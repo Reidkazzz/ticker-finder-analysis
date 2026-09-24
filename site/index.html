@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ticker Finder</title>
+<meta name="description" content="Screen for undervalued US small caps, track open-market insider buying, and read plain-English reports on any US stock. Built from SEC filings, refreshed every weekday.">
+<meta name="theme-color" content="#0a0a0b">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css">
+<link rel="stylesheet" href="assets/app.css">
+<link rel="stylesheet" href="assets/home.css">
+</head>
+<body>
+<header class="nav" data-nav></header>
+
+<main>
+  <section class="hero">
+    <div class="wrap hero-grid">
+      <div class="hero-copy">
+        <h1 class="rise">Undervalued US stocks, explained.</h1>
+        <p class="lede rise rise-2">Screens, insider buying and plain-English stock reports built from SEC filings, refreshed every weekday evening.</p>
+        <div class="hero-search rise rise-3" id="hero-search"></div>
+        <a class="text-link rise rise-3" href="#tools">Or pick one of the three tools <i class="ph ph-arrow-down" aria-hidden="true"></i></a>
+      </div>
+
+      <aside class="panel hero-preview rise rise-2" aria-labelledby="latest-h">
+        <div class="hp-head">
+          <h2 id="latest-h">Latest insider purchases</h2>
+          <span class="faint" data-latest-date></span>
+        </div>
+        <ol class="hp-list" data-latest>
+          <li class="skeleton" style="height:52px"></li>
+          <li class="skeleton" style="height:52px"></li>
+          <li class="skeleton" style="height:52px"></li>
+          <li class="skeleton" style="height:52px"></li>
+          <li class="skeleton" style="height:52px"></li>
+        </ol>
+        <a class="hp-all" href="insiders.html">All insider buying <i class="ph ph-arrow-right" aria-hidden="true"></i></a>
+      </aside>
+    </div>
+  </section>
+
+  <section class="tools" id="tools">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>Pick a tool</h2>
+        <p class="lede">Each one answers a different question. All of them explain their numbers as they go.</p>
+      </div>
+
+      <div class="bento">
+        <article class="tile tile-screener">
+          <div class="tile-top">
+            <h3>Sector screener</h3>
+            <p class="muted">Which small US companies are cheap, profitable and low on debt right now?</p>
+          </div>
+          <ul class="rules">
+            <li><i class="ph ph-check" aria-hidden="true"></i>Priced under 2x yearly sales</li>
+            <li><i class="ph ph-check" aria-hidden="true"></i>Worth less than $3 billion</li>
+            <li><i class="ph ph-check" aria-hidden="true"></i>Little or no debt</li>
+            <li><i class="ph ph-check" aria-hidden="true"></i>Keeps 8 cents or more of every sales dollar</li>
+            <li><i class="ph ph-check" aria-hidden="true"></i>Brings in more cash than it spends</li>
+            <li><i class="ph ph-check" aria-hidden="true"></i>Based and incorporated in the US</li>
+          </ul>
+          <div class="tile-table">
+            <div class="tt-head"><span>Top ranked today</span><span data-screen-count class="faint"></span></div>
+            <div data-top-screen>
+              <div class="skeleton" style="height:44px;margin-bottom:6px"></div>
+              <div class="skeleton" style="height:44px;margin-bottom:6px"></div>
+              <div class="skeleton" style="height:44px"></div>
+            </div>
+          </div>
+          <a class="btn btn-primary" href="screener.html">Open screener <i class="ph ph-arrow-right" aria-hidden="true"></i></a>
+        </article>
+
+        <article class="tile tile-insider">
+          <div class="tile-top">
+            <h3>Insider buying</h3>
+            <p class="muted">Who inside a company is buying its stock with their own money?</p>
+          </div>
+          <p class="insider-summary" data-insider-summary>&nbsp;</p>
+          <div class="tier-key">
+            <div><span class="tag tag-solid">Tier 1</span><span class="muted">$10M or more bought</span></div>
+            <div><span class="tag">Tier 2</span><span class="muted">$1M or more, or a stake up 20%+</span></div>
+          </div>
+          <a class="btn btn-ghost" href="insiders.html">See insider buying <i class="ph ph-arrow-right" aria-hidden="true"></i></a>
+        </article>
+
+        <article class="tile tile-report">
+          <div class="tile-top">
+            <h3>Ticker report</h3>
+            <p class="muted">Is one stock healthy, and is its price fair? News, scores and a verdict.</p>
+          </div>
+          <div class="example" data-example>
+            <div class="skeleton" style="height:120px"></div>
+          </div>
+          <a class="btn btn-ghost" data-example-link href="report.html">Open ticker report <i class="ph ph-arrow-right" aria-hidden="true"></i></a>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="method" id="method">
+    <div class="wrap method-grid">
+      <div>
+        <h2>How to read the numbers</h2>
+        <p class="lede">New to investing? These six ideas cover almost everything on this site.</p>
+        <div class="notice method-note">
+          <i class="ph ph-info" aria-hidden="true"></i>
+          <span>Cheap is not the same as good. A stock can look cheap because the business is shrinking.
+          That is why every screen also checks that the company is profitable, growing and not drowning in debt.</span>
+        </div>
+      </div>
+      <dl class="glossary">
+        <div><dt>Price to sales</dt><dd>What the whole company costs divided by one year of sales. Under 2 means you pay less than $2 for every $1 it sells.</dd></div>
+        <div><dt>Net profit margin</dt><dd>The share of each sales dollar left as profit after every cost and tax. 8% means 8 cents of profit per dollar.</dd></div>
+        <div><dt>Debt to equity</dt><dd>What the company owes long term compared with what shareholders own. Lower is safer. Zero means no long-term debt.</dd></div>
+        <div><dt>Free cash flow</dt><dd>Cash left over after paying for operations and equipment. It is harder to fake than profit.</dd></div>
+        <div><dt>Form 4</dt><dd>A filing executives, directors and 10%+ owners must send the SEC within two business days of trading their company's stock.</dd></div>
+        <div><dt>Schedule 13D</dt><dd>Filed when an investor passes 5% ownership and may try to influence the company, for example by pushing for changes.</dd></div>
+      </dl>
+    </div>
+  </section>
+</main>
+
+<footer class="foot" data-foot></footer>
+<script type="module" src="assets/home.js"></script>
+</body>
+</html>

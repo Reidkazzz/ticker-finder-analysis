@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sector screener | Ticker Finder</title>
+<meta name="description" content="Small US companies that are cheap, profitable and low on debt, ranked by sector.">
+<meta name="theme-color" content="#0a0a0b">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css">
+<link rel="stylesheet" href="assets/app.css">
+<link rel="stylesheet" href="assets/pages.css">
+</head>
+<body>
+<header class="nav" data-nav></header>
+<main class="wrap">
+  <div class="page-head">
+    <h1>Sector screener</h1>
+    <p class="lede">Small US companies that look cheap and are still healthy. Pick a sector to see every company that passes all eight checks, best score first.</p>
+  </div>
+
+  <div class="toolbar">
+    <div class="pills" role="group" aria-label="Sector" data-sectors></div>
+    <div class="toolbar-row">
+      <p class="result-count" data-count aria-live="polite">&nbsp;</p>
+      <label class="label-inline">Sort by
+        <select class="select" data-sort>
+          <option value="score">Best score</option>
+          <option value="ps">Cheapest vs. sales</option>
+          <option value="net_margin">Highest profit margin</option>
+          <option value="fcf_yield">Most cash generated</option>
+          <option value="drawdown">Furthest below high</option>
+          <option value="mcap">Smallest company</option>
+        </select>
+      </label>
+    </div>
+  </div>
+
+  <div data-results>
+    <div class="skeleton" style="height:56px;margin-bottom:8px"></div>
+    <div class="skeleton" style="height:56px;margin-bottom:8px"></div>
+    <div class="skeleton" style="height:56px"></div>
+  </div>
+
+  <details class="disclose" style="margin-top:24px">
+    <summary><i class="ph ph-list-checks" aria-hidden="true" style="margin:0;color:var(--text-2);transform:none"></i>What a company needs to pass<i class="ph ph-caret-down" aria-hidden="true"></i></summary>
+    <div class="body">
+      <ul class="rule-list">
+        <li><i class="ph ph-check"></i><div><b>Price to sales under 2</b><span>You pay less than $2 for each $1 of yearly sales.</span></div></li>
+        <li><i class="ph ph-check"></i><div><b>Market value under $3 billion</b><span>Smaller companies get less attention, so mispricings last longer. Under $2 billion earns extra points.</span></div></li>
+        <li><i class="ph ph-check"></i><div><b>Long-term debt under half of equity</b><span>Top marks go to companies with more cash than debt, and the best case is no debt at all.</span></div></li>
+        <li><i class="ph ph-check"></i><div><b>Net profit margin of 8% or more</b><span>At least 8 cents of profit on every sales dollar.</span></div></li>
+        <li><i class="ph ph-check"></i><div><b>Based and incorporated in the US</b><span>Rules out foreign listings (ADRs) and companies registered offshore, such as in the Cayman Islands.</span></div></li>
+        <li><i class="ph ph-check"></i><div><b>Positive equity and free cash flow</b><span>It owns more than it owes, and it brings in more cash than it spends.</span></div></li>
+        <li><i class="ph ph-check"></i><div><b>Profitable in 2 of the last 3 years</b><span>One good year can be luck. Two out of three is a pattern.</span></div></li>
+        <li><i class="ph ph-check"></i><div><b>Sales not shrinking more than 5%</b><span>Keeps out value traps: stocks that look cheap because the business is dying.</span></div></li>
+        <li class="bonus"><i class="ph ph-flag"></i><div><b>Out of favor</b><span>A flag, not a rule: the price is 25% or more below its 52-week high.</span></div></li>
+        <li class="bonus"><i class="ph ph-flag"></i><div><b>Undiscovered</b><span>A flag, not a rule: two or fewer Wall Street analysts publish estimates on it.</span></div></li>
+      </ul>
+      <p class="faint" style="font-size:13px;margin-top:16px">Figures come from each company's latest fiscal year and latest balance sheet filed with the SEC. Prices are from the last close.</p>
+    </div>
+  </details>
+</main>
+<footer class="foot" data-foot></footer>
+<script type="module" src="assets/screener.js"></script>
+</body>
+</html>

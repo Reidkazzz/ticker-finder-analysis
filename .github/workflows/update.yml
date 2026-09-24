@@ -1,0 +1,73 @@
+name: Analyze and publish
+
+on:
+  schedule:
+    # Every weekday evening after EDGAR stops accepting filings (10pm New York time).
+    # 03:15 UTC Tue-Sat = 11:15pm EDT / 10:15pm EST, Mon-Fri.
+    - cron: "15 3 * * 2-6"
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Restore previous filings and data
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .cache
+            site/data
+          key: data-${{ github.run_id }}
+          restore-keys: data-
+
+      # Code pushes reuse the last analysis so design changes deploy in a minute.
+      # Scheduled and manual runs always analyze fresh data.
+      - name: Analyze today's market data
+        if: github.event_name != 'push' || hashFiles('site/data/meta.json') == ''
+        env:
+          # "Your Name you@example.com". The SEC rejects github.com addresses.
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+        run: python -m pipeline.build
+
+      - name: Save filings and data for the next run
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            .cache
+            site/data
+          key: data-${{ github.run_id }}
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

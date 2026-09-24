@@ -1,0 +1,7 @@
+# Generated every run by the pipeline and published with the site, never committed
+site/data/
+.cache/
+__pycache__/
+*.pyc
+.DS_Store
+.claude/

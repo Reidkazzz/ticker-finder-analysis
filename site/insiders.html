@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Insider buying | Ticker Finder</title>
+<meta name="description" content="Open-market stock purchases by executives, directors and major owners, from SEC Form 4 and Schedule 13D filings.">
+<meta name="theme-color" content="#0a0a0b">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css">
+<link rel="stylesheet" href="assets/app.css">
+<link rel="stylesheet" href="assets/pages.css">
+</head>
+<body>
+<header class="nav" data-nav></header>
+<main class="wrap">
+  <div class="page-head">
+    <h1>Insider buying</h1>
+    <p class="lede">Executives, directors and big owners buying their own company's stock on the open market, with their own money. Newest filings first, checked every weekday evening.</p>
+  </div>
+
+  <div class="toolbar">
+    <div class="pills" role="group" aria-label="Sector" data-sectors></div>
+    <div class="toolbar-row">
+      <p class="result-count" data-count aria-live="polite">&nbsp;</p>
+      <div class="pills" role="group" aria-label="Size" data-tiers>
+        <button class="pill" type="button" data-tier="12" aria-pressed="true">Tier 1 and 2</button>
+        <button class="pill" type="button" data-tier="1" aria-pressed="false">Tier 1 only</button>
+        <button class="pill" type="button" data-tier="123" aria-pressed="false">All purchases</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="notice" style="margin-bottom:28px">
+    <i class="ph ph-info" aria-hidden="true"></i>
+    <span><b style="color:var(--text);font-weight:500">Tier 1</b> means $10 million or more bought on the open market in the last 30 days.
+    <b style="color:var(--text);font-weight:500">Tier 2</b> means $1 million or more, or a single buyer growing their stake by 20% or more.
+    Only real purchases count. Option exercises, stock awards and sales are left out, because insiders sell for many reasons but buy for one.</span>
+  </div>
+
+  <div data-feed>
+    <div class="skeleton" style="height:140px;margin-bottom:10px"></div>
+    <div class="skeleton" style="height:140px;margin-bottom:10px"></div>
+    <div class="skeleton" style="height:140px"></div>
+  </div>
+
+  <div class="section-title">
+    <h2>New 5%+ stakes</h2>
+    <p>Schedule 13D filings: an investor crossed 5% ownership and may push the company for changes. Newest first.</p>
+  </div>
+  <div data-stakes></div>
+</main>
+<footer class="foot" data-foot></footer>
+<script type="module" src="assets/insiders.js"></script>
+</body>
+</html>
