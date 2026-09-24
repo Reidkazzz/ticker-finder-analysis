@@ -61,14 +61,21 @@ function rangeViz(v, px) {
   </div>`;
 }
 
+// Shown near the verdict and the profit bars when last year's profit included one-time items.
+function oneTimeNote(r, style = "margin-top:16px") {
+  const n = r.fundamentals?.one_time_note;
+  // A paragraph rather than a div, so the first bar after it keeps its :first-of-type styling.
+  return n ? `<p class="notice" style="${style}"><i class="ph ph-info" aria-hidden="true"></i><span>${esc(n)}</span></p>` : "";
+}
+
 function verdictPanel(r) {
   const v = r.valuation;
   if (!v || !VERDICT[v.verdict]) {
     return `<section class="panel panel-pad verdict"><h2>Verdict</h2>
       <p class="word" style="font-size:28px">Not enough data</p>
       <p class="line">There is not enough reliable data to estimate a fair value. This happens when we could not find a full year of financials in the company's SEC filings,
-      which is common for banks, new listings and foreign companies. It also happens when a company is losing money and could only be compared on sales,
-      which says little about what it is worth.</p></section>`;
+      which is common for banks, new listings and foreign companies. It also happens when a company is losing money and has no positive cash flow to value,
+      since comparing it with others on sales says little about what it is worth.</p>${oneTimeNote(r)}</section>`;
   }
   const up = v.upside;
   const conf = v.confidence_note || CONFIDENCE[v.confidence];
@@ -76,9 +83,10 @@ function verdictPanel(r) {
     <h2>Verdict</h2>
     <p class="word ${v.verdict}">${VERDICT[v.verdict].word}</p>
     <p class="line">Estimated fair value <b>${price(v.low)} to ${price(v.high)}</b>.${up == null ? "" : ` The midpoint of <b>${price(v.mid)}</b> is
-      <b class="${signClass(up)}">${pct(Math.abs(up), 0)} ${up >= 0 ? "above" : "below"}</b> today's price.`}</p>
+      <b class="${signClass(up)}">${pct(Math.abs(up), 0)} ${up >= 0 ? "above" : "below"}</b> today's price.`}${v.limit_note ? ` ${esc(v.limit_note)}` : ""}</p>
     ${r.price ? rangeViz(v, r.price) : ""}
     <div class="methods">${v.methods.map((m) => `<div class="method-row"><b>${esc(m.name)}</b><span class="v">${price(m.value)}</span><p>${esc(m.note)}</p></div>`).join("")}</div>
+    ${oneTimeNote(r)}
     <p class="fine">${esc(conf)} This is an estimate, not a price target, and not investment advice.</p>
   </section>`;
 }
@@ -111,6 +119,7 @@ function healthSection(r) {
     <div class="h-groups">${r.health.map((g) => `
       <section class="panel h-group${g.bars.every((b) => b.context) ? " context" : ""}">
         <header><h3>${esc(g.name)}</h3><p>${esc(g.hint)}</p></header>
+        ${g.bars.some((b) => b.key === "net_margin") ? oneTimeNote(r, "margin:12px 0 4px") : ""}
         ${g.bars.map((b) => `<div class="h-bar">
           <div class="l"><b>${esc(b.label)}</b><span>${esc(b.value)}</span></div>
           ${meter(b.score, b.band)}

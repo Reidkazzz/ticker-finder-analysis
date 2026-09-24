@@ -23,6 +23,14 @@ function stake(b) {
   return `<span class="${big ? "up" : ""}">${pct(b.stake_increase, b.stake_increase < 0.1 ? 1 : 0, true)}</span><small>stake</small>`;
 }
 
+// Every share the buyer reported: in their own name, trusts, retirement accounts, family.
+function owned(b) {
+  if (b.owned_before == null) return "";
+  if (b.new_position) return "Owned no shares before buying";
+  const n = (x) => `${Math.round(x).toLocaleString("en-US")} ${Math.round(x) === 1 ? "share" : "shares"}`;
+  return `Owned ${n(b.owned_before)} before buying${b.owned_after == null ? "" : ` and ${n(b.owned_after)} after`}, counting every account reported`;
+}
+
 function card(c) {
   const link = c.symbol ? `report.html?t=${encodeURIComponent(c.symbol)}` : null;
   const vs = c.vs_paid;
@@ -44,7 +52,7 @@ function card(c) {
         <div class="who"><b title="${esc(b.name)}">${esc(b.name)}</b><span>${esc(role(b.roles))}, bought ${esc(date(b.last))}</span></div>
         <div class="n">${money(b.value)}${b.shares == null ? "" : `<small>${Math.round(b.shares).toLocaleString("en-US")} sh</small>`}</div>
         <div class="n">${price(b.avg_price)}</div>
-        <div class="n stake">${stake(b)}</div>
+        <div class="n stake"${owned(b) ? ` title="${esc(owned(b))}"` : ""}>${stake(b)}</div>
         <a class="doc" href="${esc(b.filing)}" target="_blank" rel="noopener" title="Open the SEC filing"><i class="ph ph-arrow-up-right" aria-hidden="true"></i><span class="sr-only">SEC filing</span></a>
       </div>`).join("")}
     </div>

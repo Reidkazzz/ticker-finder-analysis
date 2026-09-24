@@ -14,6 +14,7 @@ from .net import NotFound, Throttled, sec_get
 TIER1 = 10_000_000
 TIER2 = 1_000_000
 TIER2_STAKE = 0.20
+PARSER = 2  # saved on each cached purchase record; records from an older parse_form4 are re-read from EDGAR
 
 # Securities other than common stock: what was paid for them says nothing about the listed shares. A US
 # filer's depositary shares are slices of a preferred.
@@ -86,33 +87,86 @@ def _coarse(holding):
     return holding and holding.rsplit("|", 1)[0]
 
 
+def _positions(trades, holdings, joint):
+    """Everything the filing says the owners hold of the common stock, bought into or not, keyed without footnote
+    numbers: {holding: [shares just before the first purchase, shares at the end]}, None where unknown.
+    `trades` are the traded rows in table order, each with its date, whether it is a counted purchase, the shares
+    it added (negative when disposed) and the shares left after it."""
+    # Some filers list trades newest first; within a day, the table order then runs backwards too.
+    days = [r["date"] for r in trades]
+    step = -1 if days == sorted(days, reverse=True) and days != sorted(days) else 1
+    for n, r in enumerate(trades):
+        r["order"] = (r["date"], step * n)
+    chains = []
+    for r in sorted(trades, key=lambda r: r["order"]):
+        # A row belongs to the holding whose last row left what it started from: one holding's rows can cite
+        # different footnotes, and in a joint filing rows that read alike can be different owners' shares.
+        alike = [c for c in chains if _coarse(c[-1]["holding"]) == _coarse(r["holding"])]
+        c = next((c for c in alike if None not in (c[-1]["after"], r["after"], r["change"])
+                  and abs(c[-1]["after"] + r["change"] - r["after"]) < 1), None)
+        if c is None and not joint:  # a filer whose running totals do not add up still means one holding
+            c = next((c for c in alike if any(x["holding"] == r["holding"] for x in c)), None)
+        c.append(r) if c else chains.append([r])
+
+    out = {}
+
+    def add(key, before, end):
+        was, now = out.get(_coarse(key), (0, 0))
+        out[_coarse(key)] = [None if None in (was, before) else was + max(before, 0),
+                             None if None in (now, end) else now + max(end, 0)]
+
+    day = min(r["date"] for r in trades if r["buy"])
+    balances = {}
+    for rs in chains:
+        # Rows of different holdings on one day come in no particular order (shares converted at an IPO, bought
+        # in it), so on the first purchase's day each holding counts up to its own first purchase.
+        mine = [r["order"] for r in rs if r["buy"] and r["date"] == day]
+        prior = [r for r in rs if r["order"] < (min(mine) if mine else (day, math.inf))]
+        start = None if None in (rs[0]["after"], rs[0]["change"]) else rs[0]["after"] - rs[0]["change"]
+        add(rs[0]["holding"], prior[-1]["after"] if prior else start, rs[-1]["after"])
+        seen = balances.setdefault(_coarse(rs[0]["holding"]), [])
+        seen += [b for b in [start] + [r["after"] for r in rs] if b is not None]
+    # A holding row is a holding of its own even when it reads like a traded one: another account, or another
+    # reporting owner's shares. From a lone filer, though, one that repeats a balance the traded rows went
+    # through is that same account listed again (bought 2,250 to reach 98,684, then 96,434 listed as held).
+    for r in holdings:
+        seen = balances.get(_coarse(r["holding"]), ())
+        if joint or r["after"] is None or not any(abs(b - r["after"]) < 1 for b in seen):
+            add(r["holding"], r["after"], r["after"])
+    return out
+
+
 def parse_form4(raw):
     """Returns the filing's open-market purchases (transaction code P) or []."""
     i, j = raw.find("<ownershipDocument>"), raw.find("</ownershipDocument>")
     if i < 0 or j < 0:
         return []
     doc = ET.fromstring(raw[i : j + len("</ownershipDocument>")])
-    buys = []
+    buys, trades, holdings = [], [], []
     for t in doc.findall("./nonDerivativeTable/nonDerivativeTransaction"):
-        if _txt(t, "./transactionCoding/transactionCode") != "P":
-            continue
         if _not_common(_txt(t, "./securityTitle/value")):
             continue
-        if _txt(t, "./transactionAmounts/transactionAcquiredDisposedCode/value") not in ("A", ""):
-            continue
+        code = _txt(t, "./transactionCoding/transactionCode")
+        acq = _txt(t, "./transactionAmounts/transactionAcquiredDisposedCode/value")
         shares = _num(t, "./transactionAmounts/transactionShares/value")
         price = _num(t, "./transactionAmounts/transactionPricePerShare/value")
-        if not shares or not price or price <= 0:
-            continue
-        buys.append({
+        row = {
             "date": _txt(t, "./transactionDate/value")[:10],
-            "shares": shares,
-            "price": price,
-            "after": _num(t, "./postTransactionAmounts/sharesOwnedFollowingTransaction/value"),
             "holding": _holding(t),
-        })
+            "after": _num(t, "./postTransactionAmounts/sharesOwnedFollowingTransaction/value"),
+            "change": None if shares is None or acq not in ("A", "D", "") else -shares if acq == "D" else shares,
+            "buy": code == "P" and acq in ("A", "") and bool(shares) and bool(price) and price > 0,
+        }
+        trades.append(row)
+        if row["buy"]:
+            buys.append({"date": row["date"], "shares": shares, "price": price, "after": row["after"],
+                         "holding": row["holding"]})
     if not buys:
         return []
+    for t in doc.findall("./nonDerivativeTable/nonDerivativeHolding"):
+        if not _not_common(_txt(t, "./securityTitle/value")):
+            holdings.append({"holding": _holding(t),
+                             "after": _num(t, "./postTransactionAmounts/sharesOwnedFollowingTransaction/value")})
     owners = []
     for o in doc.findall("./reportingOwner"):
         rel = o.find("./reportingOwnerRelationship")
@@ -136,6 +190,8 @@ def parse_form4(raw):
         "owners": [o["name"] for o in owners if o["name"]],
         "roles": sorted({r for o in owners for r in o["roles"]}),
         "buys": buys,
+        "held": _positions(trades, holdings, len(owners) > 1),
+        "v": PARSER,
     }]
 
 
@@ -207,7 +263,8 @@ def update_cache(cache_path, days, today=None, time_budget=None):
 
     Scans the newest days first and saves after each one, so a slow or throttled run still keeps
     the most recent filings. A day is only marked done when every filing on it was downloaded;
-    anything that failed is retried on the next run. Returns (cache, days_skipped).
+    anything that failed is retried on the next run. Purchases saved by an older parse_form4 are then read
+    again, as far as the time budget allows. Returns (cache, days_skipped).
     """
     today = today or dt.date.today()
     started = time.monotonic()
@@ -324,6 +381,30 @@ def update_cache(cache_path, days, today=None, time_budget=None):
     if skipped:
         why = "Time limit reached" if over_budget() else "SEC is still refusing requests"
         print(f"  {why}; stopping here. {len(skipped)} days will be scanned on the next run", flush=True)
+    elif stale := sorted({x["path"] for x in cache["form4"] if x.get("v") != PARSER and x["filed"] >= keep}):
+        # Purchases cached by an older parse_form4 are read again, so what they record catches up without rescanning
+        # whole days. Any left when the run stops keep working as before and are read on the next run.
+        print(f"  Re-reading {len(stale)} purchase filings saved by an older version", flush=True)
+        for i in range(0, len(stale), 250):
+            fresh = {}
+            with ThreadPoolExecutor(max_workers=5) as pool:
+                for path, raw in pool.map(grab, stale[i : i + 250]):
+                    try:
+                        fresh[path] = parse_form4(raw) if raw else None
+                    except ET.ParseError:
+                        fresh[path] = None
+            fresh = {p: found for p, found in fresh.items() if found is not None}
+            filed = {x["path"]: x["filed"] for x in cache["form4"] if x["path"] in fresh}
+            cache["form4"] = [x for x in cache["form4"] if x["path"] not in fresh]
+            for path, found in fresh.items():
+                cache["form4"] += [{**p, "path": path, "filed": filed[path]} for p in found]
+                if not found:
+                    no_buys[_acc(path)] = filed[path]
+            _save(cache, cache_path, done, no_buys, keep)
+            if stop.is_set():
+                left = sum(1 for x in cache["form4"] if x.get("v") != PARSER)
+                print(f"  Stopped re-reading; {left} older purchase filings will be read on the next run", flush=True)
+                break
     _save(cache, cache_path, done, no_buys, keep)
     return cache, skipped
 
@@ -394,6 +475,43 @@ def _listing(by_cik, cik, symbol="", paid=None):
                key=lambda u: (gap(u), len(u["symbol"]), u["symbol"]), default=None)
 
 
+def _total(held, i):
+    """All of a filing's holdings together: i=0 before its first purchase, 1 at the end. None if any is unknown."""
+    sizes = [v[i] for v in held.values()]
+    return None if None in sizes else sum(sizes)
+
+
+def _owned(filings):
+    """What one buyer held before their first purchase in the window and holds now, across every holding they
+    reported: direct, IRA, trusts, family. `filings` are (held, buys) pairs, oldest purchases first. A holding
+    counts from the first filing that lists it, less what that buyer had already put into it by then, so a
+    holding a filing leaves out still counts when another filing lists it."""
+    base, now, bought = {}, {}, {}
+    for held, buys in filings:
+        for k, (was, end) in held.items():
+            if base.get(k) is None:
+                base[k] = None if was is None else max(was - bought.get(k, 0), 0)
+            now[k] = end
+        for t in buys:
+            k = _coarse(t["holding"])
+            bought[k] = bought.get(k, 0) + t["shares"]
+    before = None if None in base.values() else sum(base.values())
+    return before, None if None in now.values() else sum(now.values())
+
+
+def _bought_into(rows, split):
+    """Filings cached before holdings were recorded: only the holdings bought into, each from what it held before
+    its first purchase here."""
+    base, bought = {}, {}
+    for t in rows:
+        h = t.get("holding")
+        h = h if _coarse(h) in split else _coarse(h)
+        bought[h] = bought.get(h, 0) + t["shares"]
+        if base.get(h) is None:
+            base[h] = None if t.get("after") is None else max(t["after"] - bought[h], 0)
+    return None if None in base.values() else sum(base.values())
+
+
 def build(cache, universe, window_days, today=None):
     today = today or dt.date.today()
     since = f"{today - dt.timedelta(days=window_days):%Y%m%d}"
@@ -414,6 +532,14 @@ def build(cache, universe, window_days, today=None):
         buys = [t for t in f["buys"] if t["date"] >= _iso(since)]
         if not buys:
             continue
+        held = f.get("held")
+        if held and len(buys) < len(f["buys"]):
+            # The purchases left out still add to what the owner held before the ones that count.
+            held = {k: list(v) for k, v in held.items()}
+            for t in f["buys"]:
+                k = _coarse(t["holding"])
+                if t["date"] < _iso(since) and k in held and held[k][0] is not None:
+                    held[k][0] += t["shares"]
         names = f.get("owners") or [n for n in (f["owner"] or "").split(" / ") if n]
         trades = tuple(sorted((t["date"], round(t["shares"], 2), round(t["price"], 4), t.get("after") or 0) for t in buys))
         group = merged.setdefault((f["issuer_cik"], trades), [])
@@ -421,8 +547,11 @@ def build(cache, universe, window_days, today=None):
         if m:
             m["owners"] += [n for n in names if n not in m["owners"]]
             m["roles"] = sorted(set(m["roles"]) | set(f["roles"]))
+            # Co-filers each list the holdings they report; the fullest account of the group's shares wins.
+            if held and (not m.get("held") or (_total(held, 0) or 0) > (_total(m["held"], 0) or 0)):
+                m["held"] = held
         else:
-            group.append({**f, "buys": buys, "owners": list(names)})
+            group.append({**f, "buys": buys, "owners": list(names), "held": held})
 
     # Oldest purchases first, so each holding's starting size comes from the owner's first buy in the window.
     filings = sorted((m for g in merged.values() for m in g),
@@ -445,11 +574,12 @@ def build(cache, universe, window_days, today=None):
         })
         owner = " / ".join(_pretty(o) for o in f["owners"][:2]) + (f" +{len(f['owners']) - 2}" if len(f["owners"]) > 2 else "")
         b = c["buyers"].setdefault(owner, {"name": owner, "roles": set(), "rows": [], "filed": "", "filing": None,
-                                           "split": set()})
+                                           "split": set(), "filings": []})
         b["roles"].update(f["roles"])
         if f["filed"] >= b["filed"]:  # link the most recent filing
             b["filed"], b["filing"] = f["filed"], _link(f["path"])
         b["rows"] += sorted(f["buys"], key=lambda t: t["date"])
+        b["filings"].append((f.get("held"), f["buys"]))
         # Footnote numbers change from one filing to the next, so they only tell holdings apart where one filing
         # describes two of them alike (two funds that each 'See footnotes').
         hs = {t.get("holding") for t in f["buys"]}
@@ -462,15 +592,8 @@ def build(cache, universe, window_days, today=None):
             rows = sorted(b["rows"], key=lambda t: t["date"])
             shares = sum(t["shares"] for t in rows)
             value = sum(t["shares"] * t["price"] for t in rows)
-            # Each holding (direct, a trust, a spouse...) starts from what it held before its first purchase here.
-            base, bought = {}, {}
-            for t in rows:
-                h = t.get("holding")
-                h = h if _coarse(h) in b["split"] else _coarse(h)
-                bought[h] = bought.get(h, 0) + t["shares"]
-                if base.get(h) is None:
-                    base[h] = None if t.get("after") is None else max(t["after"] - bought[h], 0)
-            before = None if None in base.values() else sum(base.values())
+            full = all(h is not None for h, _ in b["filings"])
+            before, after = _owned(b["filings"]) if full else (_bought_into(rows, b["split"]), None)
             avg = value / shares if shares else None
             stake = shares / before if before else None
             buyers.append({
@@ -481,6 +604,9 @@ def build(cache, universe, window_days, today=None):
                 "avg_price": round(avg, 4) if avg else None,
                 "new_position": before == 0,
                 "stake_increase": round(stake, 4) if stake is not None else None,
+                # Shares across every holding the owner reported; None for filings cached before this was recorded.
+                "owned_before": round(before) if full and before is not None else None,
+                "owned_after": round(after) if after is not None else None,
                 "first": rows[0]["date"],
                 "last": rows[-1]["date"],
                 "filed": _iso(b["filed"]),

@@ -5,6 +5,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 
 from .net import NotFound, Throttled, sec_json
+from .report import one_time_note
 
 CACHE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".cache", "registrations.json")
 
@@ -112,7 +113,7 @@ def _checks(u, m):
         ("ps", ps is not None and ps < RULES["max_ps"], ps),
         ("mcap", bool(u.get("mcap")) and u["mcap"] < RULES["max_mcap"], u.get("mcap")),
         ("debt", m.get("lt_debt_to_equity") is not None and m["lt_debt_to_equity"] < RULES["max_lt_de"], m.get("lt_debt_to_equity")),
-        ("margin", m.get("net_margin") is not None and m["net_margin"] >= RULES["min_net_margin"], m.get("net_margin")),
+        ("margin", m.get("adj_net_margin") is not None and m["adj_net_margin"] >= RULES["min_net_margin"], m.get("adj_net_margin")),
         ("equity", bool(m.get("equity")) and m["equity"] > 0, m.get("equity")),
         ("fcf", m.get("fcf") is not None and m["fcf"] > 0, m.get("fcf")),
         ("profitable", m.get("years_checked", 0) >= 2 and m["profitable_years"] >= RULES["min_profitable_years"], m.get("profitable_years")),
@@ -201,7 +202,10 @@ def run(universe, metrics, prices, analyst_counter):
             "price": price,
             "mcap": u["mcap"],
             "ps": round(ps_by[sym], 3),
-            "net_margin": m["net_margin"],
+            # Without one-time items, as the margin rule and the score use it.
+            "net_margin": m["adj_net_margin"],
+            "net_margin_reported": m["net_margin"],
+            "one_time_note": one_time_note(m),
             "lt_de": m["lt_debt_to_equity"],
             "total_debt": m["total_debt"],
             "net_cash": m["net_cash"],
