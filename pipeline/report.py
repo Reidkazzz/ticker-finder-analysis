@@ -2,6 +2,8 @@
 import math
 import statistics
 
+from .fundamentals import NORMAL_TAX
+
 # Deposits, loans and insurance reserves make cash, debt and cash flow part of the business itself for
 # banks, insurers and lenders, so cash-based measures are neither scored nor used to value them.
 FINANCIAL_SECTOR = "Finance"
@@ -11,6 +13,17 @@ FINANCIAL_NOTE = ("Not scored for banks, insurers and other financial companies.
 
 def is_financial(u):
     return u.get("sector") == FINANCIAL_SECTOR
+
+
+UTILITIES = {"Electric Utilities: Central", "Power Generation", "Natural Gas Distribution", "Water Supply"}
+
+
+def normal_tax_rate(u):
+    # A REIT pays no corporate income tax on the profit it pays out, so its normal rate is zero. A utility's tax is
+    # shaped every year by regulators and energy tax credits (PG&E paid less than nothing in each of 2022 to 2025),
+    # so a benefit on its profit is normal (None).
+    ind = u.get("industry")
+    return 0.0 if ind == "Real Estate Investment Trusts" else None if ind in UTILITIES else NORMAL_TAX
 
 
 def _lerp(x, pts):
@@ -54,6 +67,37 @@ def money(x):
     return f"${x / 1e9:,.1f}B" if x >= 1e9 else f"${x / 1e6:,.0f}M" if x >= 1e6 else f"${x:,.0f}"
 
 
+def cents(x):
+    n = round(abs(x) * 100)
+    return f"{n} cent{'' if n == 1 else 's'}"
+
+
+def profit(x):
+    return money(x) if x >= 0 else f"a loss of {money(x)}"
+
+
+def one_time_note(m):
+    """Plain-English note on the one-time items left out of last year's profit, or None when there were none."""
+    items = {i["kind"]: i for i in m.get("one_time") or []}
+    if not items:
+        return None
+    parts = []
+    if "discontinued" in items:
+        parts.append(f"{money(items['discontinued']['amount'])} from businesses it sold or closed")
+    if "gain" in items:
+        parts.append(f"about {money(items['gain']['amount'])} of gains outside its main business, such as sales of assets or investments")
+    tax = items.get("tax_benefit")
+    if tax:
+        parts.append(f"a one-time tax benefit of {money(tax['amount'])}")
+    listed = parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " and " + parts[-1]
+    ni = m["net_income"]
+    head = f"Last year's profit of {money(ni)} included" if ni >= 0 else f"Last year's loss of {money(ni)} was reduced by"
+    rate = f"a normal {tax['rate'] * 100:.0f}% rate" if tax and tax["rate"] else None
+    how = (f"use profit before that benefit, taxed at {rate}" if rate and len(parts) == 1 else
+           f"leave these out and tax the rest at {rate}" if rate else f"leave {'it' if len(parts) == 1 else 'these'} out")
+    return f"{head} {listed}. Scores, screener checks and the fair value {how}, which gives {profit(m['adj_net_income'])}."
+
+
 def band(score):
     return None if score is None else "strong" if score >= 70 else "fair" if score >= 40 else "weak"
 
@@ -65,14 +109,17 @@ def peer_table(universe, metrics):
         m = metrics.get(sym)
         if not m or not u.get("mcap"):
             continue
-        rev, ni = m.get("revenue"), m.get("net_income")
+        rev, ni, adj = m.get("revenue"), m.get("net_income"), m.get("adj_net_income")
         ev = None if is_financial(u) or m.get("net_cash") is None else u["mcap"] - m["net_cash"]
         table[sym] = {
             "industry": u["industry"],
             "sector": u["sector"],
             "ps": u["mcap"] / rev if rev and rev > 0 else None,
             "ev_sales": ev / rev if ev and ev > 0 and rev and rev > 0 else None,
+            # Peers are compared on reported earnings. Only one-time gains are taken out, never one-time losses,
+            # so peer multiples on adjusted earnings would lean high and raise every company's estimate.
             "pe": u["mcap"] / ni if ni and ni > 0 else None,
+            "adj_pe": u["mcap"] / adj if adj and adj > 0 else None,
             "fcf_yield": m["fcf"] / u["mcap"] if m.get("fcf") is not None else None,
             "net_margin": m.get("net_margin"),
             "growth": m.get("revenue_growth"),
@@ -125,15 +172,19 @@ def health(u, m, price, high52, peers, table, news_overall, insider):
                  "Not enough data to compare." if s is None else
                  f"Cheaper than {s}% of similar companies for each dollar of sales." if s >= 50 else
                  f"Pricier than {100 - s}% of similar companies for each dollar of sales."))
-    pe = me.get("pe")
-    if m.get("net_income") is not None and m["net_income"] <= 0:
-        v.append(bar("pe", "Price to earnings", "Loss", 5, "The company lost money last year, so there are no earnings to value."))
+    pe = me.get("adj_pe")
+    adjusted = bool(m.get("one_time"))
+    if m.get("adj_net_income") is not None and m["adj_net_income"] <= 0:
+        v.append(bar("pe", "Price to earnings", "Loss", 5,
+                     "Without last year's one-time items the company lost money, so there are no earnings to value."
+                     if adjusted and m["net_income"] > 0 else "The company lost money last year, so there are no earnings to value."))
     else:
         s = _pct_rank(pe, [r["pe"] for r in peer_rows], lower_is_better=True)
         v.append(bar("pe", "Price to earnings", multiple(pe), s,
-                     "Not enough data to compare." if s is None else
-                     f"You pay less per dollar of profit than for {s}% of peers." if s >= 50 else
-                     f"You pay more per dollar of profit than for {100 - s}% of peers."))
+                     ("Not enough data to compare." if s is None else
+                      f"You pay less per dollar of profit than for {s}% of peers." if s >= 50 else
+                      f"You pay more per dollar of profit than for {100 - s}% of peers.")
+                     + (" Uses profit without last year's one-time items." if adjusted and pe is not None else "")))
     fy = me.get("fcf_yield")
     v.append(not_scored("fcf_yield", "Free cash flow yield") if fin else bar("fcf_yield", "Free cash flow yield", pct(fy), None if fy is None else _lerp(fy, [(-0.05, 1), (0, 15), (0.05, 55), (0.10, 85), (0.15, 100)]),
                  "Cash left after running the business, as a share of the company's price. Higher is better." if fy is None or fy > 0 else
@@ -142,13 +193,14 @@ def health(u, m, price, high52, peers, table, news_overall, insider):
 
     # Profitability
     p = []
-    nm = m.get("net_margin")
+    nm = m.get("adj_net_margin")
+    reported = lambda x: f" That leaves out last year's one-time items. With them it was {pct(x)}." if adjusted and x is not None else ""
     p.append(bar("net_margin", "Net profit margin", pct(nm), None if nm is None else _lerp(nm, [(-0.2, 1), (0, 20), (0.08, 55), (0.15, 80), (0.25, 100)]),
-                 "No revenue data." if nm is None else f"Keeps {abs(nm) * 100:.0f} cents of profit from every dollar of sales." if nm >= 0 else
-                 f"Loses {abs(nm) * 100:.0f} cents on every dollar of sales."))
-    roe = m.get("roe")
+                 ("No revenue data." if nm is None else f"Keeps {cents(nm)} of profit from every dollar of sales." if nm >= 0 else
+                  f"Loses {cents(nm)} on every dollar of sales.") + reported(m.get("net_margin"))))
+    roe = m.get("adj_roe")
     p.append(bar("roe", "Return on equity", pct(roe), None if roe is None else _lerp(roe, [(-0.1, 1), (0, 15), (0.10, 55), (0.20, 85), (0.30, 100)]),
-                 "Profit earned on the money shareholders have in the business. 15% or more is strong." if roe is not None else
+                 "Profit earned on the money shareholders have in the business. 15% or more is strong." + reported(m.get("roe")) if roe is not None else
                  "Can't be measured because shareholder equity is zero or negative."))
     fm = (m["fcf"] / m["revenue"]) if m.get("fcf") is not None and m.get("revenue") else None
     p.append(not_scored("fcf_margin", "Cash conversion") if fin else bar("fcf_margin", "Cash conversion", pct(fm), None if fm is None else _lerp(fm, [(-0.1, 1), (0, 20), (0.08, 60), (0.15, 85), (0.25, 100)]),
@@ -166,7 +218,8 @@ def health(u, m, price, high52, peers, table, news_overall, insider):
                  "Not enough history." if n < 3 else f"Sales rose in {up} of the last {n - 1} years. Steady growth is easier to trust."))
     py, yc = m.get("profitable_years", 0), m.get("years_checked", 0)
     g.append(bar("profit_record", "Profit track record", f"{py} of {yc} yrs" if yc else "n/a", None if not yc else _lerp(py / yc, [(0, 5), (0.5, 40), (0.67, 65), (1, 95)]),
-                 "Not enough history." if not yc else f"Profitable in {py} of the last {yc} years."))
+                 "Not enough history." if not yc else f"Profitable in {py} of the last {yc} years"
+                 + (f", not counting one-time items. With them it was {m['profitable_years_reported']}." if m.get("profitable_years_reported", py) != py else ".")))
     groups.append({"name": "Growth", "hint": "Is the business getting bigger and steadier?", "bars": g})
 
     # Balance sheet
@@ -225,7 +278,7 @@ def health(u, m, price, high52, peers, table, news_overall, insider):
 
 def fair_value(u, m, price, peers, table):
     """Peer multiples plus a simple cash-flow model. Returns methods, range and verdict, or None when no
-    reliable estimate exists."""
+    reliable estimate exists. Earnings leave out last year's one-time items."""
     if not price or price <= 0:
         return None
     # The share count behind the market cap, so estimates line up with the peer multiples and the P/S bar.
@@ -234,16 +287,19 @@ def fair_value(u, m, price, peers, table):
         return None
     fin = is_financial(u)
     peer_rows = [table[s] for s in peers]
-    rev, ni = m.get("revenue"), m.get("net_income")
+    rev, ni = m.get("revenue"), m.get("adj_net_income")
+    profitable = ni is not None and ni > 0
     nc = m.get("net_cash") or 0
     methods = []
 
-    if rev and rev > 0 and fin:
+    # A sales multiple assumes the company can earn what its peers earn on each dollar of sales, which says
+    # little about one that loses money, so that company is valued on its cash flow alone.
+    if rev and rev > 0 and profitable and fin:
         med_ps = _median([r["ps"] for r in peer_rows])
         if med_ps:
             methods.append({"name": "Peer price to sales", "value": med_ps * rev / shares,
                             "note": f"Similar companies trade at {med_ps:.1f}x sales."})
-    elif rev and rev > 0:
+    elif rev and rev > 0 and profitable:
         # Enterprise value, so a peer's debt is not priced in as if it were sales. This company's own net
         # debt is then subtracted (or net cash added) to get back to what the shares are worth.
         med_ev = _median([r["ev_sales"] for r in peer_rows])
@@ -254,13 +310,14 @@ def fair_value(u, m, price, peers, table):
                                     + (f" This company's net cash of {money(nc)} is added." if nc > 0 else
                                        f" This company's net debt of {money(nc)} is subtracted." if nc < 0 else "")})
     med_pe = _median([r["pe"] for r in peer_rows])
-    if med_pe and ni and ni > 0:
+    if med_pe and profitable:
         methods.append({"name": "Peer price to earnings", "value": med_pe * ni / shares,
-                        "note": f"Similar companies trade at {med_pe:.1f}x earnings."})
+                        "note": f"Similar companies trade at {med_pe:.1f}x earnings."
+                                + (f" Uses last year's profit without one-time items: {money(ni)} instead of {money(m['net_income'])}."
+                                   if m.get("one_time") else "")})
 
     fcfs = [x for x in (m.get("fcf_history") or []) if x is not None]
     base = sum(fcfs) / len(fcfs) if fcfs else None
-    dcf = False
     if base and base > 0 and not fin:
         g = max(0.0, min(0.12, m.get("revenue_cagr") or m.get("revenue_growth") or 0.0))
         r, tg = 0.10, 0.025
@@ -271,18 +328,32 @@ def fair_value(u, m, price, peers, table):
         terminal = cf * (1 + tg) / (r - tg) / (1 + r) ** 5
         value = (pv + terminal + nc) / shares
         if value > 0:
-            dcf = True
             methods.append({"name": "Cash-flow model", "value": value,
                             "note": f"Average free cash flow of ${base / 1e6:,.0f}M growing {g * 100:.0f}% a year for 5 years, "
                                     f"then 2.5%, discounted at 10%, " + ("plus net cash." if nc >= 0 else "minus net debt.")})
 
-    # A sales multiple alone says little about a business that loses money, so that case gets no verdict.
-    if not methods or (ni is None or ni <= 0) and not dcf:
+    if not methods:
         return None
     vals = sorted(x["value"] for x in methods)
     mid = statistics.median(vals)
+    # A value more than 50% away from the price needs two methods behind it, so one method can't stretch the
+    # midpoint past that. With three methods the median always has a second method on its side.
+    top = max(price * 1.5, vals[-2] if len(vals) > 1 else 0)
+    bottom = min(price * 0.5, vals[1] if len(vals) > 1 else math.inf)
+    held = "above" if mid > top else "below" if mid < bottom else None
+    mid = min(max(mid, bottom), top)
+    limit = None
+    if held:
+        far = f"more than 50% {held} the price"
+        alone = vals[0] <= price * 1.5 if held == "above" else vals[-1] >= price * 0.5
+        if len(vals) == 1:
+            limit = f"Only one method could be used, and a value {far} needs a second method to agree, so the midpoint stops at 50% {held}."
+        elif alone:
+            limit = f"Only one of the two methods puts the value {far}. A gap that large needs both to agree, so the midpoint stops at 50% {held}."
+        else:
+            limit = f"Both methods put the value {far}, so the midpoint is the {'lower' if held == 'above' else 'higher'} of the two rather than their average."
     if len(vals) == 1:
-        low, high = mid * 0.85, mid * 1.15
+        low, high = vals[0] * 0.85, vals[0] * 1.15
     elif len(vals) == 2:
         # Span both estimates, so the range never excludes a method listed beneath it.
         low, high = vals
@@ -294,7 +365,11 @@ def fair_value(u, m, price, peers, table):
     spread = vals[-1] / vals[0]
     apart = f"within {max(5, math.ceil(round((spread - 1) * 20, 6)) * 5)}% of each other"
     of = "the two methods that suit a financial company" if fin else "the three methods"
-    if len(vals) == 1:
+    if len(vals) == 1 and not profitable:
+        confidence, note = "low", (("Without last year's one-time items the company lost money"
+                                    if (m.get("net_income") or 0) > 0 else "The company lost money last year")
+                                   + ", so only the cash-flow model applies. Treat this range loosely.")
+    elif len(vals) == 1:
         confidence, note = "low", f"Only one of {of} could be used, so treat this range loosely."
     elif spread > 2:
         confidence, note = "low", (f"The methods disagree widely (lowest {dollars(vals[0])}, highest {dollars(vals[-1])}), "
@@ -317,4 +392,5 @@ def fair_value(u, m, price, peers, table):
         "verdict": verdict,
         "confidence": confidence,
         "confidence_note": note,
+        "limit_note": limit,
     }

@@ -31,7 +31,8 @@ function flags(r) {
 
 function facts(r) {
   const out = [];
-  out.push(["ph-receipt", `Sold ${money(r.revenue)} in fiscal ${r.fiscal_year} and kept ${pct(r.net_margin, 0)} of it as profit.`]);
+  out.push(["ph-receipt", `Sold ${money(r.revenue)} in fiscal ${r.fiscal_year} and kept ${pct(r.net_margin, 0)} of it as profit${r.one_time_note ? ", not counting one-time items" : ""}.`]);
+  if (r.one_time_note) out.push(["ph-info", r.one_time_note]);
   if (r.revenue_growth != null) out.push(["ph-trend-up", `Sales ${r.revenue_growth >= 0 ? "grew" : "slipped"} ${pct(Math.abs(r.revenue_growth))} from the year before.`]);
   out.push(["ph-coins", r.debt_status === "none" ? `Has no debt. Cash on hand: ${money(r.net_cash)}.`
     : r.net_cash > 0 ? `Holds ${money(r.net_cash)} more cash than all of its debt.`
@@ -122,7 +123,7 @@ function renderTable() {
         <td class="score-cell">${meter(r.score, band(r.score))}</td>
         <td>${money(r.mcap)}</td>
         <td>${times(r.ps)}</td>
-        <td>${pct(r.net_margin)}</td>
+        <td${r.one_time_note && r.net_margin_reported != null ? ` title="Leaves out one-time items. Reported margin: ${pct(r.net_margin_reported)}"` : ""}>${pct(r.net_margin)}</td>
         <td>${debtTag(r)}</td>
         <td>${pct(r.fcf_yield)}</td>
         <td>${r.drawdown == null ? "n/a" : pct(r.drawdown, 0)}</td>

@@ -16,6 +16,8 @@ CAPEX = [
     "PaymentsToAcquireOilAndGasProperty",
 ]
 DEPRECIATION = ["DepreciationDepletionAndAmortization", "DepreciationAndAmortization", "Depreciation"]
+PRETAX = ["IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest",
+          "IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments"]
 # Each metric lists the XBRL tags companies use for it, in order of preference.
 DURATION = {
     "revenue": [
@@ -29,9 +31,16 @@ DURATION = {
     "operating_income": ["OperatingIncomeLoss"],
     "ocf": ["NetCashProvidedByUsedInOperatingActivities", "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations"],
     "capex": CAPEX + DEPRECIATION,
+    # The pieces between operating income and net income, read by _one_time(). The first pretax tag already
+    # includes income from equity-method investments, the second leaves it out.
+    "pretax": PRETAX,
+    "income_tax": ["IncomeTaxExpenseBenefit"],
+    "discontinued": ["IncomeLossFromDiscontinuedOperationsNetOfTax", "IncomeLossFromDiscontinuedOperationsNetOfTaxAttributableToReportingEntity"],
+    "equity_method": ["IncomeLossFromEquityMethodInvestments"],
+    "minority": ["NetIncomeLossAttributableToNoncontrollingInterest"],
 }
 # Without these for the two newest years, every company's latest figures would silently change.
-CRITICAL = {"revenue", "net_income", "ocf", "capex"}
+CRITICAL = {"revenue", "net_income", "ocf", "capex", "pretax", "income_tax"}
 
 # Debt, read by _debt(). Instrument tags (convertibles, notes, credit lines) often restate pieces of the
 # broad totals in footnotes, so they only count when they add up to more than the broad tags do.
@@ -222,6 +231,11 @@ def _annual(facts, has_capex, capex_failed, report):
         "fcf": fcf,
         "diluted_shares": _val(facts.get("WeightedAverageNumberOfDilutedSharesOutstanding")),
         "end": (rev or facts.get("NetIncomeLoss") or {}).get("end"),
+        "pretax": _val(_first(facts, PRETAX)),
+        "pretax_has_equity_method": PRETAX[0] in facts,
+        **{k: _val(_first(facts, DURATION[k])) for k in ("income_tax", "discontinued", "equity_method", "minority")},
+        # The owners' own share, without what goes to minority holders (i3 Verticals' 2025: $14.2M of $20.9M).
+        "discontinued_parent": _val(facts.get(DURATION["discontinued"][1])),
     }
 
 
@@ -244,7 +258,9 @@ NEEDS_REPORT = object()
 
 def _net_income(facts, report=False):
     """NetIncomeLoss, checked for proxy statements. A proxy's pay-versus-performance table is tagged NetIncomeLoss
-    and filed after the annual report, so the frame shows it, and it is often unscaled (thousands read as dollars).
+    and filed after the annual report, so the frame shows it. It is often unscaled (thousands read as dollars) or
+    shows a loss as a positive number, and it can predate a restatement in the annual report (Twin Disc's 2026
+    proxy: $34.5M, its 10-K: $27.1M).
 
     A suspect figure returns NEEDS_REPORT while `report` is None. Otherwise `report` is the annual report's own
     figure, which replaces it, or False when that lookup found nothing.
@@ -261,13 +277,24 @@ def _net_income(facts, report=False):
     sane = lambda v: not (r and r > 10e6) or 1e-3 * r <= abs(v) <= 50 * r
     alts = [facts[t]["val"] for t in ("NetIncomeLossAvailableToCommonStockholdersBasic", "ProfitLoss")
             if t in facts and facts[t]["val"] and facts[t]["accn"] != ni["accn"] and (not rev or facts[t]["accn"] == rev["accn"])]
-    if any(1 / 50 < abs(x / a) < 50 for a in alts) or (not alts and sane(x)):
+    # A lost minus sign shows against another filing's income before tax less the tax, or its operating income
+    # when that is all it tags.
+    pretax, op = _first(facts, PRETAX), facts.get("OperatingIncomeLoss")
+    own = (pretax, pretax["val"] - (_val(facts.get("IncomeTaxExpenseBenefit")) or 0)) if pretax else (op, _val(op))
+    flipped = own[0] is not None and own[0]["accn"] != ni["accn"] and x * own[1] < 0
+    # Matching only one of them is not enough: a proxy often shows profit including minority holders' share,
+    # which is ProfitLoss (Tenet's 2022: $1.0B, against the owners' $411M).
+    if alts and all(abs(x - a) <= 0.02 * abs(a) for a in alts) or (not alts and sane(x) and not flipped):
         return x
+    # Preferred dividends and minority interests also set those tags apart, and income from sold businesses can
+    # turn a pretax loss into a profit, so a gap short of a scale or sign error is checked against the annual
+    # report, and stands when that lookup fails.
+    same_scale = any(1 / 50 < x / a < 50 for a in alts) or (not alts and sane(x))
     if report is None:
         return NEEDS_REPORT
     if report is not False:
         return report
-    return next((a for a in alts if sane(a)), None)
+    return x if same_scale else next((a for a in alts if sane(a)), None)
 
 
 def _report_net_income(cik, ends):
@@ -321,6 +348,9 @@ def _balance_sheet(by_quarter, quarters):
     total, lt, reported = _debt({t: d["val"] for t, d in facts.items()})
     out = {m: _val(_first(facts, INSTANT[m])) for m in ("equity", "cash", "st_investments", "current_assets", "current_liabilities")}
     out.update(as_of=_first(facts, ANCHORS).get("end"), total_debt=total, lt_debt=lt, debt_reported=reported)
+    # The most cash held at any recent quarter end, since interest earned last year came from the cash held then.
+    out["peak_cash"] = max((_val(_first(f, INSTANT["cash"])) or 0) + (_val(_first(f, INSTANT["st_investments"])) or 0)
+                           for f in by_quarter.values())
     return out
 
 
@@ -375,8 +405,70 @@ def _debt(v):
     return total, long_term, True
 
 
-def derive(f):
-    """Turns raw line items into the ratios the screener and reports use. Missing data stays None."""
+NORMAL_TAX = 0.21  # the US federal rate, which a profitable company's tax returns to once a one-time benefit is used
+CASH_YIELD = 0.05  # interest a company can earn on its cash, which counts as ordinary income rather than a one-time gain
+
+
+def _non_operating(s):
+    """Income between operating income and pretax income, other than from equity-method investments."""
+    pretax, op = s.get("pretax"), s.get("operating_income")
+    if pretax is None or op is None:
+        return None
+    return pretax - op - ((s.get("equity_method") or 0) if s.get("pretax_has_equity_method") else 0)
+
+
+def _one_time(s, cash, tax_rate, before=()):
+    """(net income without one-time items, [{kind, amount}]) for one fiscal year.
+
+    Takes out income from businesses sold or shut down, gains outside the main business (income below operating
+    income beyond what `cash` could earn in interest, or what came in each of the two years `before`), and a
+    one-time tax benefit, taxing the profit before it at the normal rate instead. A `tax_rate` of None means a
+    benefit on a pretax profit is normal for the company, taxing anything else at 21%. Only items that raise
+    profit come out, so the result is never above reported net income. Nothing changes unless the income
+    statement lines add up to the reported net income, since otherwise one of them is misread and the adjustment
+    would be too.
+    """
+    ni, pretax, tax = s.get("net_income"), s.get("pretax"), s.get("income_tax")
+    if ni is None or pretax is None or tax is None:
+        return ni, []
+    rate = NORMAL_TAX if tax_rate is None else tax_rate
+    in_pretax = s.get("pretax_has_equity_method")
+    eq, disc, nci = s.get("equity_method") or 0, s.get("discontinued") or 0, s.get("minority") or 0
+    if abs(pretax - tax + (0 if in_pretax else eq) + disc - nci - ni) > 0.1 * max(abs(ni), abs(pretax)) + 1e5:
+        return ni, []
+    items, cut = [], 0
+    own = s.get("discontinued_parent")
+    disc = disc if own is None else own  # net income is the owners' share, so only their share comes out of it
+    if disc > 0:
+        items.append({"kind": "discontinued", "amount": disc})
+        cut += disc
+    if s.get("operating_income") is not None and pretax > 0:
+        # Income that came in every recent year is ordinary, such as Robert Half's deferred pay trusts (offset by
+        # pay expense inside operating income) or interest on long-term investments.
+        prior = [_non_operating(p) for p in before]
+        usual = min(prior) if len(prior) == 2 and None not in prior else 0
+        gain = _non_operating(s) - max(CASH_YIELD * max(cash or 0, 0), usual)
+        if gain >= 0.25 * pretax:
+            items.append({"kind": "gain", "amount": gain})
+            cut += gain * (1 - rate)
+    # A benefit on a pretax loss is normally just the credit for that loss (Ford's 31% on its 2025 loss), so it
+    # only counts as one-time when the company paid less than nothing on a pretax profit, or when it turned a
+    # pretax loss into a profit.
+    if tax < 0 and (pretax > 0 and -tax >= 0.05 * pretax and tax_rate is not None or pretax <= 0 < pretax - tax):
+        items.append({"kind": "tax_benefit", "amount": -tax, "rate": rate})
+        cut += rate * pretax - tax
+    if cut < 0.05 * abs(ni):
+        return ni, []  # too small to change any score
+    return ni - cut, items
+
+
+def derive(f, tax_rate=NORMAL_TAX):
+    """Turns raw line items into the ratios the screener and reports use. Missing data stays None.
+
+    Earnings-based measures (the adj_ keys and profitable_years) leave out one-time items. `tax_rate` is the
+    normal rate those earnings are taxed at, 0 for a REIT, which pays no corporate income tax on what it pays out,
+    or None for a company whose tax is normally below nothing (see _one_time).
+    """
     years = sorted(f["annual"])
     series = [f["annual"][y] for y in years]
     i_last = next((i for i in reversed(range(len(series)))
@@ -394,10 +486,13 @@ def derive(f):
     equity = L.get("equity")
     rev = last["revenue"]
     ni = last["net_income"]
+    adjusted = [_one_time(series[j], max(cash, L.get("peak_cash") or 0), tax_rate, series[max(0, j - 2): j])
+                for j in range(max(0, i_last - 3), i_last + 1)]
+    adj_ni, one_time = adjusted[-1]
 
     hist = [{"year": y, "revenue": s.get("revenue"), "net_income": s.get("net_income"), "fcf": s.get("fcf")}
             for y, s in zip(ys, ss) if s.get("revenue") is not None or s.get("net_income") is not None]
-    recent3 = [s["net_income"] for s in ss[-3:] if s.get("net_income") is not None]
+    recent3 = [a for a, _ in adjusted[-3:] if a is not None]
     revs = [(y, s["revenue"]) for y, s in zip(ys, ss) if s.get("revenue")]
     growth_1y = (rev / prev["revenue"] - 1) if prev.get("revenue") and prev["revenue"] > 0 and rev is not None else None
     cagr = None
@@ -431,8 +526,16 @@ def derive(f):
         "lt_debt_to_equity": (lt_debt / equity) if equity and equity > 0 else None,
         "current_ratio": (L["current_assets"] / L["current_liabilities"]) if L.get("current_assets") and L.get("current_liabilities") else None,
         "roe": (ni / equity) if equity and equity > 0 else None,
+        # The same measures without one-time items (equal to the above when there are none).
+        "adj_net_income": adj_ni,
+        "adj_net_margin": (adj_ni / rev) if rev and adj_ni is not None else None,
+        "adj_roe": (adj_ni / equity) if equity and equity > 0 and adj_ni is not None else None,
+        "one_time": one_time,
+        "pretax_income": last.get("pretax"),
+        "income_tax": last.get("income_tax"),
         "shares_out": L.get("shares_out"),
         "profitable_years": sum(1 for x in recent3 if x > 0),
+        "profitable_years_reported": sum(1 for s in ss[-3:] if (s.get("net_income") or 0) > 0),
         "years_checked": len(recent3),
         "revenue_growth": growth_1y,
         "revenue_cagr": cagr,

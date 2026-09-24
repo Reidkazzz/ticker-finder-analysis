@@ -77,7 +77,7 @@ def main():
     for sym, u in uni.items():
         c = fund["companies"].get(u["cik"])
         if c:
-            d = fundamentals.derive(c)
+            d = fundamentals.derive(c, report.normal_tax_rate(u))
             if d:
                 metrics[sym] = d
     step(f"  financials for {len(metrics)} companies")
@@ -113,7 +113,7 @@ def main():
     ins = insiders.build(cache, uni if not args.limit else universe_all_for_insiders(uni), args.insider_days, today)
     pending = insiders.pending_days(cache, args.insider_days, today)
     step(f"  {len(ins['companies'])} companies with purchases, {len(ins['stakes'])} new 5%+ stakes"
-         + (f"; {len(pending)} days still to scan" if pending else ""))
+         + (f"; {len(pending)} day{'s' if len(pending) != 1 else ''} still to scan" if pending else ""))
 
     heads = {}
     if not args.skip_news:
@@ -152,8 +152,10 @@ def main():
             "weekly": p.get("weekly") or [],
             "peer_group": peer_group,
             "peer_count": len(peers),
-            "fundamentals": {k: m[k] for k in ("fiscal_year", "fiscal_year_end", "balance_as_of", "revenue", "net_income",
-                                               "fcf", "cash", "total_debt", "shares_out", "history")} if m else None,
+            "fundamentals": {**{k: m[k] for k in ("fiscal_year", "fiscal_year_end", "balance_as_of", "revenue", "net_income",
+                                                  "adj_net_income", "one_time", "pretax_income", "income_tax",
+                                                  "fcf", "cash", "total_debt", "shares_out", "history")},
+                             "one_time_note": report.one_time_note(m)} if m else None,
             "health": groups,
             "health_score": health_score,
             "valuation": fv,
