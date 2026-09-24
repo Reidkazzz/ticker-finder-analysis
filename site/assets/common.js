@@ -4,8 +4,11 @@ const cache = new Map();
 export async function load(name) {
   if (!cache.has(name)) {
     cache.set(name, fetch(`data/${name}`, { cache: "no-cache" }).then((r) => {
-      if (!r.ok) throw new Error(`${name}: ${r.status}`);
+      if (!r.ok) throw Object.assign(new Error(`${name}: ${r.status}`), { status: r.status });
       return r.json();
+    }).catch((e) => {
+      cache.delete(name); // a network blip must not stick until the page is reloaded
+      throw e;
     }));
   }
   return cache.get(name);
@@ -46,10 +49,16 @@ export function date(iso, opts = { month: "short", day: "numeric" }) {
   return d.toLocaleDateString("en-US", opts);
 }
 
-export function relDay(iso, today) {
+// The viewer's own calendar date. Data is built late in the evening, so "today" must mean the day it is read.
+export function localToday() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+export function relDay(iso, today = localToday()) {
   if (!iso) return "";
   if (iso === today) return "Today";
-  const d = (new Date(today + "T12:00:00") - new Date(iso + "T12:00:00")) / 864e5;
+  const d = Math.round((new Date(today + "T12:00:00") - new Date(iso + "T12:00:00")) / 864e5); // DST days are 23 or 25 hours
   if (d === 1) return "Yesterday";
   return date(iso, { weekday: "long", month: "short", day: "numeric" });
 }

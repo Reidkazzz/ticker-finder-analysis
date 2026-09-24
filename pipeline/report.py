@@ -1,5 +1,16 @@
 """Single-ticker report: 1-100 health bars, a fair-value range and a verdict."""
+import math
 import statistics
+
+# Deposits, loans and insurance reserves make cash, debt and cash flow part of the business itself for
+# banks, insurers and lenders, so cash-based measures are neither scored nor used to value them.
+FINANCIAL_SECTOR = "Finance"
+FINANCIAL_NOTE = ("Not scored for banks, insurers and other financial companies. Their cash and borrowing are part of "
+                  "the business itself (deposits, loans, insurance reserves), so this measure would mislead.")
+
+
+def is_financial(u):
+    return u.get("sector") == FINANCIAL_SECTOR
 
 
 def _lerp(x, pts):
@@ -34,6 +45,15 @@ def multiple(x):
     return "n/a" if x is None else f"{x:.1f}x"
 
 
+def dollars(x):
+    return f"${x:,.2f}"
+
+
+def money(x):
+    x = abs(x)
+    return f"${x / 1e9:,.1f}B" if x >= 1e9 else f"${x / 1e6:,.0f}M" if x >= 1e6 else f"${x:,.0f}"
+
+
 def band(score):
     return None if score is None else "strong" if score >= 70 else "fair" if score >= 40 else "weak"
 
@@ -46,10 +66,12 @@ def peer_table(universe, metrics):
         if not m or not u.get("mcap"):
             continue
         rev, ni = m.get("revenue"), m.get("net_income")
+        ev = None if is_financial(u) or m.get("net_cash") is None else u["mcap"] - m["net_cash"]
         table[sym] = {
             "industry": u["industry"],
             "sector": u["sector"],
             "ps": u["mcap"] / rev if rev and rev > 0 else None,
+            "ev_sales": ev / rev if ev and ev > 0 and rev and rev > 0 else None,
             "pe": u["mcap"] / ni if ni and ni > 0 else None,
             "fcf_yield": m["fcf"] / u["mcap"] if m.get("fcf") is not None else None,
             "net_margin": m.get("net_margin"),
@@ -85,10 +107,15 @@ def health(u, m, price, high52, peers, table, news_overall, insider):
     me = table.get(u["symbol"], {})
     groups = []
 
+    fin = is_financial(u)
+
     def bar(key, label, value, score, note, context=False):
         # Context bars are neither good nor bad, so they are drawn in neutral gray.
         return {"key": key, "label": label, "value": value, "score": score,
                 "band": "neutral" if context else band(score), "note": note, "context": context}
+
+    def not_scored(key, label):
+        return {**bar(key, label, "n/a", None, FINANCIAL_NOTE), "band": "neutral"}
 
     # Valuation
     v = []
@@ -108,7 +135,7 @@ def health(u, m, price, high52, peers, table, news_overall, insider):
                      f"You pay less per dollar of profit than for {s}% of peers." if s >= 50 else
                      f"You pay more per dollar of profit than for {100 - s}% of peers."))
     fy = me.get("fcf_yield")
-    v.append(bar("fcf_yield", "Free cash flow yield", pct(fy), None if fy is None else _lerp(fy, [(-0.05, 1), (0, 15), (0.05, 55), (0.10, 85), (0.15, 100)]),
+    v.append(not_scored("fcf_yield", "Free cash flow yield") if fin else bar("fcf_yield", "Free cash flow yield", pct(fy), None if fy is None else _lerp(fy, [(-0.05, 1), (0, 15), (0.05, 55), (0.10, 85), (0.15, 100)]),
                  "Cash left after running the business, as a share of the company's price. Higher is better." if fy is None or fy > 0 else
                  "The business used more cash than it brought in last year."))
     groups.append({"name": "Valuation", "hint": "Is the price reasonable for what you get?", "bars": v})
@@ -124,7 +151,7 @@ def health(u, m, price, high52, peers, table, news_overall, insider):
                  "Profit earned on the money shareholders have in the business. 15% or more is strong." if roe is not None else
                  "Can't be measured because shareholder equity is zero or negative."))
     fm = (m["fcf"] / m["revenue"]) if m.get("fcf") is not None and m.get("revenue") else None
-    p.append(bar("fcf_margin", "Cash conversion", pct(fm), None if fm is None else _lerp(fm, [(-0.1, 1), (0, 20), (0.08, 60), (0.15, 85), (0.25, 100)]),
+    p.append(not_scored("fcf_margin", "Cash conversion") if fin else bar("fcf_margin", "Cash conversion", pct(fm), None if fm is None else _lerp(fm, [(-0.1, 1), (0, 20), (0.08, 60), (0.15, 85), (0.25, 100)]),
                  "Share of each sales dollar that turns into real cash. Profits backed by cash are more trustworthy."))
     groups.append({"name": "Profitability", "hint": "Does the business make money?", "bars": p})
 
@@ -144,16 +171,22 @@ def health(u, m, price, high52, peers, table, news_overall, insider):
 
     # Balance sheet
     b = []
-    nc = m.get("net_cash")
+    # Missing cash and debt tags both read as zero, which is no data rather than a balance.
+    nc = m.get("net_cash") if m.get("cash") or m.get("total_debt") else None
     ncr = nc / mcap if nc is not None and mcap else None
-    b.append(bar("net_cash", "Net cash vs. price", pct(ncr), None if ncr is None else _lerp(ncr, [(-0.6, 1), (-0.2, 30), (0, 55), (0.15, 80), (0.35, 100)]),
-                 "Cash minus all debt, as a share of the company's price." + (" It has more cash than debt." if (nc or 0) > 0 else " It owes more than it holds in cash.")))
+    if fin:
+        b.append(not_scored("net_cash", "Net cash vs. price"))
+    else:
+        b.append(bar("net_cash", "Net cash vs. price", pct(ncr), None if ncr is None else _lerp(ncr, [(-0.6, 1), (-0.2, 30), (0, 55), (0.15, 80), (0.35, 100)]),
+                     "Cash and debt are not reported." if nc is None else
+                     "Cash minus all debt, as a share of the company's price." + (" It has more cash than debt." if nc > 0 else " It owes more than it holds in cash.")))
     de = m.get("lt_debt_to_equity")
     if m.get("equity") is not None and m["equity"] <= 0:
         b.append(bar("de", "Debt to equity", "Negative equity", 3, "The company owes more than it owns. That is a serious warning sign."))
     else:
         b.append(bar("de", "Debt to equity", multiple(de), None if de is None else _lerp(de, [(0, 100), (0.25, 85), (0.5, 65), (1, 40), (2, 10)]),
-                     "Long-term debt compared with what shareholders own. Under 0.5 is comfortable." if de else "No long-term debt."))
+                     "Not enough data." if de is None else "No long-term debt." if de == 0 else
+                     "Long-term debt compared with what shareholders own. Under 0.5 is comfortable."))
     cr = m.get("current_ratio")
     b.append(bar("current", "Short-term cushion", multiple(cr), None if cr is None else _lerp(cr, [(0.5, 5), (1, 35), (1.5, 65), (2, 85), (3, 100)]),
                  "Not reported (common for banks and insurers)." if cr is None else
@@ -191,25 +224,44 @@ def health(u, m, price, high52, peers, table, news_overall, insider):
 
 
 def fair_value(u, m, price, peers, table):
-    """Peer multiples plus a simple cash-flow model. Returns methods, range, verdict."""
-    shares = m.get("shares_out") or (u["mcap"] / price if u.get("mcap") and price else None)
+    """Peer multiples plus a simple cash-flow model. Returns methods, range and verdict, or None when no
+    reliable estimate exists."""
+    if not price or price <= 0:
+        return None
+    # The share count behind the market cap, so estimates line up with the peer multiples and the P/S bar.
+    shares = u["mcap"] / price if u.get("mcap") else m.get("shares_out")
     if not shares or shares <= 0:
         return None
+    fin = is_financial(u)
     peer_rows = [table[s] for s in peers]
+    rev, ni = m.get("revenue"), m.get("net_income")
+    nc = m.get("net_cash") or 0
     methods = []
 
-    med_ps = _median([r["ps"] for r in peer_rows])
-    if med_ps and m.get("revenue") and m["revenue"] > 0:
-        methods.append({"name": "Peer price to sales", "value": med_ps * m["revenue"] / shares,
-                        "note": f"Similar companies trade at {med_ps:.1f}x sales."})
+    if rev and rev > 0 and fin:
+        med_ps = _median([r["ps"] for r in peer_rows])
+        if med_ps:
+            methods.append({"name": "Peer price to sales", "value": med_ps * rev / shares,
+                            "note": f"Similar companies trade at {med_ps:.1f}x sales."})
+    elif rev and rev > 0:
+        # Enterprise value, so a peer's debt is not priced in as if it were sales. This company's own net
+        # debt is then subtracted (or net cash added) to get back to what the shares are worth.
+        med_ev = _median([r["ev_sales"] for r in peer_rows])
+        value = (med_ev * rev + nc) / shares if med_ev else 0
+        if value > 0:
+            methods.append({"name": "Peer value to sales", "value": value,
+                            "note": f"Similar companies are valued at {med_ev:.1f}x sales, counting their debt and cash."
+                                    + (f" This company's net cash of {money(nc)} is added." if nc > 0 else
+                                       f" This company's net debt of {money(nc)} is subtracted." if nc < 0 else "")})
     med_pe = _median([r["pe"] for r in peer_rows])
-    if med_pe and m.get("net_income") and m["net_income"] > 0:
-        methods.append({"name": "Peer price to earnings", "value": med_pe * m["net_income"] / shares,
+    if med_pe and ni and ni > 0:
+        methods.append({"name": "Peer price to earnings", "value": med_pe * ni / shares,
                         "note": f"Similar companies trade at {med_pe:.1f}x earnings."})
 
     fcfs = [x for x in (m.get("fcf_history") or []) if x is not None]
     base = sum(fcfs) / len(fcfs) if fcfs else None
-    if base and base > 0:
+    dcf = False
+    if base and base > 0 and not fin:
         g = max(0.0, min(0.12, m.get("revenue_cagr") or m.get("revenue_growth") or 0.0))
         r, tg = 0.10, 0.025
         pv, cf = 0.0, base
@@ -217,20 +269,43 @@ def fair_value(u, m, price, peers, table):
             cf *= 1 + g
             pv += cf / (1 + r) ** year
         terminal = cf * (1 + tg) / (r - tg) / (1 + r) ** 5
-        value = (pv + terminal + (m.get("net_cash") or 0)) / shares
+        value = (pv + terminal + nc) / shares
         if value > 0:
+            dcf = True
             methods.append({"name": "Cash-flow model", "value": value,
                             "note": f"Average free cash flow of ${base / 1e6:,.0f}M growing {g * 100:.0f}% a year for 5 years, "
-                                    f"then 2.5%, discounted at 10%, plus net cash."})
+                                    f"then 2.5%, discounted at 10%, " + ("plus net cash." if nc >= 0 else "minus net debt.")})
 
-    if not methods:
+    # A sales multiple alone says little about a business that loses money, so that case gets no verdict.
+    if not methods or (ni is None or ni <= 0) and not dcf:
         return None
     vals = sorted(x["value"] for x in methods)
     mid = statistics.median(vals)
-    low = max(vals[0], mid * 0.75) if len(vals) > 1 else mid * 0.85
-    high = min(vals[-1], mid * 1.25) if len(vals) > 1 else mid * 1.15
+    if len(vals) == 1:
+        low, high = mid * 0.85, mid * 1.15
+    elif len(vals) == 2:
+        # Span both estimates, so the range never excludes a method listed beneath it.
+        low, high = vals
+    else:
+        low, high = max(vals[0], mid * 0.75), min(vals[-1], mid * 1.25)
     low, high = min(low, mid * 0.9), max(high, mid * 1.1)
     verdict = "undervalued" if price < low else "overvalued" if price > high else "fair"
+
+    spread = vals[-1] / vals[0]
+    apart = f"within {max(5, math.ceil(round((spread - 1) * 20, 6)) * 5)}% of each other"
+    of = "the two methods that suit a financial company" if fin else "the three methods"
+    if len(vals) == 1:
+        confidence, note = "low", f"Only one of {of} could be used, so treat this range loosely."
+    elif spread > 2:
+        confidence, note = "low", (f"The methods disagree widely (lowest {dollars(vals[0])}, highest {dollars(vals[-1])}), "
+                                   "so treat this range loosely.")
+    elif len(vals) == 3:
+        confidence, note = "higher" if spread <= 1.5 else "moderate", f"All three methods were available and land {apart}."
+    elif fin:
+        confidence, note = "moderate", f"Both methods that suit a financial company were available and land {apart}."
+    else:
+        confidence, note = "moderate", f"Two of the three methods could be used, and they land {apart}."
+
     for x in methods:
         x["value"] = round(x["value"], 2)
     return {
@@ -240,5 +315,6 @@ def fair_value(u, m, price, peers, table):
         "high": round(high, 2),
         "upside": mid / price - 1,
         "verdict": verdict,
-        "confidence": "higher" if len(methods) == 3 else "moderate" if len(methods) == 2 else "low",
+        "confidence": confidence,
+        "confidence_note": note,
     }

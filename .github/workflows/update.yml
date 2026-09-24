@@ -35,13 +35,19 @@ jobs:
           path: |
             .cache
             site/data
-          key: data-${{ github.run_id }}
+          # run_attempt too: cache keys cannot be overwritten, so a re-run needs its own key to save its data.
+          key: data-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: data-
 
       # Code pushes reuse the last analysis so design changes deploy in a minute.
       # Scheduled and manual runs always analyze fresh data.
+      # If analysis fails, the site keeps the last good data (restored above) instead of going dark.
+      # The step timeout matters: a job timeout would skip the deploy, but a timed-out step is just a failed one.
       - name: Analyze today's market data
+        id: analyze
         if: github.event_name != 'push' || hashFiles('site/data/meta.json') == ''
+        continue-on-error: true
+        timeout-minutes: 170
         env:
           # "Your Name you@example.com". The SEC rejects github.com addresses.
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
@@ -54,7 +60,11 @@ jobs:
           path: |
             .cache
             site/data
-          key: data-${{ github.run_id }}
+          key: data-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Flag a failed analysis
+        if: steps.analyze.outcome == 'failure'
+        run: echo "::warning title=Analysis failed::Today's analysis did not finish. The site was published with the most recent data that did. Check the 'Analyze today's market data' step log."
 
       - uses: actions/configure-pages@v5
 

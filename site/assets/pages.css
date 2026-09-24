@@ -37,15 +37,20 @@ tr.detail td { padding: 0; background: var(--surface-2); white-space: normal; te
 .facts li { display: grid; grid-template-columns: 18px 1fr; gap: 10px; }
 .facts i { color: var(--text-3); margin-top: 3px; }
 .parts { display: grid; gap: 9px; }
-.part { display: grid; grid-template-columns: 150px 1fr 56px; gap: 12px; align-items: center; font-size: 13px; color: var(--text-2); }
-.part .pts { text-align: right; font-variant-numeric: tabular-nums; color: var(--text); }
+.part { display: grid; grid-template-columns: 150px 1fr 76px; gap: 12px; align-items: center; font-size: 13px; color: var(--text-2); }
+.part .pts { text-align: right; font-variant-numeric: tabular-nums; color: var(--text); white-space: nowrap; }
+.part-total { border-top: 1px solid var(--line); padding-top: 9px; color: var(--text); font-weight: 500; }
+.part-total span:nth-child(2) { text-align: right; color: var(--text-3); font-weight: 400; }
 .part-track { height: 5px; border-radius: 5px; background: var(--surface-3); overflow: hidden; }
 .part-track span { display: block; height: 100%; background: var(--text-2); border-radius: 5px; }
 .detail-actions { grid-column: 1 / -1; display: flex; gap: 10px; }
 @media (max-width: 760px) {
   .detail-inner { grid-template-columns: 1fr; padding: 16px; }
-  .part { grid-template-columns: 120px 1fr 48px; }
+  .part { grid-template-columns: 110px 1fr 70px; }
 }
+
+.notice.unverified { margin-top: 16px; }
+.notice.unverified a { color: var(--text); font-family: var(--mono); }
 
 /* Insider feed */
 .day-group + .day-group { margin-top: 36px; }

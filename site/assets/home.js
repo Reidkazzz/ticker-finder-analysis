@@ -18,9 +18,10 @@ async function latest() {
     const [ins, meta] = await Promise.all([load("insiders.json"), load("meta.json")]);
     const rows = ins.companies.filter((c) => c.tier <= 2).slice(0, 5);
     const pool = rows.length >= 3 ? rows : ins.companies.slice(0, 5);
-    document.querySelector("[data-latest-date]").textContent = pool[0] ? `Filed through ${date(meta.last_filing_day)}` : "";
+    document.querySelector("[data-latest-date]").textContent = pool[0] && meta.last_filing_day ? `Filed through ${date(meta.last_filing_day)}` : "";
     if (!pool.length) {
-      list.innerHTML = `<li class="hp-empty">No open-market purchases were filed in the last ${ins.window_days} days.</li>`;
+      const span = meta.insider_pending?.length ? "in the days scanned so far" : `in the last ${ins.window_days} days`;
+      list.innerHTML = `<li class="hp-empty">No open-market purchases were filed ${span}.</li>`;
       return;
     }
     list.innerHTML = pool.map((c) => {
@@ -63,8 +64,10 @@ async function insiderSummary() {
     const [ins, meta] = await Promise.all([load("insiders.json"), load("meta.json")]);
     const t1 = ins.companies.filter((c) => c.tier === 1).length;
     const t2 = ins.companies.filter((c) => c.tier === 2).length;
-    el.innerHTML = `In the last ${ins.window_days} days, insiders made <b>${t1}</b> Tier 1 and <b>${t2}</b> Tier 2 purchases.` +
-      (meta.filed_today ? ` <b>${meta.filed_today}</b> were filed today.` : "");
+    // Counted here from the same Tier 1 and 2 companies, so it can never exceed the total above.
+    const latest = ins.companies.filter((c) => c.tier <= 2 && c.filed === meta.market_date).length;
+    el.innerHTML = `In the last ${ins.window_days} days, insiders bought stock in <b>${t1}</b> Tier 1 and <b>${t2}</b> Tier 2 companies.` +
+      (latest ? ` Purchases at <b>${latest}</b> of them were filed on ${esc(date(meta.market_date))}.` : "");
   } catch {
     el.textContent = "Purchases appear after the first nightly update.";
   }
@@ -80,11 +83,11 @@ async function example(screen) {
     const bars = (r.health || []).flatMap((g) => g.bars).filter((b) => !b.context && b.score != null);
     const pick = ["net_margin", "net_cash", "ps"].map((k) => bars.find((b) => b.key === k)).filter(Boolean);
     const v = r.valuation;
-    const tag = v ? { undervalued: "tag-up", overvalued: "tag-down", fair: "tag-mid" }[v.verdict] : "";
+    const tag = v?.verdict && { undervalued: "tag-up", overvalued: "tag-down", fair: "tag-mid" }[v.verdict];
     host.innerHTML = `
       <div class="ex-head"><div><span class="sym">${esc(r.symbol)}</span><span class="nm">${esc(r.name)}</span></div>
-        ${v ? `<span class="tag ${tag}">${v.verdict[0].toUpperCase() + v.verdict.slice(1)}</span>` : ""}</div>
-      ${v ? `<p class="ex-fv">Estimated fair value <b>${price(v.low)} to ${price(v.high)}</b> vs. price <b>${price(r.price)}</b></p>` : ""}
+        ${tag ? `<span class="tag ${tag}">${v.verdict[0].toUpperCase() + v.verdict.slice(1)}</span>` : ""}</div>
+      ${tag ? `<p class="ex-fv">Estimated fair value <b>${price(v.low)} to ${price(v.high)}</b> vs. price <b>${price(r.price)}</b></p>` : ""}
       <div class="ex-bars">${pick.map((b) => `<div class="ex-bar"><span>${esc(b.label)}</span>${meter(b.score, b.band)}</div>`).join("")}</div>`;
     link.href = `report.html?t=${encodeURIComponent(sym)}`;
     link.innerHTML = `Open the ${esc(sym)} report <i class="ph ph-arrow-right" aria-hidden="true"></i>`;

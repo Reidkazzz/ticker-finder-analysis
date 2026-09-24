@@ -3,10 +3,11 @@ import re
 
 from .net import sec_json, web_json
 
-# Share classes that are not ordinary common stock.
+# Share classes that are not ordinary common stock. Nasdaq abbreviates some preferreds ('Dep Shr Srs A Pfd')
+# and misspells depositary shares, and these listings share the issuer's CIK with its common stock.
 _EXCLUDE_NAME = re.compile(
-    r"\b(warrants?|units?|rights?|preferred|depositary|notes due|debentures|trust preferred|"
-    r"subordinated|perpetual|acquisition corp|capital trust)\b|%",
+    r"\b(warrants?|units?|rights?|preferred|pfd (shs?|ser|series)|srs [a-z] pfd|deposit[ao]ry|dep sh[rs]|zones|"
+    r"notes due|debentures|trust preferred|subordinated|perpetual|acquisition corp|capital trust)\b|%|\(adw\)",
     re.I,
 )
 

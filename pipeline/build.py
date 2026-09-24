@@ -33,17 +33,24 @@ def _round(o):
 def write(path, payload):
     full = os.path.join(OUT, path)
     os.makedirs(os.path.dirname(full), exist_ok=True)
-    with open(full, "w", encoding="utf-8") as fh:
+    tmp = full + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
         json.dump(_round(payload), fh, separators=(",", ":"), ensure_ascii=False)
+    os.replace(tmp, full)  # a run killed by the step timeout must not leave a truncated file to deploy
 
 
 def market_today():
-    """Today's date in New York, so a late-evening run still counts as that trading day."""
+    """The New York trading day this run belongs to.
+
+    Six hours are taken off first, so an evening run that GitHub starts late, after midnight in
+    New York, still counts as that day instead of labeling its filings with tomorrow's date.
+    """
     try:
         from zoneinfo import ZoneInfo
-        return dt.datetime.now(ZoneInfo("America/New_York")).date()
+        now = dt.datetime.now(ZoneInfo("America/New_York"))
     except Exception:
-        return (dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=5)).date()
+        now = dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=5)
+    return (now - dt.timedelta(hours=6)).date()
 
 
 def step(msg):
@@ -54,6 +61,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=0, help="only process a random sample of N tickers")
     ap.add_argument("--insider-days", type=int, default=int(os.environ.get("INSIDER_DAYS", 30)))
+    ap.add_argument("--insider-minutes", type=float, default=float(os.environ.get("INSIDER_MINUTES", 75)),
+                    help="stop scanning older filing days after this long; the next run picks up where it left off")
     ap.add_argument("--skip-news", action="store_true")
     args = ap.parse_args()
     today = market_today()
@@ -95,9 +104,16 @@ def main():
     step(f"  {len(scr['results'])} companies passed")
 
     step(f"Scanning EDGAR for insider buying (last {args.insider_days} days)")
-    cache = insiders.update_cache(os.path.join(CACHE, "insiders.json"), args.insider_days, today)
+    cache_path = os.path.join(CACHE, "insiders.json")
+    try:
+        cache, _ = insiders.update_cache(cache_path, args.insider_days, today, time_budget=args.insider_minutes * 60)
+    except Exception as e:  # never lose the screener and reports because one source misbehaved
+        step(f"  Insider scan stopped early: {e!r}. Publishing the filings collected so far.")
+        cache = insiders.load_cache(cache_path)
     ins = insiders.build(cache, uni if not args.limit else universe_all_for_insiders(uni), args.insider_days, today)
-    step(f"  {len(ins['companies'])} companies with purchases, {len(ins['stakes'])} new 5%+ stakes")
+    pending = insiders.pending_days(cache, args.insider_days, today)
+    step(f"  {len(ins['companies'])} companies with purchases, {len(ins['stakes'])} new 5%+ stakes"
+         + (f"; {len(pending)} days still to scan" if pending else ""))
 
     heads = {}
     if not args.skip_news:
@@ -105,8 +121,9 @@ def main():
         heads = news.all_headlines([(s, uni[s]["name"]) for s in symbols])
 
     step("Writing ticker reports")
-    if os.path.isdir(os.path.join(OUT, "t")):
-        shutil.rmtree(os.path.join(OUT, "t"))
+    # Reports go to a fresh folder that replaces the old one only once every file is written.
+    for leftover in ("t_new", "t_old"):
+        shutil.rmtree(os.path.join(OUT, leftover), ignore_errors=True)
     table = report.peer_table(uni, metrics)
     ins_by_sym = {c["symbol"]: c for c in ins["companies"] if c.get("symbol")}
     index = []
@@ -142,11 +159,17 @@ def main():
             "valuation": fv,
             "news": {"items": items, "overall": mood},
             "insiders": ic,
+            "insider_window": args.insider_days,
             "screener": next((r for r in scr["results"] if r["symbol"] == s), None) is not None,
         }
-        write(f"t/{s}.json", doc)
+        write(f"t_new/{s}.json", doc)
         index.append([s, u["name"], u["sector"], round(u["mcap"] or 0), health_score, fv["verdict"] if fv else None])
 
+    # Renames are instant but deleting thousands of files is not, so the old folder goes last.
+    if os.path.isdir(os.path.join(OUT, "t")):
+        os.replace(os.path.join(OUT, "t"), os.path.join(OUT, "t_old"))
+    os.replace(os.path.join(OUT, "t_new"), os.path.join(OUT, "t"))
+    shutil.rmtree(os.path.join(OUT, "t_old"), ignore_errors=True)
     write("universe.json", index)
     write("screener.json", scr)
     write("insiders.json", ins)
@@ -154,7 +177,8 @@ def main():
         "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="minutes"),
         "market_date": today.isoformat(),
         "last_filing_day": insiders._iso(max(cache["days_done"])) if cache["days_done"] else None,
-        "filed_today": sum(1 for c in ins["companies"] if c["filed"] == today.isoformat()),
+        # Tier 1 and 2 only, the same companies the home page counts next to it.
+        "filed_today": sum(1 for c in ins["companies"] if c["tier"] <= 2 and c["filed"] == today.isoformat()),
         "stocks": len(symbols),
         "with_financials": len(metrics),
         "screener_passed": len(scr["results"]),
@@ -163,6 +187,7 @@ def main():
         "insider_tier2": sum(1 for c in ins["companies"] if c["tier"] == 2),
         "stakes": len(ins["stakes"]),
         "insider_days": args.insider_days,
+        "insider_pending": pending,
         "sample": bool(args.limit),
     })
     step("Done")

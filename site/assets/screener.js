@@ -44,10 +44,16 @@ function facts(r) {
 }
 
 function detailRow(r, cols) {
+  // Whole points when the pipeline sends them. Older data has one-decimal parts, and rounding those
+  // one by one here would stop them adding up to the score, so they keep their decimal.
+  const whole = r.score_parts.every((p) => Number.isInteger(p.points));
+  const pts = (n) => (whole ? String(n) : (Math.round(n * 10) / 10).toFixed(1));
+  const total = r.score_parts.reduce((a, p) => a + p.points, 0);
   return `<tr class="detail"><td colspan="${cols}"><div class="detail-inner">
     <div><h4>Why it passed</h4><ul class="facts">${facts(r).map(([i, t]) => `<li><i class="ph ${i}" aria-hidden="true"></i><span>${esc(t)}</span></li>`).join("")}</ul></div>
     <div><h4>How the ${r.score} score adds up</h4><div class="parts">${r.score_parts.map((p) => `
-      <div class="part"><span>${esc(p.label)}</span><div class="part-track"><span style="width:${(p.points / p.max) * 100}%"></span></div><span class="pts">${Math.round(p.points)} / ${p.max}</span></div>`).join("")}
+      <div class="part"><span>${esc(p.label)}</span><div class="part-track"><span style="width:${(p.points / p.max) * 100}%"></span></div><span class="pts">${pts(p.points)} / ${p.max}</span></div>`).join("")}
+      <div class="part part-total"><span>Total</span><span>${Math.abs(total - r.score) < 0.05 ? "" : `Rounds to ${r.score}`}</span><span class="pts">${pts(total)} / ${r.score_parts.reduce((a, p) => a + p.max, 0)}</span></div>
     </div></div>
     <div class="detail-actions"><a class="btn btn-primary btn-sm" href="report.html?t=${encodeURIComponent(r.symbol)}">Full report on ${esc(r.symbol)}</a></div>
   </div></td></tr>`;
@@ -56,7 +62,7 @@ function detailRow(r, cols) {
 function renderSectors() {
   const el = document.querySelector("[data-sectors]");
   const total = data.results.length;
-  const list = [{ name: "All", passed: total }, ...data.sectors.filter((s) => s.checked > 0)];
+  const list = [{ name: "All", passed: total }, ...data.sectors.filter((s) => s.checked > 0 || s.excluded)];
   el.innerHTML = list.map((s) => `<button class="pill" type="button" data-sector="${esc(s.name)}" aria-pressed="${s.name === state.sector}">
     ${esc(s.name === "All" ? "All sectors" : s.name)}<span class="count">${s.passed}</span></button>`).join("");
   el.onclick = (e) => {
@@ -72,17 +78,35 @@ function renderSectors() {
   };
 }
 
+// Companies that passed every financial check but whose US registration could not be confirmed on this run.
+function unverifiedNote() {
+  const list = (data.unverified || []).map((u) => (typeof u === "string" ? { symbol: u } : u))
+    .filter((u) => u.symbol && (state.sector === "All" || !u.sector || u.sector === state.sector));
+  if (!list.length) return "";
+  const n = list.length;
+  const links = list.map((u) => `<a href="report.html?t=${encodeURIComponent(u.symbol)}" title="${esc(u.reason || u.name || "")}">${esc(u.symbol)}</a>`).join(", ");
+  return `<div class="notice unverified"><i class="ph ph-info" aria-hidden="true"></i>
+    <span>${n} ${n === 1 ? "company" : "companies"} passed every financial check, but ${n === 1 ? "its" : "their"} US headquarters or incorporation
+    could not be confirmed with the SEC today, so ${n === 1 ? "it is" : "they are"} left out: ${links}. The next update checks again.</span></div>`;
+}
+
 function renderTable() {
   const rows = data.results.filter((r) => state.sector === "All" || r.sector === state.sector).sort(SORTS[state.sort]);
   const sec = data.sectors.find((s) => s.name === state.sector);
   countEl.innerHTML = state.sector === "All"
-    ? `<b>${rows.length}</b> companies passed every check`
+    ? `<b>${rows.length}</b> ${rows.length === 1 ? "company" : "companies"} passed every check`
+    : sec?.excluded ? `${esc(state.sector)} is not screened`
     : `<b>${rows.length}</b> of ${sec?.checked ?? 0} ${esc(state.sector)} companies passed every check`;
+
+  if (sec?.excluded) {
+    host.innerHTML = `<div class="panel empty"><h3>${esc(state.sector)} companies are not screened</h3><p>${esc(sec.excluded)}</p></div>`;
+    return;
+  }
 
   if (!rows.length) {
     host.innerHTML = `<div class="panel empty"><h3>No ${esc(state.sector)} company passes today</h3>
       <p>That is normal. The checks are strict on purpose, and some sectors rarely have cheap, debt-light, profitable small caps.
-      Try another sector or come back after the next update.</p></div>`;
+      Try another sector or come back after the next update.</p></div>${unverifiedNote()}`;
     return;
   }
   const cols = 10;
@@ -105,7 +129,8 @@ function renderTable() {
         <td>${r.analysts ?? "n/a"}</td>
       </tr>${state.open === r.symbol ? detailRow(r, cols) : ""}`).join("")}
     </tbody></table></div>
-    <p class="faint" style="font-size:13px;margin-top:12px">Select a row to see why it passed and how its score adds up. Cash yield is free cash flow as a share of market value.</p>`;
+    <p class="faint" style="font-size:13px;margin-top:12px">Select a row to see why it passed and how its score adds up. Cash yield is free cash flow as a share of market value.</p>
+    ${unverifiedNote()}`;
 
   host.querySelectorAll("tr.row").forEach((tr) => {
     const toggle = () => { state.open = state.open === tr.dataset.sym ? null : tr.dataset.sym; renderTable(); };

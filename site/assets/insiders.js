@@ -1,4 +1,4 @@
-import { chrome, date, esc, load, money, pct, price, relDay, signClass } from "./common.js";
+import { chrome, date, esc, load, localToday, money, pct, price, relDay, signClass } from "./common.js";
 
 chrome();
 
@@ -39,10 +39,10 @@ function card(c) {
       </div>
     </div>
     <div class="buyers">
-      <div class="buyers-head"><span>Buyer</span><span>Amount</span><span>Price</span><span class="stake">Change</span><span></span></div>
+      <div class="buyers-head"><span>Buyer</span><span>Amount</span><span>Price paid</span><span class="stake">Stake change</span><span></span></div>
       ${c.buyers.map((b) => `<div class="buyer">
         <div class="who"><b title="${esc(b.name)}">${esc(b.name)}</b><span>${esc(role(b.roles))}, bought ${esc(date(b.last))}</span></div>
-        <div class="n">${money(b.value)}<small>${Math.round(b.shares).toLocaleString("en-US")} sh</small></div>
+        <div class="n">${money(b.value)}${b.shares == null ? "" : `<small>${Math.round(b.shares).toLocaleString("en-US")} sh</small>`}</div>
         <div class="n">${price(b.avg_price)}</div>
         <div class="n stake">${stake(b)}</div>
         <a class="doc" href="${esc(b.filing)}" target="_blank" rel="noopener" title="Open the SEC filing"><i class="ph ph-arrow-up-right" aria-hidden="true"></i><span class="sr-only">SEC filing</span></a>
@@ -65,15 +65,16 @@ function renderSectors() {
 function render() {
   renderSectors();
   const rows = data.companies.filter((c) => state.tier.includes(String(c.tier)) && (state.sector === "All" || c.sector === state.sector));
-  const today = meta.market_date;
-  const filedToday = rows.filter((c) => c.filed === today).length;
+  const today = localToday();
+  const latest = rows.filter((c) => c.filed === meta.market_date).length;
+  const span = meta.insider_pending?.length ? "in the days scanned so far" : `in the last ${data.window_days} days`;
   document.querySelector("[data-count]").innerHTML =
     `<b>${rows.length}</b> ${rows.length === 1 ? "company" : "companies"} in the last ${data.window_days} days` +
-    (filedToday ? `, <b>${filedToday}</b> filed today` : "");
+    (latest ? `, <b>${latest}</b> filed on ${esc(date(meta.market_date))}` : "");
 
   if (!rows.length) {
     feed.innerHTML = `<div class="panel empty"><h3>No purchases match</h3><p>No ${state.sector === "All" ? "" : esc(state.sector) + " "}company had
-      ${state.tier === "1" ? "Tier 1" : state.tier === "12" ? "Tier 1 or 2" : "any"} open-market insider buying in the last ${data.window_days} days.
+      ${state.tier === "1" ? "Tier 1" : state.tier === "12" ? "Tier 1 or 2" : "any"} open-market insider buying ${span}.
       Try "All purchases" or another sector.</p></div>`;
   } else {
     const days = new Map();
@@ -88,7 +89,7 @@ function render() {
       </section>`).join("");
   }
 
-  const stakes = data.stakes.filter((s) => state.sector === "All" || s.sector === state.sector);
+  const stakes = (data.stakes || []).filter((s) => state.sector === "All" || s.sector === state.sector);
   stakesEl.innerHTML = stakes.length ? `<div class="stakes">${stakes.slice(0, 60).map((s) => `
     <div class="stake-row">
       <div><div class="sym">${s.symbol ? `<a href="report.html?t=${encodeURIComponent(s.symbol)}">${esc(s.symbol)}</a>` : "Unlisted"}</div><div class="faint" style="font-size:12.5px">${esc(date(s.filed))}</div></div>
@@ -97,7 +98,7 @@ function render() {
       <div class="purpose">${esc(s.purpose || "No stated purpose in the filing.")}</div>
       <a class="doc" href="${esc(s.filing)}" target="_blank" rel="noopener" title="Open the SEC filing"><i class="ph ph-arrow-up-right" aria-hidden="true"></i><span class="sr-only">SEC filing</span></a>
     </div>`).join("")}</div>`
-    : `<div class="panel empty"><p>No new 5%+ stakes were filed ${state.sector === "All" ? "" : "in " + esc(state.sector) + " "}in the last ${data.window_days} days.</p></div>`;
+    : `<div class="panel empty"><p>No new 5%+ stakes were filed ${state.sector === "All" ? "" : "in " + esc(state.sector) + " "}${span}.</p></div>`;
 }
 
 document.querySelector("[data-sectors]").addEventListener("click", (e) => {
@@ -117,9 +118,27 @@ document.querySelector("[data-tiers]").addEventListener("click", (e) => {
   render();
 });
 
+function pendingNotice() {
+  const el = document.querySelector("[data-pending]");
+  const p = [...(meta.insider_pending || [])].sort().reverse();
+  if (!p.length) return;
+  const oldest = p[p.length - 1], newest = p[0];
+  const which = p.length === 1 ? `${date(newest)} has` : `${p.length} weekdays between ${date(oldest)} and ${date(newest)} have`;
+  // Only claim the recent days are complete when the newest unscanned day is older than the latest one.
+  const recent = newest < meta.market_date
+    ? `Everything filed after ${date(newest)} has been checked.`
+    : `${p.length === 1 ? "That is" : "That includes"} the latest day, so some recent purchases may not be listed yet.`;
+  el.innerHTML = `<i class="ph ph-clock-counter-clockwise" aria-hidden="true"></i>
+    <span>Still catching up: ${esc(which)} not been fully scanned yet.
+    The SEC limits how fast filings can be downloaded, so each evening's update fills in more. ${esc(recent)}</span>`;
+  el.hidden = false;
+}
+
 Promise.all([load("insiders.json"), load("meta.json")]).then(([d, m]) => {
   data = d;
   meta = m;
+  document.querySelectorAll("[data-window]").forEach((el) => (el.textContent = d.window_days));
+  pendingNotice();
   render();
 }).catch(() => {
   feed.innerHTML = `<div class="panel empty"><h3>Insider data is not available yet</h3><p>Filings appear after the first nightly update runs.</p></div>`;

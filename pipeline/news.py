@@ -59,6 +59,9 @@ _LISTICLE = re.compile(r"\b(\d+|top|best) (stocks?|reasons|things)\b|\bstocks to
 
 
 def classify(title):
+    # "Will X beat estimates?" is speculation, not an event, whatever words it uses.
+    if title.rstrip().endswith("?"):
+        return "neutral", "A question or opinion piece, not news of an actual event.", 0.0
     hits = [(w, r) for rx, w, r in _COMPILED if rx.search(title)]
     if not hits:
         if _LISTICLE.search(title):
@@ -146,12 +149,17 @@ def overall(items):
     bear = sum(1 for i in items if i["label"] == "bearish")
     net = sum(max(-2, min(2, i["score"])) for i in items)
     score = round(max(1, min(100, 50 + net / max(len(items), 1) * 25)))
-    if bull >= bear + 2 or (bull > bear and net >= 2):
-        label, text = "bullish", f"Mostly positive: {bull} good, {bear} bad and {len(items) - bull - bear} neutral headlines."
-    elif bear >= bull + 2 or (bear > bull and net <= -2):
-        label, text = "bearish", f"Mostly negative: {bear} bad, {bull} good and {len(items) - bull - bear} neutral headlines."
+    n, rest = len(items), len(items) - bull - bear
+    # One good headline among nine neutral ones is not a positive news flow: require a real share of the headlines.
+    tilt = lambda a, b: (a - b >= 2 and a >= n / 4) or (a > b and a >= 0.4 * n)
+    if tilt(bull, bear):
+        word = "Mostly positive" if bull >= n / 2 else "Leaning positive"
+        label, text = "bullish", f"{word}: {bull} good, {bear} bad and {rest} neutral headlines."
+    elif tilt(bear, bull):
+        word = "Mostly negative" if bear >= n / 2 else "Leaning negative"
+        label, text = "bearish", f"{word}: {bear} bad, {bull} good and {rest} neutral headlines."
     else:
-        label, text = "neutral", f"Mixed or quiet: {bull} good, {bear} bad and {len(items) - bull - bear} neutral headlines."
+        label, text = "neutral", f"Mixed or quiet: {bull} good, {bear} bad and {rest} neutral headlines."
     return {"label": label, "score": score, "text": text}
 
 
