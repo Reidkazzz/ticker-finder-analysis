@@ -81,16 +81,45 @@ function renderSectors() {
   };
 }
 
-// Companies that passed every financial check but whose US registration could not be confirmed on this run.
+// Companies that passed every other check but were left out because a check could not be confirmed on this run:
+// their US registration ("us") or their debt ("debt"), each listed in "unconfirmed" with its reason in "reason".
+// Older data lists only registration problems, as symbols or as objects without "unconfirmed".
+const its = (n) => (n === 1 ? "its" : "their");
+const isLeftOut = (n) => (n === 1 ? "it is left out" : "they are left out");
+const UNCONFIRMED = {
+  us: (n) => `passed every financial check, but ${its(n)} US headquarters or incorporation could not be confirmed with the SEC today, so ${isLeftOut(n)}`,
+  debt: (n) => `passed every other check, but ${its(n)} debt could not be read reliably from ${its(n)} filings, so the low-debt rule could not be confirmed and ${isLeftOut(n)}`,
+  "debt us": (n) => `passed every other check, but ${its(n)} debt could not be read reliably from ${its(n)} filings and ${its(n)} US headquarters or incorporation could not be confirmed with the SEC today, so ${isLeftOut(n)}`,
+};
+const andList = (a) => (a.length < 2 ? a.join("") : `${a.slice(0, -1).join(", ")} and ${a[a.length - 1]}`);
+
 function unverifiedNote() {
   const list = (data.unverified || []).map((u) => (typeof u === "string" ? { symbol: u } : u))
-    .filter((u) => u.symbol && (state.sector === "All" || !u.sector || u.sector === state.sector));
+    .filter((u) => u && u.symbol && (state.sector === "All" || !u.sector || u.sector === state.sector));
   if (!list.length) return "";
-  const n = list.length;
-  const links = list.map((u) => `<a href="report.html?t=${encodeURIComponent(u.symbol)}" title="${esc(u.reason || u.name || "")}">${esc(u.symbol)}</a>`).join(", ");
+  const groups = new Map();
+  for (const u of list) {
+    const key = Array.isArray(u.unconfirmed) && u.unconfirmed.length ? [...u.unconfirmed].sort().join(" ") : "us";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(u);
+  }
+  const order = ["us", "debt", "debt us"];
+  const keys = [...groups.keys()].sort((a, b) => (order.indexOf(a) + 1 || 9) - (order.indexOf(b) + 1 || 9));
+  const sentences = keys.map((key) => {
+    const g = groups.get(key);
+    const n = g.length;
+    const links = andList(g.map((u) => {
+      const title = [u.name && u.name.replace(/\.$/, ""), u.reason].filter(Boolean).join(". ");
+      return `<a href="report.html?t=${encodeURIComponent(u.symbol)}"${title ? ` title="${esc(title)}"` : ""}>${esc(u.symbol)}</a>`;
+    }));
+    const why = UNCONFIRMED[key] ? UNCONFIRMED[key](n)
+      : `passed every other check, but one check could not be confirmed today, so ${isLeftOut(n)}`;
+    // A registration lookup that failed today may work tomorrow. A debt reading changes only with new filings.
+    const again = key.split(" ").includes("us") ? " The next update checks again." : "";
+    return `${n} ${n === 1 ? "company" : "companies"} ${why}: ${links}.${again}`;
+  });
   return `<div class="notice unverified"><i class="ph ph-info" aria-hidden="true"></i>
-    <span>${n} ${n === 1 ? "company" : "companies"} passed every financial check, but ${n === 1 ? "its" : "their"} US headquarters or incorporation
-    could not be confirmed with the SEC today, so ${n === 1 ? "it is" : "they are"} left out: ${links}. The next update checks again.</span></div>`;
+    <div>${sentences.map((s, i) => `<p${i ? ` style="margin-top:6px"` : ""}>${s}</p>`).join("")}</div></div>`;
 }
 
 function renderTable() {
