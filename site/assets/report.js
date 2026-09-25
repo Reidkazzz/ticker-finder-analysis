@@ -78,7 +78,8 @@ function rangeViz(v, px) {
   </div>`;
 }
 
-// Shown near the verdict and the profit bars when last year's profit included one-time items.
+// Shown near the verdict and the profit bars when last year's profit included one-time items, and for a REIT, how its
+// funds from operations (FFO) come from its net income.
 function oneTimeNote(r, style = "margin-top:16px") {
   const n = r.fundamentals?.one_time_note;
   // A paragraph rather than a div, so the first bar after it keeps its :first-of-type styling.
@@ -88,11 +89,13 @@ function oneTimeNote(r, style = "margin-top:16px") {
 function verdictPanel(r) {
   const v = r.valuation;
   if (!v || !VERDICT[v.verdict]) {
+    // A fair value withheld for a stated reason (older data has none, so it gets the general explanation).
+    const why = v?.withheld ? esc(v.withheld) : `There is not enough reliable data to estimate a fair value. This happens when we could not find a full year of financials in the company's SEC filings,
+      which is common for new listings and foreign companies, foreign banks among them. It also happens when a company is losing money and has no positive cash flow to value,
+      since comparing it with others on sales says little about what it is worth.`;
     return `<section class="panel panel-pad verdict"><h2>Verdict</h2>
       <p class="word" style="font-size:28px">Not enough data</p>
-      <p class="line">There is not enough reliable data to estimate a fair value. This happens when we could not find a full year of financials in the company's SEC filings,
-      which is common for banks, new listings and foreign companies. It also happens when a company is losing money and has no positive cash flow to value,
-      since comparing it with others on sales says little about what it is worth.</p>${oneTimeNote(r)}</section>`;
+      <p class="line">${why}</p>${oneTimeNote(r)}</section>`;
   }
   const up = v.upside;
   const conf = v.confidence_note || CONFIDENCE[v.confidence];
@@ -125,7 +128,7 @@ function pricePanel(r) {
 function healthSection(r) {
   if (!r.health) {
     return `<div class="h-top"><div><h2>Health check</h2><p>We could not find a full year of revenue and profit in this company's SEC filings, so it cannot be scored.
-      This is common for banks, companies with no sales yet, funds, SPACs and foreign filers.</p></div></div>`;
+      This is common for companies with no sales yet, funds, SPACs and foreign filers, foreign banks among them.</p></div></div>`;
   }
   const s = r.health_score;
   const band = s == null ? "" : s >= 70 ? "strong" : s >= 40 ? "fair" : "weak";
@@ -137,7 +140,7 @@ function healthSection(r) {
     <div class="h-groups">${r.health.map((g) => `
       <section class="panel h-group${g.bars.every((b) => b.context) ? " context" : ""}">
         <header><h3>${esc(g.name)}</h3><p>${esc(g.hint)}</p></header>
-        ${g.bars.some((b) => b.key === "net_margin") ? oneTimeNote(r, "margin:12px 0 4px") : ""}
+        ${g.bars.some((b) => b.key === "net_margin" || b.key === "ffo_margin" || b.key === "roa") ? oneTimeNote(r, "margin:12px 0 4px") : ""}
         ${g.bars.map((b) => `<div class="h-bar">
           <div class="l"><b>${esc(b.label)}</b><span>${esc(b.value)}</span></div>
           ${meter(b.score, b.band)}
@@ -171,8 +174,10 @@ function peersSection(r) {
   const pm = r.peer_multiples;
   const head = `<div class="h-top" id="peers"><div><h2>Similar companies</h2><p>${esc(r.peer_basis)}</p></div></div>`;
   if (!list.length || !pm) return head;
-  // Non-financial companies also get price to sales, the measure their health check ranks.
-  const cols = [pm.ps_label && ["ps", pm.ps_label], ["sales", pm.sales_label], ["pe", pm.pe_label]].filter(Boolean);
+  // Non-financial companies also get price to sales, the measure their health check ranks. Banks get price to tangible
+  // book (ptbv) in place of a sales multiple and have no sales_label; every other report has sales_label.
+  const cols = [pm.ps_label && ["ps", pm.ps_label], pm.ptbv_label && ["ptbv", pm.ptbv_label],
+    pm.sales_label && ["sales", pm.sales_label], ["pe", pm.pe_label]].filter(Boolean);
   const row = (who, name, x) => `<div class="who"><b>${esc(who)}</b><span>${esc(name)}</span></div>
     ${cols.map(([k]) => `<div class="n">${mult(x?.[k])}</div>`).join("")}`;
   return `${head}
