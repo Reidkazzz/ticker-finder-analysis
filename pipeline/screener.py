@@ -205,7 +205,7 @@ def run(universe, metrics, prices, analyst_counter):
             # Without one-time items, as the margin rule and the score use it.
             "net_margin": m["adj_net_margin"],
             "net_margin_reported": m["net_margin"],
-            "one_time_note": one_time_note(m),
+            "one_time_note": one_time_note(m, ffo=False),
             "lt_de": m["lt_debt_to_equity"],
             "total_debt": m["total_debt"],
             "net_cash": m["net_cash"],

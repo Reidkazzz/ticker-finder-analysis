@@ -17,12 +17,17 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "site", "data")
 CACHE = os.path.join(ROOT, ".cache")
 
-# SIC codes (the SEC's industry codes) of financial companies, which pick their peer group. A company's code
-# rarely changes, so each is looked up once (one request) and rechecked every SIC_REFRESH_DAYS, a few per run.
+# SIC codes (the SEC's industry codes) of financial companies, which pick their peer group, and of property companies,
+# where code 6798 marks a REIT. A company's code rarely changes, so each is looked up once (one request) and rechecked
+# every SIC_REFRESH_DAYS, a few per run.
 SIC_CACHE = os.path.join(CACHE, "sic.json")
 SIC_REFRESH_DAYS = 180
 SIC_REFRESH_PER_RUN = 40
 SIC_MINUTES = 6
+# A bank's own figures in its report's fundamentals (see main).
+BANK_FIELDS = ("net_interest_income", "noninterest_income", "noninterest_expense", "provision", "efficiency_ratio",
+               "adj_net_income_common", "adj_eps", "tangible_equity", "tce_ratio", "adj_roa", "adj_roe_common",
+               "adj_rotce", "returns_as_of", "tce_unread")
 
 
 def _round(o):
@@ -65,9 +70,10 @@ def step(msg):
 
 
 def sic_codes(ciks, today, minutes=SIC_MINUTES):
-    """{cik: SIC code} from the SEC company records, cached in .cache/sic.json. Companies not yet looked up come
-    first, then the oldest lookups are rechecked. Stops at the time budget or when the SEC throttles, and a
-    company still without a code is matched within its Nasdaq sector instead."""
+    """{cik: SIC code} from the SEC company records, cached in .cache/sic.json, for financial and property companies
+    (report.wants_sic). Companies not yet looked up come first, then the oldest lookups are rechecked. Stops at the
+    time budget or when the SEC throttles. A financial company still without a code is matched within its Nasdaq
+    sector instead, and a REIT Nasdaq doesn't label as one can still show by its filings (report.is_reit)."""
     try:
         with open(SIC_CACHE, encoding="utf-8") as fh:
             cache = json.load(fh)
@@ -98,7 +104,7 @@ def sic_codes(ciks, today, minutes=SIC_MINUTES):
             json.dump(cache, fh, separators=(",", ":"))
         os.replace(tmp, SIC_CACHE)
     missing = sum(1 for c in ciks if str(c) not in cache)
-    step(f"  SIC codes: {done} looked up, {len(ciks) - missing} of {len(ciks)} financial companies known")
+    step(f"  SIC codes: {done} looked up, {len(ciks) - missing} of {len(ciks)} financial and property companies known")
     return {c: cache[str(c)]["sic"] for c in ciks if cache.get(str(c), {}).get("sic")}
 
 
@@ -118,14 +124,20 @@ def main():
 
     step("Loading SEC financial statements")
     fund = fundamentals.load_fundamentals(today)
+    # Industry codes before the financials are worked out, since code 6798 marks a REIT (report.is_reit).
+    sic = sic_codes(sorted({u["cik"] for u in uni.values() if report.wants_sic(u) and u["cik"] in fund["companies"]}), today)
     metrics = {}
     for sym, u in uni.items():
         c = fund["companies"].get(u["cik"])
         if c:
-            d = fundamentals.derive(c, report.normal_tax_rate(u, c))
+            d = fundamentals.derive(c, report.normal_tax_rate(u, c, sic.get(u["cik"])),
+                                    bank=report.is_bank(u, sic.get(u["cik"])))
             if d:
+                if d.get("reit"):
+                    d["reit_type"] = report.REIT_TYPES.get(u["cik"])  # its property type, where reit_types knows it
                 metrics[sym] = d
-    step(f"  financials for {len(metrics)} companies")
+    step(f"  financials for {len(metrics)} companies, {sum(1 for m in metrics.values() if m.get('reit'))} of them REITs"
+         f" and {sum(1 for m in metrics.values() if m.get('bank'))} banks")
 
     symbols = sorted(uni)
     if args.limit:
@@ -166,8 +178,7 @@ def main():
         heads = news.all_headlines([(s, uni[s]["name"]) for s in symbols])
 
     step("Matching each company with similar companies")
-    fin_ciks = sorted({uni[s]["cik"] for s in metrics if report.is_financial(uni[s]) and uni[s].get("mcap")})
-    table = report.peer_table(uni, metrics, sic_codes(fin_ciks, today))
+    table = report.peer_table(uni, metrics, sic)
 
     step("Writing ticker reports")
     # Reports go to a fresh folder that replaces the old one only once every file is written.
@@ -206,9 +217,28 @@ def main():
             "peer_basis": report.peer_basis(s, table, peers),
             "peers": report.peer_list(s, table, peers),
             "peer_multiples": report.peer_multiples(s, table, peers),
+            # normal_tax_rate and tax_basis: the rate one-time items and an unusual tax bill are measured against,
+            # and where it comes from ("own", "statutory" or "reit"; see fundamentals._normal_rate). For a REIT, "reit"
+            # is its kind ("property", valued on funds from operations, or "mortgage"; see report.reit_kind), "ffo" and
+            # "adj_ffo" its funds from operations as the filings give them and without one-time items (the one the
+            # valuation and scores use), "ffo_parts" how FFO comes from net income, and "reit_type" its property type
+            # (reit_types; null where not listed). Its history entries also carry ffo and adj_ffo, and one_time_note then
+            # explains FFO (report.ffo_note).
+            # A bank (report.is_bank) has "bank": true, and its revenue is net interest income plus noninterest income
+            # (fundamentals._bank_year), with the parts, noninterest expense and the efficiency ratio (noninterest
+            # expense over revenue without one-time securities gains and losses), its earnings left to common
+            # shareholders without one-time items (adj_net_income_common, and per diluted share, adj_eps), tangible
+            # common equity (tangible_equity) and its share of tangible assets (tce_ratio), and return on assets, on
+            # common equity and on tangible common equity measured on the balance sheet dated returns_as_of. tce_unread
+            # says why tangible common equity is null where a line it needs is unknown ("preferred" or "year_end").
             "fundamentals": {**{k: m[k] for k in ("fiscal_year", "fiscal_year_end", "balance_as_of", "revenue", "net_income",
                                                   "adj_net_income", "one_time", "pretax_income", "income_tax",
+                                                  "normal_tax_rate", "tax_basis",
                                                   "fcf", "cash", "total_debt", "shares_out", "history")},
+                             **({"reit": report.reit_kind(m),
+                                 **{k: m.get(k) for k in ("reit_type", "ffo", "adj_ffo", "ffo_parts")}}
+                                if m.get("reit") else {}),
+                             **({"bank": True, **{k: m.get(k) for k in BANK_FIELDS}} if m.get("bank") else {}),
                              "one_time_note": report.one_time_note(m)} if m else None,
             "health": groups,
             "health_score": health_score,
