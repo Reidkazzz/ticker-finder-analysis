@@ -24,6 +24,8 @@ UNVERIFIED_REASONS = {
     "missing": _NOT_CHECKED + "the SEC has no company record for it.",
     "blank": _NOT_CHECKED + "its SEC company record does not say.",
 }
+# For a company that passes every other check but whose debt could not be read (_debt_unread).
+DEBT_UNREAD = "Its debt could not be read reliably from its filings, so the low-debt rule could not be confirmed."
 
 US_STATES = set(
     "AL AK AZ AR CA CO CT DE FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH "
@@ -71,8 +73,9 @@ def _save_cache(cache):
         pass
 
 
-def registrations(ciks):
-    """{cik: record, or a key of UNVERIFIED_REASONS when the record could not be read}."""
+def registrations(ciks, reuse=()):
+    """{cik: record, or a key of UNVERIFIED_REASONS when the record could not be read}. The CIKs in `reuse` take the
+    record an earlier run saved when it gives both places, and are looked up otherwise."""
     blocked = threading.Event()
 
     def one(cik):
@@ -89,21 +92,27 @@ def registrations(ciks):
         except Exception:
             return "failed"
 
+    # Where a company is incorporated and based rarely changes, so a record from an earlier run stands in: for the
+    # CIKs in `reuse` in place of a lookup, and for the others when theirs fails. A saved record missing either place
+    # is looked up again, as the page promises for a registration it could not confirm.
+    cache = _load_cache()
+    fresh = list(dict.fromkeys(ciks))
+    saved = {c: cache[str(c)] for c in reuse if c not in fresh and isinstance(cache.get(str(c)), dict)
+             and cache[str(c)].get("incorporated") and cache[str(c)].get("hq")}
+    todo = fresh + [c for c in dict.fromkeys(reuse) if c not in fresh and c not in saved]
     with ThreadPoolExecutor(max_workers=4) as pool:
-        out = dict(zip(ciks, pool.map(one, ciks)))
+        out = dict(zip(todo, pool.map(one, todo)))
     # Dropped connections and gateway errors usually clear up, so each one gets a second try.
     for cik in [c for c, r in out.items() if r == "failed"]:
         out[cik] = one(cik)
 
-    # Where a company is incorporated and based rarely changes, so a record from an earlier run stands in.
-    cache = _load_cache()
     for cik, r in out.items():
         if isinstance(r, dict):
             cache[str(cik)] = r
         elif str(cik) in cache:
             out[cik] = cache[str(cik)]
     _save_cache(cache)
-    return out
+    return {**out, **saved}
 
 
 def _checks(u, m):
@@ -120,6 +129,16 @@ def _checks(u, m):
         ("growth", m.get("revenue_growth") is not None and m["revenue_growth"] >= RULES["min_revenue_growth"], m.get("revenue_growth")),
     ]
     return out, ps
+
+
+def _debt_unread(m):
+    """Whether the low-debt rule could not be checked because the debt read from the company's filings looks far too
+    small to be all of it (fundamentals' debt_known False). The debt that was read is then a floor, so a company it
+    already puts over the limit fails the rule outright (Collegium Pharmaceutical's 2026 convertible notes alone,
+    beside the term loan the reading missed)."""
+    equity = m.get("equity")
+    return m.get("debt_known") is False and bool(equity) and equity > 0 \
+        and (m.get("lt_debt") or 0) / equity < RULES["max_lt_de"]
 
 
 def _score(row):
@@ -150,7 +169,7 @@ def _score(row):
 
 def run(universe, metrics, prices, analyst_counter):
     """universe/metrics/prices keyed by symbol. Returns the screener JSON payload."""
-    candidates, checked_by_sector = [], {}
+    candidates, debt_unread, checked_by_sector = [], [], {}
     for sym, u in universe.items():
         if u["sector"] in EXCLUDED_SECTORS:
             continue
@@ -161,29 +180,43 @@ def run(universe, metrics, prices, analyst_counter):
         if not (m.get("loc") or "").startswith("US"):
             continue
         checks, ps = _checks(u, m)
-        if all(ok for _, ok, _ in checks):
+        failed = [key for key, ok, _ in checks if not ok]
+        if not failed:
             candidates.append((sym, ps))
+        elif failed == ["debt"] and _debt_unread(m):
+            debt_unread.append(sym)
 
-    # Only survivors need the slower per-company lookups.
+    # Only survivors need the slower per-company lookups. Those left out for their debt are only listed, so a
+    # registration an earlier run saved is enough for them.
     syms = [s for s, _ in candidates]
-    found = registrations(sorted({universe[s]["cik"] for s in syms}))
+    fresh = {universe[s]["cik"] for s in syms}
+    found = registrations(sorted(fresh), reuse=sorted({universe[s]["cik"] for s in debt_unread} - fresh))
     regs, us, unverified = {}, [], []
-    for s in syms:
+    for s in syms + debt_unread:
         r = found[universe[s]["cik"]]
+        debt = s in debt_unread
         if isinstance(r, dict):
             regs[s] = r
             places = (r["incorporated"], r["hq"])
             if all(p in US_STATES for p in places):
-                us.append(s)
-                continue
-            if any(p and p not in US_STATES for p in places):
-                continue  # confirmed outside the US
-            r = "blank"
-        # The rules require confirmed US incorporation and headquarters, so these stay out but are listed.
+                r = None
+                if not debt:
+                    us.append(s)
+                    continue
+            elif any(p and p not in US_STATES for p in places):
+                continue  # confirmed outside the US, so it fails that rule whatever its debt
+            else:
+                r = "blank"
+        # The rules require low debt and confirmed US incorporation and headquarters, so these stay out but are listed,
+        # with each check that could not be confirmed ("debt", "us") and why.
+        unconfirmed = (["debt"] if debt else []) + (["us"] if r else [])
         unverified.append({"symbol": s, "name": universe[s]["name"], "sector": universe[s]["sector"],
-                           "reason": UNVERIFIED_REASONS[r]})
-    if unverified:
-        print(f"  {len(unverified)} screener candidates could not be checked with the SEC and were left out", flush=True)
+                           "reason": " ".join(([DEBT_UNREAD] if debt else []) + ([UNVERIFIED_REASONS[r]] if r else [])),
+                           "unconfirmed": unconfirmed})
+    for key, why in (("us", "could not be checked with the SEC"), ("debt", "had debt that could not be read reliably")):
+        left = [x["symbol"] for x in unverified if key in x["unconfirmed"]]
+        if left:
+            print(f"  {len(left)} screener candidates {why} and were left out: {', '.join(left)}", flush=True)
     analysts = analyst_counter.counts(us)
 
     rows = []
