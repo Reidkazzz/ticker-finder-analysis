@@ -223,6 +223,9 @@ TAX_EVIDENCE = {*TAX_LINES, *RATIOS}
 # gains, which only a few REITs tag, that leaves them in FFO for the run rather than every company's one-time items out.
 REIT_METRICS = {"reit_depreciation", "preferred", "dividends", "lease_income", "reit_gain"}
 REIT_INSTANT = {"liabilities", "reit_debt"}  # likewise for their balance sheets (_reit_debt)
+# Likewise for the debt check (_debt_check): noncurrent operating lease liabilities, which are not debt but make up
+# most of the noncurrent liabilities of many store and restaurant chains.
+DEBT_CHECK_INSTANT = {"lease_nc"}
 # Frames only banks need (_bank_year). The two in CRITICAL stop the run for the newest years; any other that fails leaves
 # the figures built on it blank for that year.
 BANK_METRICS = {k for k in DURATION if k.startswith("bank_")}
@@ -277,6 +280,8 @@ INSTANT = {
     "liabilities": ["Liabilities"],
     "reit_debt": ["DebtInstrumentCarryingAmount", "NotesAndLoansPayable", "NotesPayableToBank", "UnsecuredDebt",
                   "DebtAndCapitalLeaseObligations"],
+    # Only for the debt check (_debt_check). A failed request leaves its liabilities test unmade for that quarter.
+    "lease_nc": ["OperatingLeaseLiabilityNoncurrent"],
     # Only for banks' tangible book value (_bank_parts): goodwill, other intangible assets (the last tag is both
     # together) and preferred stock, which belongs to preferred shareholders rather than common ones.
     "goodwill": ["Goodwill"],
@@ -295,7 +300,8 @@ INSTANT = {
 # filing before, can predate by a merger (FirstSun Capital's June 2026 balance sheet, with First Foundation in it,
 # beside the 27.9M shares on its first-quarter report's cover). Its frame failing leaves the cover's count to use.
 BANK_SHARES = "CommonStockSharesOutstanding"
-OPTIONAL_INSTANT = {"shares_out", "total_assets", "liabilities", "reit_debt", "bank_shares", *BANK_INSTANT}
+OPTIONAL_INSTANT = {"shares_out", "total_assets", "liabilities", "reit_debt", "bank_shares", *BANK_INSTANT,
+                    *DEBT_CHECK_INSTANT}
 # A company's balance sheet date is the newest quarter in which it reported one of these.
 ANCHORS = INSTANT["equity"] + INSTANT["current_assets"]
 
@@ -475,7 +481,8 @@ def load_fundamentals(today=None):
             else:
                 inst.setdefault(cik, {}).setdefault(period, {})[tag] = d
             if metric in TAX_EVIDENCE or metric in REIT_METRICS or metric in REIT_INSTANT or metric in BANK_METRICS \
-                    or metric in BANK_INSTANT or metric == "bank_shares" or metric in CASH_FLOW_METRICS:
+                    or metric in BANK_INSTANT or metric == "bank_shares" or metric in CASH_FLOW_METRICS \
+                    or metric in DEBT_CHECK_INSTANT:
                 # A company that files few tax tags could otherwise take its location from an old filing, and the REIT
                 # and bank lines would move other companies' locations (SunPower's from California to New York).
                 continue
@@ -498,6 +505,7 @@ def load_fundamentals(today=None):
             print(f"  Tax rate reconciliation frames missing, {what} {', '.join(f'CY{p}' for p in sorted(ys))} in this "
                   "run", flush=True)
     bank_failed = {p for m, p in failed if m in BANK_INSTANT}  # quarters whose tangible book value is unknown
+    lease_failed = {p for m, p in failed if m in DEBT_CHECK_INSTANT}  # quarters whose lease liabilities are unknown
     companies = {}
     for cik, c in info.items():
         facts = annual.get(cik, {})
@@ -511,7 +519,7 @@ def load_fundamentals(today=None):
                                   | {m for (m, p), known in stale.items()
                                      if p == y and (known is None or cik not in known)})
                        for y in years}
-        c["latest"] = _balance_sheet(inst.get(cik, {}), quarters, bank_failed)
+        c["latest"] = _balance_sheet(inst.get(cik, {}), quarters, bank_failed, lease_failed)
         s = next((shares[cik][q] for q in quarters if q in shares.get(cik, {})), None)
         if s is not None:
             c["latest"]["shares_out"] = s
@@ -1143,7 +1151,7 @@ def _bank_parts(facts, known=True):
             "servicing": servicing, "lumped": lumped, "shares": _val(facts.get(BANK_SHARES))}
 
 
-def _balance_sheet(by_quarter, quarters, bank_failed=frozenset()):
+def _balance_sheet(by_quarter, quarters, bank_failed=frozenset(), lease_failed=frozenset()):
     """Every balance sheet figure from the same quarter, so one stale line can't mix with newer ones."""
     q = next((q for q in quarters if any(t in by_quarter.get(q, {}) for t in ANCHORS)), None)
     if q is None:
@@ -1160,6 +1168,16 @@ def _balance_sheet(by_quarter, quarters, bank_failed=frozenset()):
     # The most cash held at any recent quarter end, since interest earned last year came from the cash held then.
     out["peak_cash"] = max((_val(_first(f, INSTANT["cash"])) or 0) + (_val(_first(f, INSTANT["st_investments"])) or 0)
                            for f in by_quarter.values())
+    # For the debt check (_debt_check): the most debt read at any recent quarter end, since interest paid last year
+    # was on the debt held then, and noncurrent operating lease liabilities (None where the frame failed).
+    # A quarter's reading above that quarter's total liabilities (or assets, or else the latest ones) is itself a
+    # misread (a $10.7 trillion reading at RGC Resources, a $0.2B company), so it doesn't count.
+    peak = [(_debt({t: d["val"] for t, d in f.items()})[0],
+             _val(f.get(INSTANT["liabilities"][0])) or _val(f.get(INSTANT["total_assets"][0])))
+            for f in by_quarter.values()]
+    cap = _val(facts.get(INSTANT["liabilities"][0])) or _val(facts.get(INSTANT["total_assets"][0]))
+    out["peak_debt"] = max([d for d, c in peak if not (c or cap) or d <= (c or cap)] or [0])
+    out["lease_nc"] = None if q in lease_failed else _val(facts.get(INSTANT["lease_nc"][0])) or 0
     # For banks (_bank_parts): the lines behind tangible book value at each recent quarter end, by date, so that the
     # latest gives the price to tangible book value and returns are measured against the balance sheet at the end of the
     # year they were earned in (derive), not one changed since by a merger. None for a quarter a frame failed for.
@@ -1977,7 +1995,7 @@ def _discontinued_for_ffo(s, ffo):
     return min((tagged, implied), key=lambda d: abs(ffo - d - ocf))
 
 
-def derive(f, tax_rate=OWN_RATE, bank=False):
+def derive(f, tax_rate=OWN_RATE, bank=False, check_debt=True):
     """Turns raw line items into the ratios the screener and reports use. Missing data stays None.
 
     Earnings-based measures (the adj_ keys and profitable_years) leave out one-time items. `tax_rate` is the
@@ -2045,11 +2063,14 @@ def derive(f, tax_rate=OWN_RATE, bank=False):
 
     lt_debt = L.get("lt_debt") or 0
     total_debt = L.get("total_debt") or 0
-    debt_known = True
+    debt_known, debt_doubt = True, None
     if reit:
         debt, debt_known = _reit_debt(L)
         if debt != total_debt:
             lt_debt, total_debt = max(0, debt - (total_debt - lt_debt)), debt
+    elif not bank and check_debt:
+        debt_doubt = _debt_check(L, last.get("interest_paid"))
+        debt_known = debt_doubt is None
     cash = (L.get("cash") or 0) + (L.get("st_investments") or 0)
     equity = L.get("equity")
     rev = last["revenue"]
@@ -2106,8 +2127,10 @@ def derive(f, tax_rate=OWN_RATE, bank=False):
         "lt_debt": lt_debt,
         "total_debt": total_debt,
         "debt_reported": bool(L.get("debt_reported")),
-        # False for a REIT whose debt could not be read (_reit_debt), whose net cash and debt measures then mean nothing.
+        # False for a REIT whose debt could not be read (_reit_debt), or another company whose debt read looks far too
+        # small (_debt_check, which says why in debt_doubt), whose net cash and debt measures then mean nothing.
         "debt_known": debt_known,
+        "debt_doubt": debt_doubt,
         "cash": cash,
         "net_cash": cash - total_debt,
         "lt_debt_to_equity": (lt_debt / equity) if equity and equity > 0 and debt_known else None,
@@ -2371,3 +2394,40 @@ def _reit_debt(L):
     debt = max(readings)
     known = debt > 0 if not liab else debt >= REIT_DEBT_MIN * liab or liab <= 0.1 * assets
     return debt, known
+
+
+# The debt check (_debt_check). On September 2026 data, the 1,428 companies outside finance with $50M or more of debt
+# read paid a median 5.1% of it in interest in their latest year, 13% at the 95th percentile. More than DEBT_RATE_MAX
+# is taken to mean debt the reader missed, when the interest comes to at least DEBT_INTEREST_MIN of total assets, so
+# that the missing debt would matter (at 5% interest, a tenth of the assets or more). That caught T-Mobile ($3.9B of
+# interest against the $6.1B of debt read), General Motors and Caterpillar (no debt read, beside finance arms that
+# borrow tens of billions) and Deere ($3.1B against $17.1B). Ford tags neither its debt nor its interest paid outside
+# its segments, so a second test reads the balance sheet itself: noncurrent liabilities other than operating leases
+# (most of a store chain's) of at least DEBT_LIAB_SHARE of total assets and more than DEBT_LIAB_TIMES the debt read
+# ($140B at Ford, which read none).
+DEBT_RATE_MAX = 0.15
+DEBT_INTEREST_MIN = 0.005
+DEBT_LIAB_SHARE = 0.4
+DEBT_LIAB_TIMES = 10
+
+
+def _debt_check(L, interest):
+    """Why the debt _debt() read from the latest balance sheet `L` looks far too small to be the company's whole debt,
+    or None: "interest" where the interest it paid in its newest year (`interest`, None where unknown) is more than
+    DEBT_RATE_MAX of the most debt read at a recent quarter end, "liabilities" where its noncurrent liabilities are
+    mostly something other than the debt read. See the notes above DEBT_RATE_MAX."""
+    assets = L.get("total_assets")
+    if not assets or assets <= 0:
+        return None
+    debt = L.get("total_debt") or 0
+    if interest and interest > DEBT_RATE_MAX * max(debt, L.get("peak_debt") or 0) \
+            and interest >= DEBT_INTEREST_MIN * assets:
+        return "interest"
+    equity = L["equity_total"] if L.get("equity_total") is not None else L.get("equity")
+    liab = L["liabilities"] if L.get("liabilities") is not None else assets - equity if equity is not None else None
+    cl, lease = L.get("current_liabilities"), L.get("lease_nc")
+    if liab is not None and cl is not None and lease is not None:
+        other = liab - cl - lease
+        if other >= DEBT_LIAB_SHARE * assets and other > DEBT_LIAB_TIMES * debt:
+            return "liabilities"
+    return None
