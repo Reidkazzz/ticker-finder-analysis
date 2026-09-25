@@ -130,8 +130,10 @@ def main():
     for sym, u in uni.items():
         c = fund["companies"].get(u["cik"])
         if c:
+            # The debt check is for companies outside finance: a broker's or insurer's interest is paid on customer
+            # balances and funding, not on debt the reader missed.
             d = fundamentals.derive(c, report.normal_tax_rate(u, c, sic.get(u["cik"])),
-                                    bank=report.is_bank(u, sic.get(u["cik"])))
+                                    bank=report.is_bank(u, sic.get(u["cik"])), check_debt=not report.is_financial(u))
             if d:
                 if d.get("reit"):
                     d["reit_type"] = report.REIT_TYPES.get(u["cik"])  # its property type, where reit_types knows it
@@ -198,6 +200,7 @@ def main():
         if m:
             groups, health_score = report.health(u, m, price, p.get("high52"), peers, table, mood, insider_info)
             fv = report.fair_value(u, m, price, peers, table)
+        dropped = fv.pop("dropped", []) if fv else []
         doc = {
             "symbol": s,
             "name": u["name"],
@@ -216,7 +219,7 @@ def main():
             # peers and peer_multiples also carry price to sales ("ps"), the measure its health check ranks.
             "peer_basis": report.peer_basis(s, table, peers),
             "peers": report.peer_list(s, table, peers),
-            "peer_multiples": report.peer_multiples(s, table, peers),
+            "peer_multiples": report.peer_multiples(s, table, peers, dropped),
             # normal_tax_rate and tax_basis: the rate one-time items and an unusual tax bill are measured against,
             # and where it comes from ("own", "statutory" or "reit"; see fundamentals._normal_rate). For a REIT, "reit"
             # is its kind ("property", valued on funds from operations, or "mortgage"; see report.reit_kind), "ffo" and
@@ -239,6 +242,8 @@ def main():
                                  **{k: m.get(k) for k in ("reit_type", "ffo", "adj_ffo", "ffo_parts")}}
                                 if m.get("reit") else {}),
                              **({"bank": True, **{k: m.get(k) for k in BANK_FIELDS}} if m.get("bank") else {}),
+                             # Why the debt read looks far too small (fundamentals._debt_check), or null.
+                             "debt_doubt": m.get("debt_doubt"),
                              "one_time_note": report.one_time_note(m)} if m else None,
             "health": groups,
             "health_score": health_score,

@@ -576,6 +576,29 @@ DEBT_UNKNOWN_NOTE = ("Not measured. This REIT's debt could not be read from its 
                      "liabilities under names this site doesn't read.")
 DOUBT_BAR_NOTE = ("Not measured. The sales figure in the company's SEC data looks incomplete, since profit came out "
                   "larger than sales.")
+# Any other company whose debt read from its SEC data looks far too small (fundamentals._debt_check, which gives the
+# reason as debt_doubt): fair_value leaves out the methods that count its debt (value to sales and the cash-flow model),
+# and its health check the debt measures.
+DEBT_DOUBT_VALUE_NOTE = ("Its debt could not be read reliably from its filings, so methods that depend on debt are left "
+                         "out.")
+DEBT_DOUBT_BAR_NOTES = {
+    "interest": ("Not measured. Its debt could not be read reliably from its filings: the debt found is far too small "
+                 "for the interest it paid last year."),
+    "liabilities": ("Not measured. Its debt could not be read reliably from its filings: the debt found is a small part "
+                    "of what it owes beyond the next year."),
+}
+
+
+def _debt_bar_note(m):
+    """The health check's note for a debt measure left out because the debt could not be read (debt_known False)."""
+    return DEBT_DOUBT_BAR_NOTES.get(m.get("debt_doubt"), DEBT_UNKNOWN_NOTE)
+
+
+# The most a single valuation method may put the value above the price (or below it, as a fraction) before fair_value
+# takes it for a data error and leaves it out. On September 2026 data that dropped 142 methods at 108 companies
+# (Cheer Holding's value to sales at 165 times its $1.60 price, CISS's price to earnings at 100 times, Live Ventures'
+# cash-flow model at 12 times), and left 45 of them with no method at all.
+METHOD_SANITY = 10
 
 
 def _fin_group(code):
@@ -666,7 +689,9 @@ def peer_table(universe, metrics, sic=None):
             table[sym].update(ps=None, ev_sales=None, pe=None, adj_pe=None, p_ffo=None, pb=None, fcf_yield=None,
                               ptbv=None, shares_gap=True)
         if m.get("debt_known") is False:
-            table[sym]["debt_unknown"] = True  # a REIT whose debt could not be read (fundamentals._reit_debt)
+            # A REIT whose debt could not be read (fundamentals._reit_debt), or another company whose debt read looks
+            # far too small (fundamentals._debt_check).
+            table[sym]["debt_unknown"] = True
     # Each figure becomes a percentile rank across all companies, so margins, growth and size weigh the same
     # and a few extreme values can't dominate the distance. Banks, which are matched among themselves on their own
     # measures (ranked among banks), are left out of the ranks other companies are matched on, so how a bank's figures
@@ -893,11 +918,12 @@ def _bank_peer_multiples(me, rows):
     }
 
 
-def peer_multiples(sym, table, peers):
+def peer_multiples(sym, table, peers, dropped=()):
     """Column labels, the company's own multiples and the peer medians fair_value() uses, for the peer list on
     the report, or None without a list. A non-financial company also gets a price to sales column, since its
     health check ranks price to sales while its fair value uses value to sales. A bank gets price to tangible book
-    ("ptbv", ptbv_label) and price to earnings, and no sales column or sales_label (_bank_peer_multiples)."""
+    ("ptbv", ptbv_label) and price to earnings, and no sales column or sales_label (_bank_peer_multiples). `dropped`
+    names the methods fair_value() left out as data errors (METHOD_SANITY), which the note then says."""
     me = table.get(sym)
     if not me or me["features"]["size"] is None or not peers:
         return None
@@ -932,13 +958,22 @@ def peer_multiples(sym, table, peers):
         note.append(f"The fair value uses the median of the {earn_words} column"
                     + (" and the same REITs' median price to book value, which the table doesn't show."
                        if me.get("reit") == "mortgage" and me.get("pb") and not me.get("ptype") else
-                       # fair_value leaves value to sales out where the REIT's own debt could not be read.
-                       " alone, since this REIT's debt could not be read and value to sales counts debt."
+                       # fair_value leaves value to sales out where the company's own debt could not be read.
+                       f" alone, since {'this REIT' if reit else 'its'} debt could not be read"
+                       + ("" if reit else " reliably") + " and value to sales counts debt."
                        if me.get("debt_unknown") and not fin else "."))
     else:
         note.append("These are the companies the price to sales bar in the health check compares it with. The fair "
                     "value doesn't use them, since the company "
                     + ("had negative FFO." if reit else "lost money."))
+    # A column the sentence above names whose result fair_value left out as a data error (METHOD_SANITY).
+    cols = [c for name, c in (("Peer value to sales", "value to sales"), ("Peer price to sales", "price to sales"),
+                              ("Peer price to earnings", "price to earnings"), ("Peer price to FFO", "price to FFO"))
+            if profitable and name in dropped and c in note[-1]]
+    if cols:
+        note.append(f"The {' and '.join(cols)} result{'s' if len(cols) > 1 else ''} came out more than "
+                    f"{METHOD_SANITY} times the price or under a tenth of it, which more likely means a misread "
+                    f"figure, so {'they are' if len(cols) > 1 else 'it is'} left out of the fair value.")
     # What an n/a cell means. Peers are matched on their sales, so every row has sales; a sales multiple is blank where
     # the share count changed after the company's latest filing (_share_count_gap), and value to sales also where the
     # debt could not be read (a REIT), for a lender (not valued on it) or where cash exceeds the market value.
@@ -1293,7 +1328,7 @@ def health(u, m, price, high52, peers, table, news_overall, insider):
     elif fin:
         b.append(not_scored("net_cash", "Net cash vs. price"))
     elif m.get("debt_known") is False:
-        b.append(not_scored("net_cash", "Net cash vs. price", DEBT_UNKNOWN_NOTE))
+        b.append(not_scored("net_cash", "Net cash vs. price", _debt_bar_note(m)))
     elif shares_off:
         b.append(not_scored("net_cash", "Net cash vs. price", SHARES_BAR_NOTE))
     else:
@@ -1306,7 +1341,7 @@ def health(u, m, price, high52, peers, table, news_overall, insider):
     elif m.get("equity") is not None and m["equity"] <= 0:
         b.append(bar("de", "Debt to equity", "Negative equity", 3, "The company owes more than it owns. That is a serious warning sign."))
     elif m.get("debt_known") is False:
-        b.append(not_scored("de", "Debt to equity", DEBT_UNKNOWN_NOTE))
+        b.append(not_scored("de", "Debt to equity", _debt_bar_note(m)))
     else:
         b.append(bar("de", "Debt to equity", multiple(de), None if de is None else _lerp(de, [(0, 100), (0.25, 85), (0.5, 65), (1, 40), (2, 10)]),
                      "Not enough data." if de is None else "No long-term debt." if de == 0 else
@@ -1851,7 +1886,7 @@ def fair_value(u, m, price, peers, table):
     # A sales multiple assumes the company can earn what its peers earn on each dollar of sales, which says
     # little about one that loses money, so that company is valued on its cash flow alone. Nor is it used when
     # the sales figure itself can't be right.
-    if doubt or bank or reit and not REIT_SALES or reit_kind(m) == "mortgage" or m.get("debt_known") is False:
+    if doubt or bank or reit and not REIT_SALES or reit_kind(m) == "mortgage" or m.get("debt_known") is False and not fin:
         pass
     elif rev and rev > 0 and profitable and fin:
         med_ps = _median([r["ps"] for r in peer_rows])
@@ -1903,10 +1938,35 @@ def fair_value(u, m, price, peers, table):
                             "note": f"Average FFO of ${base / 1e6:,.0f}M growing {g * 100:.0f}% a year for 5 years, then "
                                     "2.5%, discounted at 10%. FFO is counted after interest, so debt is not subtracted."})
     left_out = None
-    if not reit and not fin:
+    debt_doubt = m.get("debt_known") is False and not fin and not reit
+    if not reit and not fin and not debt_doubt:
+        # The model subtracts the debt, so it is left out where the debt could not be read (DEBT_DOUBT_VALUE_NOTE).
         model, left_out = _cash_flow_model(u, m, shares, price)
         if model:
             methods.append(model)
+
+    # A method that puts the value more than METHOD_SANITY times the price, or less than a METHOD_SANITY-th of it,
+    # rests on a misread figure, so it is left out.
+    wild = [x for x in methods if not price / METHOD_SANITY <= x["value"] <= price * METHOD_SANITY]
+    sanity = None
+    if wild:
+        methods = [x for x in methods if x not in wild]
+        sanity = " ".join(
+            f"{x['name']} came out at {dollars(x['value'])} a share, "
+            + (f"more than {METHOD_SANITY} times the price" if x["value"] > price else
+               f"less than a {'tenth' if METHOD_SANITY == 10 else f'{METHOD_SANITY}th'} of the price")
+            + ". A gap that large more likely means a figure read from its filings is wrong, so it is left out."
+            for x in wild)
+        if not methods:
+            return {"methods": [], "verdict": None, "dropped": [x["name"] for x in wild],
+                    "withheld": f"There is no fair value estimate. {sanity}"
+                                + (f" {DEBT_DOUBT_VALUE_NOTE}" if debt_doubt else "")}
+    if not methods and debt_doubt:
+        return {"methods": [], "verdict": None,
+                "withheld": f"There is no fair value estimate. {DEBT_DOUBT_VALUE_NOTE[:-1]}, and "
+                            + ("the company lost money last year, not counting one-time items, so it can't be valued "
+                               "on its earnings either." if not profitable else
+                               "no price to earnings of similar companies was available to value it on instead.")}
 
     if not methods:
         if left_out and not profitable:
@@ -2004,8 +2064,12 @@ def fair_value(u, m, price, peers, table):
         confidence, note = "moderate", f"Two of the three methods could be used, and they land {apart}."
     if doubt and profitable:
         note = f"{DOUBT_NOTE} {note}"
+    elif debt_doubt:
+        note = f"{DEBT_DOUBT_VALUE_NOTE} {note}"
     elif m.get("debt_known") is False and profitable and not fin:
         note = f"{DEBT_VALUE_NOTE} {note}"
+    if sanity:
+        note = f"{sanity} {note}"
     if left_out:
         note = f"{note} The cash-flow model is left out because {left_out}."
     caveat = _bank_caveat(m) if bank else None
@@ -2016,6 +2080,8 @@ def fair_value(u, m, price, peers, table):
         x["value"] = round(x["value"], 2)
     return {
         "methods": methods,
+        # The methods left out as data errors (METHOD_SANITY), for peer_multiples(); build takes it off the JSON.
+        "dropped": [x["name"] for x in wild],
         "low": round(low, 2),
         "mid": round(mid, 2),
         "high": round(high, 2),
