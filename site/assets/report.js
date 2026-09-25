@@ -12,6 +12,23 @@ attachSearch(searchHost.querySelector("form"), {
   },
 });
 window.addEventListener("popstate", () => route());
+// Peer links open that company's report in place, like a search pick. A jump to the peer list scrolls without
+// touching the address, since a #fragment there would re-run the router and reload the report.
+host.addEventListener("click", (e) => {
+  if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  const jump = e.target.closest("[data-jump]");
+  if (jump) {
+    e.preventDefault();
+    document.getElementById(jump.dataset.jump)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+  const peer = e.target.closest("a[data-sym]");
+  if (peer) {
+    e.preventDefault();
+    history.pushState(null, "", `?t=${encodeURIComponent(peer.dataset.sym)}`);
+    show(peer.dataset.sym);
+  }
+});
 
 const VERDICT = {
   undervalued: { word: "Undervalued", tag: "tag-up" },
@@ -86,6 +103,7 @@ function verdictPanel(r) {
       <b class="${signClass(up)}">${pct(Math.abs(up), 0)} ${up >= 0 ? "above" : "below"}</b> today's price.`}${v.limit_note ? ` ${esc(v.limit_note)}` : ""}</p>
     ${r.price ? rangeViz(v, r.price) : ""}
     <div class="methods">${v.methods.map((m) => `<div class="method-row"><b>${esc(m.name)}</b><span class="v">${price(m.value)}</span><p>${esc(m.note)}</p></div>`).join("")}</div>
+    ${r.peers?.length && v.methods.some((m) => m.name.startsWith("Peer")) ? `<p class="fine"><a href="#peers" data-jump="peers">See the ${r.peers.length} similar companies</a> behind the peer estimates.</p>` : ""}
     ${oneTimeNote(r)}
     <p class="fine">${esc(conf)} This is an estimate, not a price target, and not investment advice.</p>
   </section>`;
@@ -142,6 +160,31 @@ function newsSection(r) {
       </a>`).join("")}</div>` : ""}`;
 }
 
+// A valuation multiple, or n/a where it doesn't apply (the note under the table says why).
+const mult = (x) => (x == null ? "n/a" : `${x >= 100 ? Math.round(x).toLocaleString("en-US") : x.toFixed(1)}x`);
+
+// Reports written before peers were chosen by their numbers carry only peer_group and peer_count, which the
+// notes at the bottom still describe.
+function peersSection(r) {
+  if (!r.peer_basis) return "";
+  const list = r.peers || [];
+  const pm = r.peer_multiples;
+  const head = `<div class="h-top" id="peers"><div><h2>Similar companies</h2><p>${esc(r.peer_basis)}</p></div></div>`;
+  if (!list.length || !pm) return head;
+  // Non-financial companies also get price to sales, the measure their health check ranks.
+  const cols = [pm.ps_label && ["ps", pm.ps_label], ["sales", pm.sales_label], ["pe", pm.pe_label]].filter(Boolean);
+  const row = (who, name, x) => `<div class="who"><b>${esc(who)}</b><span>${esc(name)}</span></div>
+    ${cols.map(([k]) => `<div class="n">${mult(x?.[k])}</div>`).join("")}`;
+  return `${head}
+    <div class="panel peers${cols.length > 2 ? " wide" : ""}">
+      <div class="peer-row peer-head"><span>Company</span>${cols.map(([, label]) => `<span>${esc(label)}</span>`).join("")}</div>
+      <div class="peer-row self">${row(r.symbol, "This company", pm.company)}</div>
+      ${list.map((p) => `<a class="peer-row" href="?t=${encodeURIComponent(p.symbol)}" data-sym="${esc(p.symbol)}">${row(p.symbol, p.name, p)}</a>`).join("")}
+      <div class="peer-row total">${row("Median", `of the ${list.length} companies above`, pm.median)}</div>
+    </div>
+    ${pm.note ? `<p class="fine peers-note">${esc(pm.note)}</p>` : ""}`;
+}
+
 function stake(b) {
   if (b.new_position) return `<span class="up">New</span><small>position</small>`;
   if (b.stake_increase == null) return `<span class="faint">n/a</span>`;
@@ -178,11 +221,12 @@ function render(r) {
     </header>
     <div class="r-grid">${verdictPanel(r)}${pricePanel(r)}</div>
     ${healthSection(r)}
+    ${peersSection(r)}
     ${insiderSection(r)}
     ${newsSection(r)}
     <div class="notes">
       ${f ? `<p>Financials from fiscal year ${f.fiscal_year}${f.fiscal_year_end ? ` (ended ${esc(date(f.fiscal_year_end, { month: "short", day: "numeric", year: "numeric" }))})` : ""}.${f.balance_as_of ? ` Balance sheet as of ${esc(date(f.balance_as_of, { month: "short", day: "numeric", year: "numeric" }))}.` : ""} Source: SEC filings.</p>` : ""}
-      ${r.peer_group ? `<p>Compared with ${r.peer_count} other US-listed companies in ${esc(r.peer_group)}.</p>` : ""}
+      ${r.peer_group && !r.peer_basis ? `<p>Compared with ${r.peer_count} other US-listed companies in ${esc(r.peer_group)}.</p>` : ""}
       <p>Educational estimates only. Not investment advice.</p>
     </div>`;
 }

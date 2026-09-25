@@ -85,6 +85,31 @@
 .news-item .src { color: var(--text-3); font-size: 12.5px; margin-top: 6px; }
 @media (max-width: 560px) { .news-item { grid-template-columns: 1fr; gap: 8px; } .news-item .tag { justify-self: start; } }
 
+/* Similar companies: this company, its peers (each a link to its report) and the medians the valuation uses */
+.peers { padding: 8px; }
+.peer-row { display: grid; grid-template-columns: minmax(0, 1fr) 128px 128px; gap: 12px; align-items: center; padding: 10px 12px; border-radius: var(--r-ctl); font-size: 14px; text-decoration: none; }
+a.peer-row { transition: background .15s; }
+a.peer-row:hover { background: var(--surface-2); }
+.peer-row .who { min-width: 0; display: flex; align-items: baseline; gap: 12px; }
+.peer-row .who b { flex: none; min-width: 60px; font-family: var(--mono); font-size: 13px; font-weight: 500; }
+.peer-row .who span { min-width: 0; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.peer-row .n { text-align: right; font-variant-numeric: tabular-nums; }
+.peer-head { padding-top: 6px; padding-bottom: 6px; font-size: 12px; color: var(--text-3); }
+.peer-head span:not(:first-child) { text-align: right; }
+.peer-row.self { background: var(--surface-2); }
+.peer-row.self .who span { color: var(--text-3); }
+.peer-row.total { margin-top: 4px; border-top: 1px solid var(--line); border-radius: 0; }
+.peer-row.total .who b { font-family: var(--font); font-size: 14px; }
+.peer-row.total .who span { color: var(--text-3); }
+.peer-row.total .n { font-weight: 500; }
+.peers.wide .peer-row { grid-template-columns: minmax(0, 1fr) 112px 112px 128px; }
+.peers-note { max-width: 80ch; }
+@media (max-width: 560px) {
+  .peer-row { grid-template-columns: minmax(0, 1fr) 68px 76px; gap: 8px; padding: 10px 8px; }
+  .peers.wide .peer-row { grid-template-columns: minmax(0, 1fr) 54px 54px 64px; gap: 6px; }
+  .peer-row .who { flex-direction: column; align-items: stretch; gap: 0; }
+}
+
 .notes { margin-top: 48px; display: grid; gap: 6px; color: var(--text-3); font-size: 13px; }
 
 .start { padding: 64px 0 24px; }

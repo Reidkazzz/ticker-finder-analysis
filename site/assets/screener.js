@@ -38,7 +38,9 @@ function facts(r) {
     : r.net_cash > 0 ? `Holds ${money(r.net_cash)} more cash than all of its debt.`
     : `Long-term debt is ${times(r.lt_de)} its equity, under the 0.5 limit.`]);
   if (r.fcf_yield != null) out.push(["ph-hand-coins", `Generated ${money(r.fcf)} of free cash, ${pct(r.fcf_yield)} of its market value.`]);
-  out.push(["ph-calendar-check", `Profitable in ${r.profitable_years} of the last ${r.years_checked} years.`]);
+  const asReported = r.profitable_years_reported;
+  out.push(["ph-calendar-check", `Profitable in ${r.profitable_years} of the last ${r.years_checked} years${
+    asReported != null && asReported !== r.profitable_years ? `, not counting one-time items (${asReported} as reported)` : ""}.`]);
   if (r.drawdown != null) out.push(["ph-arrow-down-right", `Trades ${pct(r.drawdown, 0)} below its 52-week high of ${price(r.high52)}.`]);
   out.push(["ph-users", r.analysts == null ? "Analyst coverage could not be checked today." : r.analysts === 0 ? "No Wall Street analysts publish estimates on it." : `${r.analysts} analyst${r.analysts === 1 ? "" : "s"} publish estimates on it.`]);
   return out;

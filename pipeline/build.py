@@ -11,11 +11,18 @@ import random
 import shutil
 import time
 
-from . import fundamentals, insiders, market, news, report, screener, universe
+from . import fundamentals, insiders, market, net, news, report, screener, universe
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "site", "data")
 CACHE = os.path.join(ROOT, ".cache")
+
+# SIC codes (the SEC's industry codes) of financial companies, which pick their peer group. A company's code
+# rarely changes, so each is looked up once (one request) and rechecked every SIC_REFRESH_DAYS, a few per run.
+SIC_CACHE = os.path.join(CACHE, "sic.json")
+SIC_REFRESH_DAYS = 180
+SIC_REFRESH_PER_RUN = 40
+SIC_MINUTES = 6
 
 
 def _round(o):
@@ -57,6 +64,44 @@ def step(msg):
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
 
 
+def sic_codes(ciks, today, minutes=SIC_MINUTES):
+    """{cik: SIC code} from the SEC company records, cached in .cache/sic.json. Companies not yet looked up come
+    first, then the oldest lookups are rechecked. Stops at the time budget or when the SEC throttles, and a
+    company still without a code is matched within its Nasdaq sector instead."""
+    try:
+        with open(SIC_CACHE, encoding="utf-8") as fh:
+            cache = json.load(fh)
+    except (OSError, ValueError):
+        cache = {}
+    stale = (today - dt.timedelta(days=SIC_REFRESH_DAYS)).isoformat()
+    todo = [c for c in ciks if str(c) not in cache]
+    todo += sorted((c for c in ciks if str(c) in cache and cache[str(c)].get("checked", "") < stale),
+                   key=lambda c: cache[str(c)].get("checked", ""))[:SIC_REFRESH_PER_RUN]
+    stop, done = time.monotonic() + minutes * 60, 0
+    for cik in todo:
+        if time.monotonic() > stop:
+            break
+        try:
+            code = net.sec_json(f"https://data.sec.gov/submissions/CIK{cik:010d}.json").get("sic") or None
+        except net.NotFound:
+            code = None
+        except net.Throttled:
+            break
+        except Exception:  # one bad response shouldn't cost the rest; the next run tries again
+            continue
+        cache[str(cik)] = {"sic": code, "checked": today.isoformat()}
+        done += 1
+    if done:
+        os.makedirs(CACHE, exist_ok=True)
+        tmp = SIC_CACHE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(cache, fh, separators=(",", ":"))
+        os.replace(tmp, SIC_CACHE)
+    missing = sum(1 for c in ciks if str(c) not in cache)
+    step(f"  SIC codes: {done} looked up, {len(ciks) - missing} of {len(ciks)} financial companies known")
+    return {c: cache[str(c)]["sic"] for c in ciks if cache.get(str(c), {}).get("sic")}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=0, help="only process a random sample of N tickers")
@@ -77,7 +122,7 @@ def main():
     for sym, u in uni.items():
         c = fund["companies"].get(u["cik"])
         if c:
-            d = fundamentals.derive(c, report.normal_tax_rate(u))
+            d = fundamentals.derive(c, report.normal_tax_rate(u, c))
             if d:
                 metrics[sym] = d
     step(f"  financials for {len(metrics)} companies")
@@ -120,11 +165,14 @@ def main():
         step(f"Fetching headlines for {len(symbols)} stocks")
         heads = news.all_headlines([(s, uni[s]["name"]) for s in symbols])
 
+    step("Matching each company with similar companies")
+    fin_ciks = sorted({uni[s]["cik"] for s in metrics if report.is_financial(uni[s]) and uni[s].get("mcap")})
+    table = report.peer_table(uni, metrics, sic_codes(fin_ciks, today))
+
     step("Writing ticker reports")
     # Reports go to a fresh folder that replaces the old one only once every file is written.
     for leftover in ("t_new", "t_old"):
         shutil.rmtree(os.path.join(OUT, leftover), ignore_errors=True)
-    table = report.peer_table(uni, metrics)
     ins_by_sym = {c["symbol"]: c for c in ins["companies"] if c.get("symbol")}
     index = []
     for s in symbols:
@@ -152,6 +200,12 @@ def main():
             "weekly": p.get("weekly") or [],
             "peer_group": peer_group,
             "peer_count": len(peers),
+            # How the peers were chosen, in one sentence, and the peers themselves with the multiples behind the
+            # valuation (empty when the company has no usable sales figure to match on). A non-financial company's
+            # peers and peer_multiples also carry price to sales ("ps"), the measure its health check ranks.
+            "peer_basis": report.peer_basis(s, table, peers),
+            "peers": report.peer_list(s, table, peers),
+            "peer_multiples": report.peer_multiples(s, table, peers),
             "fundamentals": {**{k: m[k] for k in ("fiscal_year", "fiscal_year_end", "balance_as_of", "revenue", "net_income",
                                                   "adj_net_income", "one_time", "pretax_income", "income_tax",
                                                   "fcf", "cash", "total_debt", "shares_out", "history")},

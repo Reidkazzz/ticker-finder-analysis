@@ -214,6 +214,8 @@ def run(universe, metrics, prices, analyst_counter):
             "revenue": m["revenue"],
             "revenue_growth": m["revenue_growth"],
             "profitable_years": m["profitable_years"],
+            # As reported, so the page can say when leaving out one-time items changed the count.
+            "profitable_years_reported": m.get("profitable_years_reported"),
             "years_checked": m["years_checked"],
             "fiscal_year": m["fiscal_year"],
             "high52": high,
