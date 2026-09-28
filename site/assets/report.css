@@ -38,7 +38,14 @@
 .method-row b { font-weight: 500; }
 .method-row .v { font-variant-numeric: tabular-nums; text-align: right; }
 .method-row p { grid-column: 1 / -1; color: var(--text-3); font-size: 13px; }
+.method-row.ref b, .method-row.ref .v { color: var(--text-2); }
+.method-row .tag { margin-left: 8px; height: 20px; font-size: 11.5px; vertical-align: 1px; }
 .fine { margin-top: 14px; font-size: 12.5px; color: var(--text-3); }
+.how summary { font-size: 14px; }
+.how-list { list-style: none; margin: 0; padding: 0; }
+.how-list li { padding: 12px 0; border-top: 1px solid var(--line); }
+.how-list b { display: block; font-weight: 500; font-size: 14px; }
+.how-list span { display: block; margin-top: 4px; color: var(--text-2); font-size: 13.5px; }
 
 .chart-panel h2, .panel-title { font-size: 13px; font-weight: 500; color: var(--text-2); letter-spacing: 0; }
 .chart { margin-top: 18px; }

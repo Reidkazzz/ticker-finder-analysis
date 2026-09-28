@@ -18,6 +18,10 @@ CAPEX = [
     "PaymentsToExploreAndDevelopOilAndGasProperties",
     "PaymentsToAcquireOilAndGasPropertyAndEquipment",
     "PaymentsToAcquireOilAndGasProperty",
+    # The property purchases of companies that tag no other capex line (Eli Lilly's 2025: $7.84B, its only capex tag).
+    # On September 2026 data 88 companies tagged it for 2025, 67 of them with no other capex tag, so their free cash flow
+    # could not be read.
+    "PaymentsToAcquireOtherPropertyPlantAndEquipment",
 ]
 DEPRECIATION = ["DepreciationDepletionAndAmortization", "DepreciationAndAmortization", "Depreciation"]
 PRETAX = ["IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest",
@@ -98,6 +102,9 @@ DURATION = {
         "RevenueFromContractWithCustomerIncludingAssessedTax",
         "SalesRevenueNet",
         "RevenuesNetOfInterestExpense",
+        # Utilities that tag their total sales only this way (Xcel Energy's 2025: $14.67B, DTE Energy's $15.81B, MGE
+        # Energy's $744M, each as their 10-K shows), which left them without a sales figure.
+        "RegulatedAndUnregulatedOperatingRevenue",
     ],
     "net_income": ["NetIncomeLoss", "ProfitLoss", "NetIncomeLossAvailableToCommonStockholdersBasic"],
     "operating_income": ["OperatingIncomeLoss"],
@@ -116,9 +123,21 @@ DURATION = {
     # beside $3.45B tagged as other productive assets, and Matson's $244M of ship construction beside $393M of other
     # capital spending).
     "interest_paid": ["InterestPaidNet", "InterestPaid"],
+    # Interest expense, which stands in for interest paid where a company tags none (Mastercard's 2025: $680M on its
+    # debt, which it tagged as interest paid for 2024, $571M, the same as its interest expense on debt that year;
+    # Qualcomm's $664M). Read with InterestExpense, which the bank lines already fetch (bank_interest_expense).
+    "interest_expense": ["InterestExpenseDebt", "InterestExpenseNonoperating"],
     "sbc": ["ShareBasedCompensation", "AllocatedShareBasedCompensationExpense"],
     "software_capex": ["PaymentsToDevelopSoftware", "PaymentsForSoftware"],
     "construction_capex": ["PaymentsForConstructionInProcess"],
+    # The year's change in working capital, a use of cash where positive, whose outliers mark a one-off payment inside
+    # operating cash flow (_one_off_cash): Coca-Cola's $6.23B in 2024, holding its $6.0B deposit with the IRS in its tax
+    # dispute, and $7.21B in 2025, holding $6.1B of its final payment for fairlife, both as its 10-K describes; against
+    # $0.9B or less in each of 2021 to 2023. Payments on an acquisition's earn-out that count as operating cash
+    # (PaymentForContingentConsiderationLiabilityOperatingActivities) are not added back: for most of the companies
+    # tagging them they recur, royalty-like, year after year (AbbVie's $0.87B, $2.0B and $2.87B in 2023 to 2025), and
+    # the rest still owed would have to be subtracted as a debt too.
+    "working_capital": ["IncreaseDecreaseInOperatingCapital"],
     # The pieces between operating income and net income, read by _adjust(). The first pretax tag already
     # includes income from equity-method investments, the second leaves it out.
     "pretax": PRETAX,
@@ -180,6 +199,10 @@ DURATION = {
     # California's 2023 loss of $442M), read only for a bank, where they are part of its noninterest income. Other
     # companies' investment gains under these tags are left as they were.
     "bank_securities": ["GainLossOnInvestments", "DebtSecuritiesAvailableForSaleGainLoss"],
+    # Gains and losses on stakes in other companies, revalued or sold, which any other company that tags none under
+    # SECURITIES reads under this or GainLossOnInvestments (derive): Nvidia's $8.92B for its year to January 2026, AT&T's
+    # $5.89B for 2025 and Walmart's $2.02B for its year to January 2026, against losses or much smaller gains before.
+    "equity_securities": ["EquitySecuritiesFvNiGainLoss"],
     # Goodwill from the year's acquisitions, which tells a bank's provision for loan losses swollen by the allowance it
     # had to set up at once for the loans it bought (report._provision_spike) from one swollen by its own lending.
     "bank_goodwill_acquired": ["GoodwillAcquiredDuringPeriod"],
@@ -211,9 +234,9 @@ CRITICAL = {"revenue", "net_income", "ocf", "capex", "pretax", "income_tax", "ba
 # that merely read as zero would make an item look one-time in the others, and reading only some kinds would take
 # out gains without adding back charges or the reverse.
 ITEMS = {"gw_impairment", "impairment", "sale", "property_sale", "securities", "debt_extinguishment",
-         "gw_impairment_net", "impairment_nondeductible", "valuation_allowance", "tax_credits"}
+         "gw_impairment_net", "impairment_nondeductible", "valuation_allowance", "tax_credits", "equity_securities"}
 # Checked like them (_check_items), though a failed frame of the REIT gains only leaves those out (REIT_METRICS).
-ITEM_TAGS = {t for k in ITEMS for t in DURATION[k]} | set(REIT_GAIN)
+ITEM_TAGS = {t for k in ITEMS for t in DURATION[k]} | set(REIT_GAIN) | {"GainLossOnInvestments"}
 # Frames that show which years' tax rates are a company's normal one (_clean_rate). A frame that fails for a year is
 # taken from the last run that read it (TAX_CACHE), since a past year's filings rarely change. Without that, the lines
 # are unknown for that year only, which then shows no company's normal rate, and a failed effective rate frame only
@@ -232,7 +255,8 @@ BANK_METRICS = {k for k in DURATION if k.startswith("bank_")}
 # Frames only the cash-flow model needs. One that fails is taken from the last run that read it (CASH_FLOW_CACHE), as
 # the tax frames are, except for companies that filed for that year since (_kept_frames); without that, the figure is
 # unknown for that year, which then leaves the year out of the model.
-CASH_FLOW_METRICS = {"interest_paid", "sbc", "software_capex", "construction_capex"}
+CASH_FLOW_METRICS = {"interest_paid", "interest_expense", "sbc", "software_capex", "construction_capex",
+                     "working_capital"}
 # Balance sheet lines for a bank's tangible book value (_bank_parts). One that fails leaves it unknown for that quarter,
 # rather than reading as none.
 BANK_INSTANT = {"goodwill", "intangibles", "preferred_stock", "servicing"}
@@ -282,6 +306,15 @@ INSTANT = {
                   "DebtAndCapitalLeaseObligations"],
     # Only for the debt check (_debt_check). A failed request leaves its liabilities test unmade for that quarter.
     "lease_nc": ["OperatingLeaseLiabilityNoncurrent"],
+    # Marketable securities held for over a year, which count with cash (derive): Apple's $84.1B at June 2026, Regeneron's
+    # $9.8B. Other long-term investments are left out, since at an insurer or a health insurer they back what it owes
+    # policyholders (UnitedHealth's $57.7B), and a stake in another company is not cash. A failed request leaves it out.
+    "lt_securities": ["MarketableSecuritiesNoncurrent"],
+    # The part of consolidated subsidiaries that minority holders own, in equity and in temporary equity where they can
+    # make the company buy it (AT&T's June 2026: $16.0B and $2.0B; CF Industries' $3.2B, CHS's stake in its nitrogen
+    # business). The sales, cash flow and debt the valuation reads are the whole group's, so this claim comes off with
+    # the debt (report.other_claims). Added together, as they are separate lines. A failed request leaves it out.
+    "minority_interest": ["MinorityInterest", "RedeemableNoncontrollingInterestEquityCarryingAmount"],
     # Only for banks' tangible book value (_bank_parts): goodwill, other intangible assets (the last tag is both
     # together) and preferred stock, which belongs to preferred shareholders rather than common ones.
     "goodwill": ["Goodwill"],
@@ -301,7 +334,7 @@ INSTANT = {
 # beside the 27.9M shares on its first-quarter report's cover). Its frame failing leaves the cover's count to use.
 BANK_SHARES = "CommonStockSharesOutstanding"
 OPTIONAL_INSTANT = {"shares_out", "total_assets", "liabilities", "reit_debt", "bank_shares", *BANK_INSTANT,
-                    *DEBT_CHECK_INSTANT}
+                    *DEBT_CHECK_INSTANT, "lt_securities", "minority_interest"}
 # A company's balance sheet date is the newest quarter in which it reported one of these.
 ANCHORS = INSTANT["equity"] + INSTANT["current_assets"]
 
@@ -447,6 +480,9 @@ def load_fundamentals(today=None):
     for metric, tags in RATIOS.items():
         for y in years:
             jobs += [("annual", metric, y, "us-gaap", t, "pure", f"CY{y}") for t in tags]
+    # The working capital changes of the WC_HISTORY years before these, which _one_off_cash measures a year's against.
+    for y in range(years[0] - WC_HISTORY, years[0]):
+        jobs += [("history", "working_capital", y, "us-gaap", t, "USD", f"CY{y}") for t in DURATION["working_capital"]]
     for y in years[-3:]:  # three years, so companies whose newest year isn't filed yet still get a dilution figure
         jobs.append(("annual", "diluted_shares", y, "us-gaap", "WeightedAverageNumberOfDilutedSharesOutstanding", "shares", f"CY{y}"))
     for q in quarters:
@@ -469,15 +505,17 @@ def load_fundamentals(today=None):
               + ", ".join(sorted(f"{m} {p if p in quarters else f'CY{p}'}" for m, p in failed))
               + (f". Balance sheets skip {', '.join(sorted(bad_quarters))}." if bad_quarters else ""), flush=True)
 
-    annual, inst, shares, info = {}, {}, {}, {}
+    annual, inst, shares, info, history = {}, {}, {}, {}, {}
     for (section, metric, period, _tax, tag, _unit, _p), frame in zip(jobs, frames):
         if frame is None or (metric, period) in failed or (section == "instant" and metric not in OPTIONAL_INSTANT and period in bad_quarters):
             continue
         for cik, d in frame.items():
             if section == "annual":
                 annual.setdefault(cik, {}).setdefault(period, {})[tag] = d
+            elif section == "history":
+                history.setdefault(cik, {})[period] = d["val"]
             elif metric == "shares_out":
-                shares.setdefault(cik, {})[period] = d["val"]
+                shares.setdefault(cik, {})[period] = (d["val"], d.get("end"))
             else:
                 inst.setdefault(cik, {}).setdefault(period, {})[tag] = d
             if metric in TAX_EVIDENCE or metric in REIT_METRICS or metric in REIT_INSTANT or metric in BANK_METRICS \
@@ -522,9 +560,46 @@ def load_fundamentals(today=None):
         c["latest"] = _balance_sheet(inst.get(cik, {}), quarters, bank_failed, lease_failed)
         s = next((shares[cik][q] for q in quarters if q in shares.get(cik, {})), None)
         if s is not None:
-            c["latest"]["shares_out"] = s
+            # The cover page's count and its date, which build.py checks for stock splits since.
+            c["latest"]["shares_out"], c["latest"]["shares_as_of"] = s
+        if history.get(cik):
+            c["wc_history"] = history[cik]  # {year: change in working capital} before `years` (_one_off_cash)
         companies[cik] = c
+    for new, old in SUCCESSORS.items():
+        if old in companies:
+            companies[new] = _successor(companies.get(new), companies[old])
     return {"years": years, "companies": companies}
+
+
+# Listings whose company moved to a new SEC registrant (a holding company put on top by an 8-K12B filing), mapped to
+# the registrant that filed the annual reports: {new CIK: old CIK}. The listed ticker points to the new one, which has
+# only filed quarterly reports so far, so without this the company would have no financial figures at all. Exxon Mobil
+# moved under ExxonMobil Holdings Corp (8-K12B of July 1, 2026; the old registrant filed to delist on July 2), whose
+# first 10-Q (August 3, 2026) is its only filing with figures. Once the new registrant files an annual report of its
+# own, its years take over (_successor), so an entry can stay until then.
+SUCCESSORS = {2115436: 34088}
+
+
+def _successor(new, old):
+    """A company record for a listing whose registrant changed (SUCCESSORS): each fiscal year from the new registrant
+    where it has one (revenue and net income), else from the old, and the newer of the two balance sheets and cover
+    page share counts."""
+    if not new:
+        return old
+    out = dict(new)
+    out["annual"] = {y: s if s.get("revenue") is not None and s.get("net_income") is not None else
+                     old.get("annual", {}).get(y, s) for y, s in (new.get("annual") or {}).items()}
+    nl, ol = new.get("latest") or {}, old.get("latest") or {}
+    latest = dict(nl if (nl.get("as_of") or "") >= (ol.get("as_of") or "") else ol)
+    for k in ("shares_out", "shares_as_of"):
+        latest.pop(k, None)
+    counts = [x for x in (nl, ol) if x.get("shares_out")]
+    if counts:
+        newest = max(counts, key=lambda x: x.get("shares_as_of") or "")
+        latest.update(shares_out=newest["shares_out"], shares_as_of=newest.get("shares_as_of"))
+    out["latest"] = latest
+    out["wc_history"] = {**(old.get("wc_history") or {}), **(new.get("wc_history") or {})}
+    return out
 
 
 def _first(facts, tags):
@@ -584,6 +659,14 @@ def _annual(facts, has_capex, capex_failed, report, unknown=frozenset()):
         # Negative readings (a year's reversed stock pay, a stray sign) count as none.
         **{k: None if k in unknown else max(0, _val(_first(facts, DURATION[k])) or 0)
            for k in ("interest_paid", "sbc", "construction_capex")},
+        # Interest expense (0 where untagged), which report._cash_flow_model uses for interest paid where the company
+        # tags no interest paid at all ("interest_paid_tagged"), rather than counting the interest as a cost while also
+        # subtracting the debt it is paid on.
+        "interest_expense": None if "interest_expense" in unknown else max(
+            0, _val(_first(facts, DURATION["interest_expense"] + ["InterestExpense"])) or 0),
+        "interest_paid_tagged": any(t in facts for t in DURATION["interest_paid"]),
+        # One-off payments inside operating cash flow (derive's one_off_cash): None where unknown or untagged.
+        "working_capital": None if "working_capital" in unknown else _val(facts.get(DURATION["working_capital"][0])),
         "software_capex": None if "software_capex" in unknown else max(
             [0] + [_val(facts.get(t)) or 0 for t in DURATION["software_capex"]]),
         **_bank_year(facts, unknown),
@@ -686,6 +769,11 @@ def _items(facts, unknown):
         "property_sale": _group(facts, PROPERTY_SALE),
         "reit_gain": None if "reit_gain" in unknown else sum(_val(facts.get(t)) or 0 for t in REIT_GAIN),
         "securities": _group(facts, SECURITIES),
+        # Gains or losses on stakes in other companies under the broader tags (DURATION's equity_securities), which
+        # derive() reads for a company other than a bank that tags none under SECURITIES; None where they contradict
+        # each other or their frames failed.
+        "other_securities": None if unknown & {"bank_securities", "equity_securities"} else _group(
+            facts, DURATION["bank_securities"][:1] + DURATION["equity_securities"]),
         "debt_extinguishment": _val(facts.get("GainsLossesOnExtinguishmentOfDebt")) or 0,
         "gw_tax_rate": _goodwill_tax_rate(facts, gw),
         "valuation_allowance": line("valuation_allowance"),
@@ -701,8 +789,8 @@ def _items(facts, unknown):
         # a run missing any of these frames reads none of them. Discontinued operations, untagged gains and the tax
         # check still apply.
         out.update(gw_impairment=None, impairment=None, sale=None, sale_assets=None, property_sale=None, reit_gain=None,
-                   securities=None, debt_extinguishment=None, gw_tax_rate=None, valuation_allowance=None,
-                   tax_credits=None)
+                   securities=None, other_securities=None, debt_extinguishment=None, gw_tax_rate=None,
+                   valuation_allowance=None, tax_credits=None)
     return out
 
 
@@ -839,7 +927,11 @@ def _capex(facts):
         return ppe + og if og is not None and og != ppe else ppe  # an equal figure is one line tagged twice
     if broad is not None or og is not None:
         return max(x for x in (broad, og) if x is not None)
-    return v(CAPEX[4])  # property purchases: usually acquisitions, so only when nothing else is reported
+    # Only when nothing else is reported: oil and gas property purchases, which are usually acquisitions, and "other"
+    # property purchases, which some companies tag as their only capex line (CAPEX). The larger counts, as they can be
+    # one line tagged twice.
+    rest = [x for x in (v(CAPEX[4]), v(CAPEX[5])) if x is not None]
+    return max(rest) if rest else None
 
 
 NEEDS_REPORT = object()
@@ -876,6 +968,14 @@ def _net_income(facts, report=False):
     x, r = ni["val"], _val(rev) or _val(bank)
     if rev and ni["accn"] == rev["accn"]:
         return None if rev["val"] > 50e6 and abs(x) < 1e-4 * rev["val"] else x
+    # A proxy's figure often includes minority holders' share: it matches the annual report's ProfitLoss, while that
+    # report's own net income leaves the minority share out (Verizon's 2026 proxy: $17.61B for 2025, which is its 10-K's
+    # $17.17B plus $434M to minority holders; DaVita's $1.08B against $747M; Tenet's $2.37B against $1.41B, whose 10-K
+    # tags no NetIncomeLoss at all). Then the annual report's ProfitLoss less its minority share is the owners' own.
+    pl, mi = facts.get("ProfitLoss"), facts.get("NetIncomeLossAttributableToNoncontrollingInterest")
+    if pl and mi and mi["val"] and pl["accn"] != ni["accn"] and mi["accn"] == pl["accn"] \
+            and (not rev or pl["accn"] == rev["accn"]) and abs(x - pl["val"]) <= 0.02 * abs(pl["val"]):
+        return pl["val"] - mi["val"]
     # It came from another filing, so compare it with the annual report's own figures (from the filing that
     # reported revenue, or from any other filing when there is no revenue). A wrong scale is off by 1,000x.
     sane = lambda v: not (r and r > 10e6) or 1e-3 * r <= abs(v) <= 50 * r
@@ -1161,13 +1261,17 @@ def _balance_sheet(by_quarter, quarters, bank_failed=frozenset(), lease_failed=f
     out = {m: _val(_first(facts, INSTANT[m])) for m in ("equity", "cash", "st_investments", "current_assets", "current_liabilities")}
     out.update(as_of=_first(facts, ANCHORS).get("end"), total_debt=total, lt_debt=lt, debt_reported=reported,
                total_assets=_val(facts.get("Assets")),
+               # Long-term marketable securities, which derive() counts with cash, and minority holders' stakes in
+               # subsidiaries (both lines added; a negative one, a deficit, counts as none).
+               lt_securities=max(_val(_first(facts, INSTANT["lt_securities"])) or 0, 0),
+               minority_interest=sum(max(_val(facts.get(t)) or 0, 0) for t in INSTANT["minority_interest"]),
                # For REITs: equity with minority holders' share (_ffo), total liabilities and the debt tags _reit_debt()
                # reads besides those _debt() does.
                equity_total=_val(facts.get(INSTANT["equity"][1])), liabilities=_val(facts.get("Liabilities")),
                reit_debt={t: facts[t]["val"] for t in INSTANT["reit_debt"] + ["SecuredDebt", "LineOfCredit"] if t in facts})
     # The most cash held at any recent quarter end, since interest earned last year came from the cash held then.
     out["peak_cash"] = max((_val(_first(f, INSTANT["cash"])) or 0) + (_val(_first(f, INSTANT["st_investments"])) or 0)
-                           for f in by_quarter.values())
+                           + max(_val(_first(f, INSTANT["lt_securities"])) or 0, 0) for f in by_quarter.values())
     # For the debt check (_debt_check): the most debt read at any recent quarter end, since interest paid last year
     # was on the debt held then, and noncurrent operating lease liabilities (None where the frame failed).
     # A quarter's reading above that quarter's total liabilities (or assets, or else the latest ones) is itself a
@@ -1995,6 +2099,52 @@ def _discontinued_for_ffo(s, ffo):
     return min((tagged, implied), key=lambda d: abs(ffo - d - ocf))
 
 
+# A working capital outflow in one of the cash-flow model's three years counts as a one-off payment (_one_off_cash) when
+# it is above WC_SALES of that year's sales, above WC_TIMES the company's usual swing and larger than any outflow it had
+# before. The usual swing is the median size of its changes in the years before the model's three (at least WC_YEARS of
+# them, reaching back WC_HISTORY years before the other figures' window), so neither the year itself nor a second
+# one-off year beside it counts as usual. Coca-Cola's $6.23B in 2024 (its $6.0B deposit with the IRS in its tax dispute)
+# and $7.21B in 2025 ($6.1B of its final payment for fairlife), both as its 10-K describes, pass against a usual swing of
+# $0.53B in 2019 to 2022, when its largest outflow was $0.61B. Outflows that recur don't: IMAX's $36.0M and $35.2M in
+# 2023 and 2024 against $45.9M in 2019, or Teva's $1.37B in 2025 against $2.19B in 2020, which a comparison with only the
+# other years of the window had taken for one-off payments.
+WC_SALES = 0.05
+WC_TIMES = 3
+WC_YEARS = 4
+WC_HISTORY = 3
+
+
+def _one_off_cash(years, series, window, history=None):
+    """{index into `series`: one-off payments inside that year's operating cash flow}, which the cash-flow model adds
+    back to its free cash flow (report._cash_flow_model), for the model's years (the last three of `window`): the part
+    of an outlying working capital outflow (WC_SALES, WC_TIMES) beyond the company's usual swing, measured over the
+    years before those three, from `series` (fiscal `years`) and `history` ({year: change} of earlier years)."""
+    model = window[-3:]
+    if not model:
+        return {}
+    before = {y: v for y, v in (history or {}).items() if y < years[model[0]] and v is not None}
+    before.update({years[j]: series[j]["working_capital"] for j in range(model[0])
+                   if series[j].get("working_capital") is not None})
+    ref = list(before.values())
+    if len(ref) < WC_YEARS:
+        return {}
+    usual = statistics.median(abs(x) for x in ref)
+    out = {}
+    for i in model:
+        v, rev = series[i].get("working_capital"), series[i].get("revenue")
+        if v is not None and rev and rev > 0 and v > WC_SALES * rev and v > WC_TIMES * usual and v > max(ref):
+            out[i] = v - usual
+    return out
+
+
+def _preferred_claim(L):
+    """The preferred stock on the latest balance sheet `L` (_bank_parts' reading), or 0 where none is tagged or it tops
+    total assets, which no real preferred stock can."""
+    pref = ((L.get("quarters") or {}).get(L.get("as_of")) or {}).get("preferred") or 0
+    assets = L.get("total_assets")
+    return 0 if assets and pref > assets else pref
+
+
 def derive(f, tax_rate=OWN_RATE, bank=False, check_debt=True):
     """Turns raw line items into the ratios the screener and reports use. Missing data stays None.
 
@@ -2011,6 +2161,11 @@ def derive(f, tax_rate=OWN_RATE, bank=False, check_debt=True):
     """
     years = sorted(f["annual"])
     series = [f["annual"][y] for y in years]
+    if not bank:
+        # Gains or losses on stakes in other companies under the broader tags, where none is tagged under SECURITIES
+        # (_items' other_securities; a bank reads its own, bank_securities, below).
+        series = [dict(s, securities=s["other_securities"]) if s.get("securities") == 0 and s.get("other_securities")
+                  else s for s in series]
     if bank:
         # A bank whose net income has no frame for a year it tagged its pretax income and tax for has what they leave
         # (Esquire Financial's 2025: $65.7M less $14.8M of tax, $50.8M as its 10-K shows).
@@ -2071,11 +2226,12 @@ def derive(f, tax_rate=OWN_RATE, bank=False, check_debt=True):
     elif not bank and check_debt:
         debt_doubt = _debt_check(L, last.get("interest_paid"))
         debt_known = debt_doubt is None
-    cash = (L.get("cash") or 0) + (L.get("st_investments") or 0)
+    cash = (L.get("cash") or 0) + (L.get("st_investments") or 0) + (L.get("lt_securities") or 0)
     equity = L.get("equity")
     rev = last["revenue"]
     ni = last["net_income"]
     window = list(range(max(0, i_last - 3), i_last + 1))
+    one_off_cash = _one_off_cash(years, series, window, f.get("wc_history"))
     abroad = not (f.get("loc") or "US").startswith("US")
     found = _adjust(series, window, max(cash, L.get("peak_cash") or 0), tax_rate, abroad)
     adjusted = [found[j] for j in window]
@@ -2119,8 +2275,10 @@ def derive(f, tax_rate=OWN_RATE, bank=False, check_debt=True):
         "fcf_history": [s["fcf"] for s in ss[-3:] if s.get("fcf") is not None],
         # The same years' figures behind the cash-flow model (report._cash_flow_model).
         "cash_flow_years": [{"year": y, "revenue": s.get("revenue"), "fcf": s["fcf"],
-                             **{k: s.get(k) for k in CASH_FLOW_METRICS}}
-                            for y, s in list(zip(ys, ss))[-3:] if s.get("fcf") is not None],
+                             **{k: s.get(k) for k in CASH_FLOW_METRICS},
+                             "interest_paid_tagged": s.get("interest_paid_tagged", True),
+                             "one_off_cash": one_off_cash.get(j, 0.0)}
+                            for j, y, s in list(zip(window, ys, ss))[-3:] if s.get("fcf") is not None],
         "net_margin": (ni / rev) if rev else None,
         "op_margin": (op / rev) if rev and op is not None else None,
         "equity": equity,
@@ -2133,6 +2291,14 @@ def derive(f, tax_rate=OWN_RATE, bank=False, check_debt=True):
         "debt_doubt": debt_doubt,
         "cash": cash,
         "net_cash": cash - total_debt,
+        # Claims on the business besides debt, which come off the value of the whole business before it is split among
+        # the common shares (report.other_claims): minority holders' stakes in subsidiaries, and preferred stock (at its
+        # liquidation preference where the carrying amount is only nominal, as for banks; fundamentals._bank_parts).
+        # Preferred stock above the company's total assets is a misread figure and counts as none (Emerson Radio's
+        # liquidation preference tagged as $3.68B at June 2026, against $18M of assets and no preferred on its balance
+        # sheet; an S-1's $329M at a company with $51M of assets).
+        "minority_interest": L.get("minority_interest") or 0,
+        "preferred_stock": _preferred_claim(L),
         "lt_debt_to_equity": (lt_debt / equity) if equity and equity > 0 and debt_known else None,
         "current_ratio": (L["current_assets"] / L["current_liabilities"]) if L.get("current_assets") and L.get("current_liabilities") else None,
         "roe": (ni / equity) if equity and equity > 0 else None,
@@ -2148,6 +2314,10 @@ def derive(f, tax_rate=OWN_RATE, bank=False, check_debt=True):
         "normal_tax_rate": tax_normal,
         "tax_basis": tax_basis,
         "shares_out": L.get("shares_out"),
+        # The cover page count's date, and the newest year's weighted average diluted share count, which build.py
+        # checks the market value's share count against after a stock split.
+        "shares_as_of": L.get("shares_as_of"),
+        "diluted_shares": last.get("diluted_shares"),
         "total_assets": L.get("total_assets"),
         "profitable_years": sum(1 for x in recent3 if x > 0),
         "profitable_years_reported": sum(1 for s in ss[-3:] if (s.get("net_income") or 0) > 0),

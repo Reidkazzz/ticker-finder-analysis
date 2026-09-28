@@ -36,6 +36,10 @@ def is_bank(u, sic=None):
 
 
 UTILITIES = {"Electric Utilities: Central", "Power Generation", "Natural Gas Distribution", "Water Supply"}
+UTILITY_SECTOR = "Utilities"
+# The SEC's industry codes for electric, gas and water utilities and pipelines (49xx), which decide the peer pool of a
+# company Nasdaq gives a utility industry but another sector (utility_sector).
+UTILITY_SIC = "49"
 REIT_INDUSTRY = "Real Estate Investment Trusts"
 REIT_SIC = "6798"  # the SEC's industry code for real estate investment trusts
 # Nasdaq lists some REITs under these instead of "Real Estate Investment Trusts" (Invitation Homes and Terreno Realty
@@ -47,7 +51,22 @@ SIC_SECTORS = {"Finance", "Real Estate"}
 
 
 def wants_sic(u):
-    return u.get("sector") in SIC_SECTORS or u.get("industry") in PROPERTY_INDUSTRIES
+    return u.get("sector") in SIC_SECTORS or u.get("industry") in PROPERTY_INDUSTRIES or _utility_label(u)
+
+
+def _utility_label(u):
+    """Whether Nasdaq gives a company a utility industry (UTILITIES) under a sector other than Utilities."""
+    return u.get("industry") in UTILITIES and u.get("sector") != UTILITY_SECTOR
+
+
+def peer_sector(u, sic=None):
+    """The sector a company's peers are drawn from (_pool): Nasdaq's, except for a company Nasdaq gives a utility
+    industry under another sector whose SEC industry code (`sic`) is a utility's, which is compared with utilities. On
+    September 2026 data that moved MGE Energy (an electric utility, code 4900, Nasdaq files under Energy, which had been
+    valued against oil and gas producers) and AES (4991, under Industrials, valued against chemical makers), and left
+    HF Sinclair (a refiner Nasdaq labels a gas distributor), Enbridge and South Bow (pipelines, 4610) among energy
+    companies."""
+    return UTILITY_SECTOR if _utility_label(u) and str(sic or "").startswith(UTILITY_SIC) else u["sector"]
 
 
 def is_reit(u, company=None, sic=None):
@@ -202,6 +221,31 @@ def _whole(m):
     rest (fundamentals._owners): its sales, debt and cash are the whole business's, its market value only theirs
     (Strawberry Fields' Class A shares: 23%; Simon Property's: 88%). 1 for any other company."""
     return (m.get("owners_share") or 1.0) if reit_kind(m) == "property" else 1.0
+
+
+def other_claims(m):
+    """Claims on a business besides its debt that come before its common shareholders, as the balance sheet carries
+    them (fundamentals.derive): minority holders' stakes in subsidiaries, whose sales, cash flow and debt the
+    consolidated figures include in full (AT&T's $18.0B, CF Industries' $3.2B), and preferred stock. A REIT whose
+    operating partnership's other unitholders own part of it (_whole) has that part taken out by its owners' share
+    instead, so its minority stake is not counted twice."""
+    minority = (m.get("minority_interest") or 0) if _whole(m) >= 0.995 else 0
+    return minority + (m.get("preferred_stock") or 0)
+
+
+def _claims_sentence(m):
+    """" The $18.0B stake minority holders own in its subsidiaries is subtracted too, ...", or "" where other_claims()
+    has nothing worth naming."""
+    minority = (m.get("minority_interest") or 0) if _whole(m) >= 0.995 else 0
+    pref = m.get("preferred_stock") or 0
+    parts = ([f"the {money(minority)} stake minority holders own in its subsidiaries"] if minority >= 5e5 else []) \
+        + ([f"{money(pref)} of preferred stock"] if pref >= 5e5 else [])
+    if not parts:
+        return ""
+    text = " and ".join(parts)
+    many = len(parts) > 1
+    return (f" {text[0].upper()}{text[1:]} {'are' if many else 'is'} subtracted too, as "
+            f"{'claims that come' if many else 'a claim that comes'} before its common shares.")
 
 
 def financial(u, m=None):
@@ -599,6 +643,22 @@ def _debt_bar_note(m):
 # (Cheer Holding's value to sales at 165 times its $1.60 price, CISS's price to earnings at 100 times, Live Ventures'
 # cash-flow model at 12 times), and left 45 of them with no method at all.
 METHOD_SANITY = 10
+# Whether a company outside finance (not a bank, lender, insurer or REIT) counts its peers' price to earnings toward its
+# fair value. It doesn't: the estimate is still shown, for comparison, but the midpoint and range come from value to
+# sales and the cash-flow model (or from price to earnings alone where neither could be used). The evidence is a
+# point-in-time backtest (the model as it would have run in late September 2022 to 2025, on the filings public then,
+# against each stock's next 52 weeks relative to the average listed company), and it is in-sample: this was picked from
+# 20 changes tried on those same four dates. Leaving it out changed the rank correlation between the midpoint's upside
+# and those returns by +0.027, -0.002, +0.008 and +0.017 (+0.012 averaged; 95% interval +0.003 to +0.023 resampling
+# whole sectors, which allowing for the 20 tries would widen to include zero), and raised the return of the companies
+# called undervalued over those called overvalued on every date, by 0.7 to 2.8 points. For the companies it touches,
+# those outside finance, the change was positive on all four dates (+0.018, +0.005, +0.012, +0.018). Of the 20 it had
+# the largest gain and the only one clear of zero on both 2022-23 and 2024-25 (a growth floor of -10% and a peer size
+# weight were slightly positive on both, the rest not). A year's profit swings more than sales and cash flow (one-time
+# items the filings don't tag, cyclical lows that put a peer at 100 times earnings), which is the likely reason. The
+# gain is small, and the calls for these companies still barely predict returns (a rank correlation of -0.07 to +0.05
+# by date), so this is not a claim that they do. Re-check it when a fifth year of returns is available.
+PE_COUNTS = False
 
 
 def _fin_group(code):
@@ -622,8 +682,10 @@ def peer_table(universe, metrics, sic=None):
         # The value of the whole business behind the sales. A REIT's market value counts only its listed shares,
         # while its operating partnership's other unitholders own the rest of the sales and debt (_whole).
         whole = u["mcap"] / _whole(m)
-        # Unknown where a REIT's debt could not be read (fundamentals._reit_debt).
-        ev = None if fin or m.get("net_cash") is None or m.get("debt_known") is False else whole - m["net_cash"]
+        # Unknown where a REIT's debt could not be read (fundamentals._reit_debt). Minority holders' stakes and preferred
+        # stock are claims on the business too (other_claims).
+        ev = (None if fin or m.get("net_cash") is None or m.get("debt_known") is False
+              else whole - m["net_cash"] + other_claims(m))
         doubt = sales_doubtful(m)
         has_rev = bool(rev and rev > 0) and not doubt
         assets = m.get("total_assets")
@@ -638,7 +700,8 @@ def peer_table(universe, metrics, sic=None):
             "name": u.get("name"),
             "cik": u.get("cik"),
             "industry": u["industry"],
-            "sector": u["sector"],
+            # The sector its peers come from (peer_sector), Nasdaq's but for a utility Nasdaq files elsewhere.
+            "sector": peer_sector(u, code),
             "fin": fin,
             # The listed shares' part of the business (_whole), below 1 where an operating partnership's other
             # unitholders own the rest, so price to sales counts the whole business.
@@ -918,12 +981,14 @@ def _bank_peer_multiples(me, rows):
     }
 
 
-def peer_multiples(sym, table, peers, dropped=()):
+def peer_multiples(sym, table, peers, dropped=(), counted=None):
     """Column labels, the company's own multiples and the peer medians fair_value() uses, for the peer list on
     the report, or None without a list. A non-financial company also gets a price to sales column, since its
     health check ranks price to sales while its fair value uses value to sales. A bank gets price to tangible book
     ("ptbv", ptbv_label) and price to earnings, and no sales column or sales_label (_bank_peer_multiples). `dropped`
-    names the methods fair_value() left out as data errors (METHOD_SANITY), which the note then says."""
+    names the methods fair_value() left out as data errors (METHOD_SANITY), which the note then says, and `counted`
+    (where given) the methods its fair value counts, so the note of a company outside finance names the columns its fair
+    value uses, and a price to earnings shown only for comparison (PE_COUNTS) as such (_outside_note)."""
     me = table.get(sym)
     if not me or me["features"]["size"] is None or not peers:
         return None
@@ -951,7 +1016,10 @@ def peer_multiples(sym, table, peers, dropped=()):
         note.append("Peers' earnings are as reported. This company's leave out last year's one-time items, as its "
                     "fair value does.")
     earn_words = "price to FFO" if reit else "price to earnings"
-    if profitable and (REIT_SALES or not reit) and me.get("reit") != "mortgage" and not me.get("debt_unknown"):
+    if counted is not None and profitable and not fin and not reit:
+        # A company outside finance with a fair value: the columns it uses, as fair_value() counted them.
+        note += _outside_note(counted, dropped, me)
+    elif profitable and (REIT_SALES or not reit) and me.get("reit") != "mortgage" and not me.get("debt_unknown"):
         note.append("The fair value uses the median of the " + ("price to sales" if fin else "value to sales")
                     + f" and {earn_words} columns.")
     elif profitable:
@@ -969,11 +1037,9 @@ def peer_multiples(sym, table, peers, dropped=()):
     # A column the sentence above names whose result fair_value left out as a data error (METHOD_SANITY).
     cols = [c for name, c in (("Peer value to sales", "value to sales"), ("Peer price to sales", "price to sales"),
                               ("Peer price to earnings", "price to earnings"), ("Peer price to FFO", "price to FFO"))
-            if profitable and name in dropped and c in note[-1]]
+            if profitable and name in dropped and c in note[-1]] if counted is None or fin or reit else []
     if cols:
-        note.append(f"The {' and '.join(cols)} result{'s' if len(cols) > 1 else ''} came out more than "
-                    f"{METHOD_SANITY} times the price or under a tenth of it, which more likely means a misread "
-                    f"figure, so {'they are' if len(cols) > 1 else 'it is'} left out of the fair value.")
+        note.append(_dropped_sentence(cols))
     # What an n/a cell means. Peers are matched on their sales, so every row has sales; a sales multiple is blank where
     # the share count changed after the company's latest filing (_share_count_gap), and value to sales also where the
     # debt could not be read (a REIT), for a lender (not valued on it) or where cash exceeds the market value.
@@ -1005,6 +1071,35 @@ def peer_multiples(sym, table, peers, dropped=()):
         "note": " ".join(note),
         "company": {"sales": me[key], "pe": me.get(earn), **({} if fin else {"ps": me["ps"]})},
     }
+
+
+def _dropped_sentence(cols):
+    """Why the peer columns `cols` fair_value() left out as data errors (METHOD_SANITY) don't count."""
+    return (f"The {' and '.join(cols)} result{'s' if len(cols) > 1 else ''} came out more than {METHOD_SANITY} times "
+            "the price or under a tenth of it, which usually means a misread figure or similar companies that don't "
+            f"describe this one, so {'they are' if len(cols) > 1 else 'it is'} left out of the fair value.")
+
+
+def _outside_note(counted, dropped, me):
+    """The peer table's sentences on which of its columns the fair value of a profitable company outside finance uses:
+    `counted` names the methods fair_value() counted, `dropped` those it left out as data errors. Price to earnings
+    counts only where it is the only estimate (PE_COUNTS), and is otherwise shown for comparison."""
+    vs, pe = "Peer value to sales" in counted, "Peer price to earnings" in counted
+    if vs or pe:
+        cols = " and ".join(c for c, used in (("value to sales", vs), ("price to earnings", pe)) if used)
+        out = [f"The fair value uses the median of the {cols} column{'s' if vs and pe else ''}"
+               + (", the only estimate that could be used" if pe and not vs and len(counted) == 1 else "")
+               + (", since its debt could not be read reliably and value to sales counts debt"
+                  if pe and not vs and me.get("debt_unknown") else "") + "."]
+    else:
+        out = ["The fair value doesn't use this table's multiples."]
+    if not pe and "Peer price to earnings" not in dropped and me.get(PEER_PE) is not None:
+        out.append("The price to earnings column is shown for comparison and not counted, as the verdict explains.")
+    cols = [c for name, c in (("Peer value to sales", "value to sales"), ("Peer price to earnings", "price to earnings"))
+            if name in dropped]
+    if cols:
+        out.append(_dropped_sentence(cols))
+    return out
 
 
 def _median(values):
@@ -1439,9 +1534,20 @@ def _discounted(base, g, r=0.10, tg=0.025):
 CF_HIGH_YEARS = 5  # years at the company's own growth rate
 CF_YEARS = 10  # by which growth has faded to CF_TERMINAL
 CF_GROWTH_CAP = 0.12
+CF_GROWTH_FLOOR = 0.0  # the least growth counted: a decline counts as none
 CF_TERMINAL = 0.025
 CF_RATES = ((10e9, 0.08), (2e9, 0.09), (3e8, 0.10))  # (least market value, discount rate), largest first
 CF_SMALL_RATE = 0.11
+# Where the largest companies' rate comes from, as the report explains it: a risk-free rate (the 10-year US Treasury
+# yield, 4.18% at the start of January 2026) and the extra return investors want for owning stocks (Damodaran's implied
+# equity risk premium for January 2026, also 4.18%), about 8.4% together, which the report rounds to about 4% each and
+# the rate to 8%. The rates stay
+# fixed rather than moving with bond yields: a rate by each company's measured risk (CAPM: the Treasury yield on the
+# day plus its beta times the equity risk premium, as a weighted cost of capital) made the cash-flow model's calls
+# slightly worse at predicting the next year's returns on all four backtest dates (September 2022 to 2025, a rank
+# correlation 0.023 lower on average), and one with a beta of 1 for every company, moving only with bond yields, was
+# no better than these.
+CF_RATE_BASIS = (0.0418, 0.0418, "Damodaran's January 2026 figures")
 CF_TAX = FEDERAL_TAX  # for adding back interest where the company's normal tax rate is unknown
 CF_PARTS = ("interest_paid", "sbc", "software_capex", "construction_capex")  # fundamentals.CASH_FLOW_METRICS
 # Equity is the business's value less its net debt, so where the debt is large, a small error in the business value
@@ -1480,11 +1586,13 @@ def _size_words(mcap):
     """The market value tier of CF_RATES a company of market value `mcap` falls in, in words."""
     bounds = [least for least, _ in CF_RATES]
     i = next((k for k, least in enumerate(bounds) if (mcap or 0) >= least), len(bounds))
+    # Round amounts read best without decimals ($10B, $300M).
+    say = lambda x: f"${x / 1e9:g}B" if x >= 1e9 else f"${x / 1e6:g}M"
     if i == 0:
-        return f"worth {money(bounds[0])} or more"
+        return f"worth {say(bounds[0])} or more"
     if i == len(bounds):
-        return f"worth under {money(bounds[-1])}"
-    return f"worth {money(bounds[i])} to {money(bounds[i - 1])}"
+        return f"worth under {say(bounds[-1])}"
+    return f"worth {say(bounds[i])} to {say(bounds[i - 1])}"
 
 
 def _year_list(years):
@@ -1533,16 +1641,30 @@ def _cash_flow_model(u, m, shares, price):
     # since older years alone would value the company on stale figures. Metrics from before the model read these
     # figures have none.
     years = [y for y in listed or [] if all(y.get(k) is not None for k in CF_PARTS)]
-    if not listed:
+    if listed is None:
         return None, None
+    # Nor where the newest year's free cash flow can't be read at all (a 10-K that tags its operating cash flow or its
+    # capital spending under no tag CAPEX lists, as Valero's and AppLovin's for 2025 do), rather than running the model
+    # on the years before. On September 2026 data that took the model away from 19 companies the live site had
+    # valued with it on older years. In the backtest it made no measurable difference (a rank correlation 0.000 lower averaged over the four
+    # dates, 3 to 5 verdicts changed on each).
+    if not listed or listed[-1]["year"] != m.get("fiscal_year"):
+        return None, (f"its free cash flow for {m.get('fiscal_year')} could not be read from its SEC filings, which "
+                      "report its operating cash flow or capital spending under names this site doesn't read")
     if not years or years[-1] is not listed[-1]:
         return None, ("the SEC's figures for its interest paid, stock-based pay or capital spending in "
                       f"{listed[-1]['year']} could not all be read in this run")
     t = m.get("normal_tax_rate")
     t = CF_TAX if t is None else t
     debt = m.get("total_debt") or 0
-    added = [min(y["interest_paid"], CF_INTEREST_RATE * debt) for y in years]
-    before = [y["fcf"] - y["software_capex"] - y["construction_capex"] + a * (1 - t) for y, a in zip(years, added)]
+    # Interest paid, or the interest expense where the company tags no interest paid at all (fundamentals.DURATION).
+    expensed = [not y.get("interest_paid_tagged", True) and bool(y.get("interest_expense")) for y in years]
+    interest = [y["interest_expense"] if e else y["interest_paid"] for y, e in zip(years, expensed)]
+    added = [min(i, CF_INTEREST_RATE * debt) for i in interest]
+    # One-off payments inside operating cash flow (fundamentals._one_off_cash) are added back.
+    one_off = [y.get("one_off_cash") or 0 for y in years]
+    before = [y["fcf"] + o - y["software_capex"] - y["construction_capex"] + a * (1 - t)
+              for y, a, o in zip(years, added, one_off)]
     flows = [f - y["sbc"] for f, y in zip(before, years)]
     n, when = len(years), _year_list([y["year"] for y in years])
     if not _steady(flows):
@@ -1580,7 +1702,7 @@ def _cash_flow_model(u, m, shares, price):
 
     # A sales figure that looks incomplete (sales_doubtful) shows no trend either.
     rates, jump = ([], None) if sales_doubtful(m) else _growth_inputs(m)
-    held = [max(0.0, min(CF_GROWTH_CAP, x)) for _, x in rates]
+    held = [max(CF_GROWTH_FLOOR, min(CF_GROWTH_CAP, x)) for _, x in rates]
     g = statistics.fmean(held) if held else 0.0
     r = cash_flow_rate(mcap)
     pv, cf = 0.0, base
@@ -1596,23 +1718,36 @@ def _cash_flow_model(u, m, shares, price):
     if -nc > CF_DEBT_SHARE * business:
         return None, (f"its free cash flow of {money(base)} a year values the whole business at only "
                       f"{money(business)}, less than twice its debt less its cash of {money(nc)}, {swing}")
+    claims = other_claims(m)
+    if claims and claims - nc > CF_DEBT_SHARE * business:
+        return None, (f"its free cash flow of {money(base)} a year values the whole business at only "
+                      f"{money(business)}, less than twice what comes before its common shares: its debt less its "
+                      f"cash and {money(claims)} of minority holders' stakes and preferred stock, {swing}")
 
     also = [what for key, what in (("software_capex", "software it builds for its own use"),
                                    ("construction_capex", "construction")) if any(y[key] for y in years)]
-    paid = any(y["interest_paid"] for y in years)
+    paid = any(interest)
+    # Where interest expense stood in for interest paid the company doesn't report (fundamentals.DURATION).
+    stood = " (its interest expense, as it doesn't report interest paid)" if any(expensed) else ""
     start = (f"Starts from free cash flow of {money(base)} a year: cash from operations less capital spending"
              + (f" ({' and '.join(also)} included)" if also else "")
              + (" and stock-based pay" if any(y["sbc"] for y in years) else ""))
     if paid and not debt:
         start += ". Interest stays counted as a cost, since no debt was read from its latest balance sheet to subtract."
-    elif any(a < y["interest_paid"] for a, y in zip(added, years)):
-        start += (", with interest added back, after tax, since the debt is subtracted at the end. Only interest of up "
-                  f"to {CF_INTEREST_RATE * 100:.0f}% of that debt a year is added back: it paid more, which the debt "
-                  "read from its latest balance sheet can't account for, so the rest stays counted as a cost.")
+    elif any(a < i for a, i in zip(added, interest)):
+        start += (f", with interest{stood} added back, after tax, since the debt is subtracted at the end. Only interest "
+                  f"of up to {CF_INTEREST_RATE * 100:.0f}% of that debt a year is added back: it paid more, which the "
+                  "debt read from its latest balance sheet can't account for, so the rest stays counted as a cost.")
     elif paid:
-        start += ", with interest added back, after tax, since the debt is subtracted at the end."
+        start += f", with interest{stood} added back, after tax, since the debt is subtracted at the end."
     else:
         start += "."
+    added_back = [(y["year"], o) for y, o in zip(years, one_off) if o >= 5e5]
+    if added_back:
+        start += (" One-off payments inside its operating cash flow are added back: "
+                  + _year_list([f"{money(o)} in {yr}" for yr, o in added_back])
+                  + " (working capital that took far more cash than in any of its earlier years, a sign of a one-time "
+                    "payment such as a deposit in a tax dispute or the last payment for a past acquisition).")
     ys = [y["year"] for _, y in sized]
     if margin is not None:
         start += (f" That is {margin * 100:.1f}% of sales, "
@@ -1654,17 +1789,23 @@ def _cash_flow_model(u, m, shares, price):
     grows = (seen + pace + f", then its growth moves evenly to {CF_TERMINAL * 100:.1f}% by year {CF_YEARS} and stays "
              "there, about the pace of inflation.").strip()
     top, bottom = CF_RATES[0][1], CF_SMALL_RATE
-    rate = (f"Cash further off counts for less, so it is discounted at {r * 100:.0f}% for each year of waiting, the "
-            f"rate used here for companies {_size_words(mcap)}"
-            + (f" (smaller, riskier ones get up to {bottom * 100:.0f}%)." if r == top else
-               f", the riskiest (the largest get {top * 100:.0f}%)." if r == bottom else
-               f" ({top * 100:.0f}% for the largest, {bottom * 100:.0f}% for the smallest and riskiest)."))
-    net = (f"Its net cash of {money(nc)} is added." if nc > 0 else
-           f"Its net debt of {money(nc)} is subtracted." if nc < 0 else "")
-    return {"name": "Cash-flow model", "value": (business + nc) / shares,
+    safe, extra, source = CF_RATE_BASIS
+    basis = (f"about {safe * 100:.0f}% from safe US government bonds plus about {extra * 100:.0f}% for the extra risk "
+             f"of stocks, per {source}")
+    rate = (f"Money further off is worth less, so each year's cash is discounted at {r * 100:.0f}% a year, the return "
+            + (f"investors expect for the risk of owning a large company's stock: {basis}. Smaller companies get up to "
+               f"{bottom * 100:.0f}%, since they are riskier." if r == top else
+               f"investors expect for the risk of owning a company {_size_words(mcap)}. The rate starts at "
+               f"{top * 100:.0f}% for companies {_size_words(CF_RATES[0][0])} ({basis}) and rises a point for each "
+               f"step down in size, since smaller companies are riskier, to {bottom * 100:.0f}% for those "
+               f"{_size_words(0)}."))
+    net = ((f"Its net cash of {money(nc)} is added." if nc > 0 else
+            f"Its net debt of {money(nc)} is subtracted." if nc < 0 else "") + _claims_sentence(m)).strip()
+    return {"name": "Cash-flow model", "value": (business + nc - claims) / shares,
             "note": " ".join(x for x in (start, grows, rate, net) if x),
             "model": {"cash_flow": base, "margin": margin, "growth": g, "discount_rate": r,
-                      "terminal_growth": CF_TERMINAL, "net_cash": nc}}, None
+                      "terminal_growth": CF_TERMINAL, "net_cash": nc,
+                      **({"other_claims": claims} if claims else {})}}, None
 
 
 # The most the share count behind a REIT's or a bank's market value may differ from the one in its latest SEC filing
@@ -1898,12 +2039,14 @@ def fair_value(u, m, price, peers, table):
         # debt is then subtracted (or net cash added) to get back to what the shares are worth.
         med_ev = _median([r["ev_sales"] for r in peer_rows])
         own = _whole(m)
-        value = (med_ev * rev + nc) * own / shares if med_ev else 0
+        claims = other_claims(m)
+        value = (med_ev * rev + nc - claims) * own / shares if med_ev else 0
         if value > 0:
             methods.append({"name": "Peer value to sales", "value": value,
                             "note": f"Similar {'REITs' if reit else 'companies'} are valued at {med_ev:.1f}x sales, counting their debt and cash."
                                     + (f" This company's net cash of {money(nc)} is added." if nc > 0 else
                                        f" This company's net debt of {money(nc)} is subtracted." if nc < 0 else "")
+                                    + _claims_sentence(m)
                                     + (f" Its shares own {own * 100:.0f}% of the business, the rest belonging to holders "
                                        "of its operating partnership's units." if own < 0.995 else "")})
     med_pe = _median([r.get(PEER_FFO if reit else PEER_PE) for r in peer_rows])
@@ -1945,8 +2088,9 @@ def fair_value(u, m, price, peers, table):
         if model:
             methods.append(model)
 
-    # A method that puts the value more than METHOD_SANITY times the price, or less than a METHOD_SANITY-th of it,
-    # rests on a misread figure, so it is left out.
+    # A method that puts the value more than METHOD_SANITY times the price, or less than a METHOD_SANITY-th of it, is
+    # left out: usually a misread figure, though sometimes a real result of a method that doesn't suit the company
+    # (Tesla's price to earnings against carmakers' multiples, CrowdStrike's cash flow after stock-based pay).
     wild = [x for x in methods if not price / METHOD_SANITY <= x["value"] <= price * METHOD_SANITY]
     sanity = None
     if wild:
@@ -1955,7 +2099,8 @@ def fair_value(u, m, price, peers, table):
             f"{x['name']} came out at {dollars(x['value'])} a share, "
             + (f"more than {METHOD_SANITY} times the price" if x["value"] > price else
                f"less than a {'tenth' if METHOD_SANITY == 10 else f'{METHOD_SANITY}th'} of the price")
-            + ". A gap that large more likely means a figure read from its filings is wrong, so it is left out."
+            + ". A gap that large usually means a figure read from its filings is wrong, or that the method doesn't "
+              "suit this company, so it is left out."
             for x in wild)
         if not methods:
             return {"methods": [], "verdict": None, "dropped": [x["name"] for x in wild],
@@ -1984,6 +2129,18 @@ def fair_value(u, m, price, peers, table):
                     "withheld": f"There is no fair value estimate. {lost}, so only the cash-flow model could apply, "
                                 f"and it is left out because {left_out}.{versus}"}
         return None
+    # A company outside finance shows its peers' price to earnings for comparison without counting it (PE_COUNTS),
+    # unless it is the only estimate left.
+    outside = not (PE_COUNTS or fin or reit or bank)
+    reference = [x for x in methods if outside and x["name"] == "Peer price to earnings"] if len(methods) > 1 else []
+    shown = methods
+    methods = [x for x in methods if x not in reference]
+    for x in reference:
+        x["counted"] = False
+        x["note"] += (" Shown for comparison and not counted in the fair value. A year's profit swings more than sales "
+                      "and cash flow, and in a test on 2022 to 2025 data, leaving this estimate out made the verdicts "
+                      "for companies outside finance slightly better at telling which stocks would do better over the "
+                      "next year, though the gain was small.")
     vals = sorted(x["value"] for x in methods)
     mid = statistics.median(vals)
     # A value more than 50% away from the price needs two independent estimates behind it, so one can't stretch
@@ -1994,7 +2151,8 @@ def fair_value(u, m, price, peers, table):
     # So the midpoint passes 50% only when the cash-flow model and the peer estimates (their geometric mean) are
     # both past it. Then, as before, three methods keep their median, which always has a second method on its
     # side, and two keep the nearer one. A company valued on peer multiples alone (every financial company, and
-    # others without positive average cash flow) therefore stays within 50% of the price.
+    # others without positive average cash flow) therefore stays within 50% of the price. Only the estimates that
+    # count take part (a price to earnings shown for comparison doesn't; PE_COUNTS).
     peer_vals = [x["value"] for x in methods if x["name"].startswith("Peer")]
     other = [x["value"] for x in methods if not x["name"].startswith("Peer")]
     kinds = sorted(([math.exp(statistics.fmean(math.log(v) for v in peer_vals))] if peer_vals else []) + other)
@@ -2007,7 +2165,10 @@ def fair_value(u, m, price, peers, table):
         far = f"more than 50% {held} the price"
         stop = f"so the midpoint stops at 50% {held}"
         past = (lambda v: v > price * 1.5) if held == "above" else (lambda v: v < price * 0.5)
-        if len(vals) == 1:
+        if len(vals) == 1 and reference:
+            limit = (f"Only one counted method could be used, and a value {far} needs a second counted method to "
+                     f"agree, {stop}. The price to earnings shown for comparison doesn't count toward this rule.")
+        elif len(vals) == 1:
             limit = f"Only one method could be used, and a value {far} needs a second method to agree, {stop}."
         elif len(kinds) == 1:
             limit = (f"Both estimates come from similar companies' multiples, and a value {far} needs an independent "
@@ -2038,11 +2199,16 @@ def fair_value(u, m, price, peers, table):
     apart = f"within {max(5, math.ceil(round((spread - 1) * 20, 6)) * 5)}% of each other"
     pair = reit and not REIT_CASH_FLOW  # a REIT's two methods both come from its peers
     suits = "bank" if bank else "REIT" if pair else "financial company"
-    of = f"the two methods that suit a {suits}" if pair or fin else "the three methods"
+    of = (f"the two methods that suit a {suits}" if pair or fin else
+          "the two methods counted for it, similar companies' value to sales and the cash-flow model," if outside
+          else "the three methods")
     if len(vals) == 1 and not profitable:
         confidence, note = "low", (("Without last year's one-time items the company lost money"
                                     if (m.get("net_income") or 0) > 0 else "The company lost money last year")
                                    + ", so only the cash-flow model applies. Treat this range loosely.")
+    elif len(vals) == 1 and outside and methods[0]["name"] == "Peer price to earnings":
+        confidence, note = "low", ("Only its peers' price to earnings could be used, so the fair value rests on it "
+                                   "alone. Treat this range loosely.")
     elif len(vals) == 1 and reit_kind(m) == "mortgage":
         confidence, note = "low", (("A REIT whose leases are booked as loans is valued on its peers' price to earnings "
                                     "alone" if m.get("reit_type") else "Only its peers' price to earnings could be used")
@@ -2052,6 +2218,18 @@ def fair_value(u, m, price, peers, table):
     elif spread > 2:
         confidence, note = "low", (f"The methods disagree widely (lowest {dollars(vals[0])}, highest {dollars(vals[-1])}), "
                                    "so treat this range loosely.")
+    elif outside:
+        # Two independent estimates, one from similar companies and one from the company's own cash flow. "Higher"
+        # needs every estimate shown within 1.5x of the others, the price to earnings shown for comparison included,
+        # as it needed all three methods to before that one stopped counting.
+        every = sorted(x["value"] for x in shown)
+        confidence = "higher" if every[-1] / every[0] <= 1.5 else "moderate"
+        note = (f"Both methods counted for it, similar companies' value to sales and the cash-flow model, were available "
+                f"and land {apart}"
+                + ("." if not reference else
+                   ", and the price to earnings shown for comparison is close to them too." if confidence == "higher"
+                   else f", though the price to earnings shown for comparison, {dollars(reference[0]['value'])}, is "
+                        "further off." if spread <= 1.5 else "."))
     elif len(vals) == 3:
         confidence, note = "higher" if spread <= 1.5 else "moderate", f"All three methods were available and land {apart}."
     elif fin or pair:
@@ -2076,10 +2254,11 @@ def fair_value(u, m, price, peers, table):
     if caveat:
         confidence, note = "low", f"{caveat} {note}" + ("" if "loosely" in note else " Treat this range loosely.")
 
-    for x in methods:
+    for x in shown:
         x["value"] = round(x["value"], 2)
     return {
-        "methods": methods,
+        # The estimates in the order worked out; one shown for comparison only has "counted": false.
+        "methods": shown,
         # The methods left out as data errors (METHOD_SANITY), for peer_multiples(); build takes it off the JSON.
         "dropped": [x["name"] for x in wild],
         "low": round(low, 2),
