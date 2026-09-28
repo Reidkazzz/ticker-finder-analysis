@@ -86,6 +86,67 @@ function oneTimeNote(r, style = "margin-top:16px") {
   return n ? `<p class="notice" style="${style}"><i class="ph ph-info" aria-hidden="true"></i><span>${esc(n)}</span></p>` : "";
 }
 
+// The model's track record by kind of company, from a point-in-time backtest of this code on four past dates (the
+// README's "How accurate is it?"): rerun on the filings public then, against each stock's next 12 months.
+const TESTED = "We re-ran this model as it would have run in late September of 2022, 2023, 2024 and 2025, using only the SEC filings public at the time, and followed each stock's return over the next 12 months, dividends included.";
+const LISTED = "The test could only include companies still listed today, and four years is a short record.";
+const TRACK_RECORD = {
+  bank: `${TESTED} For banks it helped: in each of the four years, the banks it called undervalued did better than those it called overvalued, by 5.5 to 16 percentage points, about 9 on average. ${LISTED}`,
+  financial: `${TESTED} For financial companies other than banks the record is mixed: the ones it called undervalued did better than those it called overvalued in three of the four years, by 3 to 19 percentage points, but worse in the other, by 9.5. ${LISTED}`,
+  reit: `${TESTED} For REITs the verdicts did not help: in three of the four years, the REITs it called undervalued did worse than those it called overvalued. Read the verdict as how the price compares with similar REITs, not as a forecast. ${LISTED}`,
+  other: `${TESTED} For companies outside finance, most of those valued here, the verdicts barely predicted which stocks would do better. The ones called undervalued beat those called overvalued by 0.5 to 5 percentage points in three of the years and trailed them by 5.5 in the other, close to even overall. Calls on the very largest companies were no better: the best-known ones it called overvalued, such as Nvidia and Eli Lilly, more often went on to beat other large companies than to trail them. Read the verdict as how today's price compares with similar companies and with a simple forecast of the company's cash, not as a prediction. ${LISTED}`,
+};
+
+// What kind of company the fair value treats this as, which decides the methods it uses (report.fair_value).
+function valuationKind(r) {
+  const f = r.fundamentals || {};
+  if (f.bank) return "bank";
+  if (f.reit === "property") return "reit";
+  if (r.sector === "Finance" || f.reit === "mortgage") return "financial";
+  return "other";
+}
+
+// A plain-English account of how the estimate is made and how well it has done, under the methods. The discount rates
+// and growth limits repeat report.py's CF_RATES, CF_SMALL_RATE, CF_RATE_BASIS, CF_GROWTH_CAP and CF_TERMINAL, and the
+// track record comes from the point-in-time backtest described in the README.
+function howItWorks(r) {
+  const kind = valuationKind(r);
+  const item = (title, text) => `<li><b>${title}</b><span>${text}</span></li>`;
+  const peersLine = kind === "bank"
+    ? "The 10 US-listed banks most like this one in return on tangible equity, return on assets, efficiency and size."
+    : kind === "reit"
+      ? "The 10 US-listed REITs that own property most like this one, preferring its own property type."
+      : "The 10 US-listed companies most like this one in profit margins, cash flow, sales growth, size and sales per dollar of assets, preferring its own industry.";
+  const items = [item("Similar companies", `${r.peer_basis ? esc(r.peer_basis) : peersLine} Each estimate that starts with Peer applies their median multiple to this company's own figures: what the stock would be worth if the market priced it like them.`)];
+  if (kind === "other") {
+    items.push(item("Value to sales", "What each similar company's whole business costs, its debt included and its cash taken off, per dollar of yearly sales. That multiple times this company's sales, less its debt and any other claims that come before its shares, plus its cash, gives the value of its shares."));
+    items.push(item("Cash-flow model", "Starts from free cash flow: the cash the business brings in each year after paying for its operations, its equipment and the stock it pays staff with. The cash flow grows at the company's recent sales growth, kept between 0% and 12% a year, for 5 years, then slows evenly to 2.5% a year, about the pace of inflation, by year 10 and keeps that pace after."));
+    items.push(item("The discount rate", "Money that arrives later is worth less than money today, so each future year's cash is shrunk by a discount rate: the yearly return investors want for the risk of owning the stock. For companies worth $10B or more it is 8%: about 4% from safe US government bonds plus about 4% for the extra risk of stocks, per Damodaran's January 2026 figures. Smaller companies are riskier, so the rate goes up a point for each step down in size: 9% from $2B, 10% from $300M and 11% below that. It is not moved with daily bond yields: in our tests, a rate that moved with bond yields and with how much each stock moves with the market did not make the verdicts more accurate."));
+    // Only where the estimates show a price to earnings: for comparison when other estimates count, or counted when
+    // it is the only one (report.fair_value, PE_COUNTS). Data written before PE_COUNTS has no "counted", and there a
+    // price to earnings beside other estimates counted with them, so it gets neither item.
+    const shown = r.valuation?.methods || [];
+    const pe = shown.find((m) => m.name === "Peer price to earnings");
+    if (pe && pe.counted === false) {
+      items.push(item("Price to earnings, shown for comparison", "Similar companies' price to earnings appears under the estimates but is not counted. In our tests on 2022 to 2025 data, leaving it out made the verdicts for companies outside finance slightly better at telling which stocks would do better, since one year's profit swings more than sales and cash flow. The gain was small."));
+    } else if (pe && shown.length === 1) {
+      items.push(item("Price to earnings", "Similar companies' price to earnings, applied to this company's profit, is the only estimate that could be used here, so it counts. Where value to sales or the cash-flow model can be used, price to earnings is shown for comparison only."));
+    }
+  } else if (kind === "bank") {
+    items.push(item("Price to tangible book and price to earnings", "Tangible book value is what the shareholders own, less goodwill and other intangible assets. Banks are valued this way and on their earnings, not on sales or a cash-flow model, since their borrowing is their raw material."));
+  } else if (kind === "reit") {
+    items.push(item("Price to FFO and value to sales", "Funds from operations (FFO) is the profit measure REITs report: net income with property depreciation added back and property sales left out."));
+  } else {
+    items.push(item("Price to sales and price to earnings", "Insurers, lenders and other financial companies borrow and invest as part of the business, so they are valued on similar companies' price to sales and price to earnings (a mortgage REIT on price to earnings, and a lender also on price to book), with no cash-flow model."));
+  }
+  items.push(item("The verdict", "The midpoint is the middle of the estimates counted (with two, their average). A midpoint more than 50% above or below the price needs two independent estimates to agree, and estimates from the same similar companies count as one. The range spans the estimates and is at least 10% either side of the midpoint. Undervalued means today's price is below the range, overvalued means above it."));
+  items.push(item("How well has this worked?", TRACK_RECORD[kind]));
+  return `<details class="disclose how" style="margin-top:18px">
+    <summary><i class="ph ph-question" aria-hidden="true" style="margin:0;color:var(--text-2);transform:none"></i>How this fair value is worked out<i class="ph ph-caret-down" aria-hidden="true"></i></summary>
+    <div class="body"><ul class="how-list">${items.join("")}</ul></div>
+  </details>`;
+}
+
 function verdictPanel(r) {
   const v = r.valuation;
   if (!v || !VERDICT[v.verdict]) {
@@ -105,10 +166,11 @@ function verdictPanel(r) {
     <p class="line">Estimated fair value <b>${price(v.low)} to ${price(v.high)}</b>.${up == null ? "" : ` The midpoint of <b>${price(v.mid)}</b> is
       <b class="${signClass(up)}">${pct(Math.abs(up), 0)} ${up >= 0 ? "above" : "below"}</b> today's price.`}${v.limit_note ? ` ${esc(v.limit_note)}` : ""}</p>
     ${r.price ? rangeViz(v, r.price) : ""}
-    <div class="methods">${v.methods.map((m) => `<div class="method-row"><b>${esc(m.name)}</b><span class="v">${price(m.value)}</span><p>${esc(m.note)}</p></div>`).join("")}</div>
+    <div class="methods">${v.methods.map((m) => `<div class="method-row${m.counted === false ? " ref" : ""}"><b>${esc(m.name)}${m.counted === false ? ` <span class="tag">For comparison</span>` : ""}</b><span class="v">${price(m.value)}</span><p>${esc(m.note)}</p></div>`).join("")}</div>
     ${r.peers?.length && v.methods.some((m) => m.name.startsWith("Peer")) ? `<p class="fine"><a href="#peers" data-jump="peers">See the ${r.peers.length} similar companies</a> behind the peer estimates.</p>` : ""}
     ${oneTimeNote(r)}
     <p class="fine">${esc(conf)} This is an estimate, not a price target, and not investment advice.</p>
+    ${howItWorks(r)}
   </section>`;
 }
 

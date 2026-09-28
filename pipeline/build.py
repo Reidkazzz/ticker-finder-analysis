@@ -6,6 +6,7 @@
 import argparse
 import datetime as dt
 import json
+import math
 import os
 import random
 import shutil
@@ -71,9 +72,10 @@ def step(msg):
 
 def sic_codes(ciks, today, minutes=SIC_MINUTES):
     """{cik: SIC code} from the SEC company records, cached in .cache/sic.json, for financial and property companies
-    (report.wants_sic). Companies not yet looked up come first, then the oldest lookups are rechecked. Stops at the
-    time budget or when the SEC throttles. A financial company still without a code is matched within its Nasdaq
-    sector instead, and a REIT Nasdaq doesn't label as one can still show by its filings (report.is_reit)."""
+    and utilities Nasdaq files under another sector (report.wants_sic). Companies not yet looked up come first, then the
+    oldest lookups are rechecked. Stops at the time budget or when the SEC throttles. A financial company still without
+    a code is matched within its Nasdaq sector instead, a REIT Nasdaq doesn't label as one can still show by its filings
+    (report.is_reit), and a utility is matched within Nasdaq's sector (report.peer_sector)."""
     try:
         with open(SIC_CACHE, encoding="utf-8") as fh:
             cache = json.load(fh)
@@ -104,8 +106,49 @@ def sic_codes(ciks, today, minutes=SIC_MINUTES):
             json.dump(cache, fh, separators=(",", ":"))
         os.replace(tmp, SIC_CACHE)
     missing = sum(1 for c in ciks if str(c) not in cache)
-    step(f"  SIC codes: {done} looked up, {len(ciks) - missing} of {len(ciks)} financial and property companies known")
+    step(f"  SIC codes: {done} looked up, {len(ciks) - missing} of {len(ciks)} financial, property and utility companies "
+         "known")
     return {c: cache[str(c)]["sic"] for c in ciks if cache.get(str(c), {}).get("sic")}
+
+
+# A stock split after a company's latest SEC cover page can leave the listing's market value on the wrong share count:
+# on September 2026 data Nasdaq's figure for Monster Beverage implied 2,939M shares after its 2-for-1 split of August 11,
+# while its July 31 cover showed 979.5M shares, so 1,959M after the split (and its 984M diluted shares for 2025, 1,969M).
+# Where a forward split came after the cover's date and the cover and the year's diluted share count, each carried
+# through the splits since, agree within SPLIT_AGREE, a market value implying a count more than SPLIT_GAP away from the
+# cover's is replaced by the cover's count times the price. Two SEC counts that agree are the better witness; companies
+# whose cover counts one share class only, or depositary shares, don't pass the agreement test. Reverse splits are left
+# alone: on the same data all 13 listings the test would have changed after one were small companies that had issued
+# many shares since their last filing (New Fortress Energy's debt exchange, fuboTV's merger), which only the listing's
+# count has. Listings Nasdaq places outside the United States are left alone too: a foreign company's cover page and
+# diluted count are of its ordinary shares, which agree, while its listing may trade depositary shares that each hold
+# several (HDFC Bank's hold 3, so after its 1-for-1 bonus issue of September 2025 the test would have tripled its value).
+SPLIT_AGREE = 1.10
+SPLIT_GAP = 1.25
+# The size above which a US listing without financial figures is named in the run's log (a registrant change, a
+# revenue tag not read), so a gap in the largest companies is seen rather than silently left without a verdict.
+WARN_MCAP = 10e9
+
+
+def split_market_values(uni, metrics, prices):
+    """Resets the market value (uni[s]["mcap"]) of listings whose share count is off after a stock split (SPLIT_GAP),
+    and returns [(symbol, shares the old market value implied, shares now)]."""
+    fixed = []
+    for s, u in uni.items():
+        m, splits = metrics.get(s) or {}, (prices.get(s) or {}).get("splits") or []
+        cover, diluted, since = m.get("shares_out"), m.get("diluted_shares"), m.get("shares_as_of")
+        if not (splits and cover and diluted and since and u.get("mcap") and u.get("price"))                 or u.get("country") != "United States":
+            continue
+        after = lambda day: math.prod(r for d, r in splits if day and d > day)
+        f_cover = after(since)
+        if f_cover == 1.0 or any(r < 1 for d, r in splits if d > since):
+            continue
+        now, check = cover * f_cover, diluted * after(m.get("fiscal_year_end"))
+        listed = u["mcap"] / u["price"]
+        if abs(math.log(now / check)) <= math.log(SPLIT_AGREE) and abs(math.log(listed / now)) > math.log(SPLIT_GAP):
+            u["mcap"] = now * u["price"]
+            fixed.append((s, listed, now))
+    return fixed
 
 
 def main():
@@ -140,6 +183,11 @@ def main():
                 metrics[sym] = d
     step(f"  financials for {len(metrics)} companies, {sum(1 for m in metrics.values() if m.get('reit'))} of them REITs"
          f" and {sum(1 for m in metrics.values() if m.get('bank'))} banks")
+    gaps = sorted(((u["mcap"], s) for s, u in uni.items() if s not in metrics and (u.get("mcap") or 0) >= WARN_MCAP
+                   and u.get("country") == "United States"), reverse=True)
+    if gaps:
+        step(f"  WARNING: no financial figures for {len(gaps)} US listings worth ${WARN_MCAP / 1e9:.0f}B or more: "
+             + ", ".join(f"{s} (CIK {uni[s]['cik']})" for _, s in gaps))
 
     symbols = sorted(uni)
     if args.limit:
@@ -157,6 +205,9 @@ def main():
             if uni[s].get("mcap") and old:
                 uni[s]["mcap"] = uni[s]["mcap"] * p["price"] / old
     step(f"  prices for {sum(1 for p in prices.values() if p)} stocks")
+    for s, listed, filed in split_market_values(uni, metrics, prices):
+        step(f"  {s}: market value set from {filed / 1e6:,.0f}M shares (its SEC filings, after the stock split since) "
+             f"rather than the {listed / 1e6:,.0f}M the listing's market value implied")
 
     step("Running the sector screener")
     scr = screener.run(uni, metrics, prices, market.AnalystCounter())
@@ -219,7 +270,9 @@ def main():
             # peers and peer_multiples also carry price to sales ("ps"), the measure its health check ranks.
             "peer_basis": report.peer_basis(s, table, peers),
             "peers": report.peer_list(s, table, peers),
-            "peer_multiples": report.peer_multiples(s, table, peers, dropped),
+            "peer_multiples": report.peer_multiples(s, table, peers, dropped,
+                                                    [x["name"] for x in fv["methods"] if x.get("counted", True)]
+                                                    if fv and fv.get("methods") else None),
             # normal_tax_rate and tax_basis: the rate one-time items and an unusual tax bill are measured against,
             # and where it comes from ("own", "statutory" or "reit"; see fundamentals._normal_rate). For a REIT, "reit"
             # is its kind ("property", valued on funds from operations, or "mortgage"; see report.reit_kind), "ffo" and

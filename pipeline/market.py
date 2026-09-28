@@ -1,4 +1,5 @@
 """Price history, 52-week range and analyst coverage from Yahoo Finance's public endpoints."""
+import datetime as dt
 from concurrent.futures import ThreadPoolExecutor
 
 from .net import cookie_opener, web_get, web_json
@@ -9,9 +10,10 @@ def _ysym(sym):
 
 
 def price_history(sym):
-    """1 year of weekly closes plus the current price and 52-week high/low."""
+    """1 year of weekly closes plus the current price, 52-week high/low and the stock splits of the year."""
     try:
-        res = web_json(f"https://query1.finance.yahoo.com/v8/finance/chart/{_ysym(sym)}?range=1y&interval=1wk")["chart"]["result"][0]
+        res = web_json(f"https://query1.finance.yahoo.com/v8/finance/chart/{_ysym(sym)}?range=1y&interval=1wk"
+                       "&events=split")["chart"]["result"][0]
     except Exception:
         return None
     meta = res.get("meta", {})
@@ -26,7 +28,22 @@ def price_history(sym):
         "high52": meta.get("fiftyTwoWeekHigh"),
         "low52": meta.get("fiftyTwoWeekLow"),
         "weekly": points,
+        "splits": _splits(res),
     }
+
+
+def _splits(res):
+    """[(date, shares after per share before)] of the chart's stock splits (a 2-for-1 split is 2.0), oldest first."""
+    out = []
+    for e in ((res.get("events") or {}).get("splits") or {}).values():
+        try:
+            ratio = float(e["numerator"]) / float(e["denominator"])
+            day = dt.datetime.fromtimestamp(int(e["date"]), dt.timezone.utc).date().isoformat()
+        except (KeyError, TypeError, ValueError, ZeroDivisionError, OverflowError, OSError):
+            continue
+        if ratio > 0:
+            out.append((day, ratio))
+    return sorted(out)
 
 
 def price_histories(symbols, workers=6):
