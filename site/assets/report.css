@@ -127,3 +127,84 @@ a.peer-row:hover { background: var(--surface-2); }
 .popular a:hover { border-color: var(--line-2); background: var(--surface-2); }
 .popular .s { font-family: var(--mono); font-weight: 500; font-size: 13px; }
 .popular .n { color: var(--text-2); }
+
+/* Revenue by quarter: columns on wide screens, one row per quarter on phones (the same markup). Bars grow from the
+   zero line: --base is its height in the plot (or, in rows, its distance from the left) and --h the bar's length. */
+.q-panel { padding: 24px 24px 10px; --plot-h: 200px; }
+.qc { display: grid; grid-template-columns: 52px minmax(0, 1fr); margin: 8px 0 0; }
+.qc-axis { position: relative; height: var(--plot-h); font-size: 11.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.qc-axis span { position: absolute; right: 10px; transform: translateY(50%); white-space: nowrap; }
+.qc-plot { position: relative; min-width: 0; }
+.qc-grids { position: absolute; left: 0; right: 0; top: 0; height: var(--plot-h); pointer-events: none; }
+.qc-grid { position: absolute; left: 0; right: 0; height: 1px; background: var(--line); }
+.qc-grid.zero { background: var(--line-2); }
+.qc-cols { position: relative; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); }
+.qc-col { position: relative; display: grid; grid-template-rows: var(--plot-h) auto auto; justify-items: center; border-radius: 6px; outline: none; }
+.qc-col:focus-visible { box-shadow: 0 0 0 2px var(--text); }
+.qc-area { position: relative; width: 100%; height: 100%; }
+.qc-bar { position: absolute; left: 50%; width: min(24px, 64%); transform: translateX(-50%); bottom: var(--base); height: var(--h);
+  background: #9c9ca5; border-radius: 4px 4px 0 0; transition: background .15s; }
+.qc-bar.neg { bottom: auto; top: calc(100% - var(--base)); border-radius: 0 0 4px 4px; }
+.qc-col.derived .qc-bar { background: #5d5d66; }
+.qc-col:hover .qc-bar, .qc-col:focus-visible .qc-bar { background: #d2d2d8; }
+.qc-col.derived:hover .qc-bar, .qc-col.derived:focus-visible .qc-bar { background: #85858e; }
+.qc-na { position: absolute; left: 0; right: 0; bottom: calc(var(--base, 0%) + 6px); text-align: center; font-size: 11px; color: var(--text-3); }
+.qc-x { margin-top: 8px; font-size: 11.5px; line-height: 1.3; color: var(--text-3); text-align: center; white-space: nowrap; }
+.qc-x b { display: block; font-weight: 500; color: var(--text-2); }
+.qc-yoy { margin-top: 4px; min-height: 18px; font-size: 12px; color: var(--text-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.qc-yoy.adj { text-decoration: underline dotted; text-underline-offset: 3px; }
+.qc-val { display: none; }
+.qc-tip { position: absolute; top: 6px; left: 50%; transform: translateX(-50%); z-index: 5; width: 230px; padding: 10px 12px;
+  display: none; pointer-events: none; background: var(--surface-3); border: 1px solid var(--line-2); border-radius: var(--r-ctl);
+  box-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.7); font-size: 12.5px; line-height: 1.45; color: var(--text-2); text-align: left; }
+.qc-tip.left { left: 0; transform: none; }
+.qc-tip.right { left: auto; right: 0; transform: none; }
+.qc-tip b { display: block; font-size: 15px; font-weight: 600; color: var(--text); }
+.qc-tip span { display: block; margin-top: 3px; }
+.qc-col:hover, .qc-col:focus-visible { z-index: 4; }
+.qc-col:hover .qc-tip, .qc-col:focus-visible .qc-tip { display: block; }
+.qc-note { margin-top: 14px; font-size: 12.5px; color: var(--text-3); }
+.qc-stale { margin-top: 14px; font-size: 13px; color: var(--text-2); }
+.qc-keys { display: grid; gap: 6px; margin-top: 8px; font-size: 12.5px; color: var(--text-3); }
+.qc-keys span { display: flex; align-items: baseline; gap: 8px; }
+.qk { flex: none; display: inline-block; width: 10px; height: 10px; border-radius: 2px; transform: translateY(1px); }
+.qk.derived { background: #5d5d66; }
+.qk.adj { width: 14px; height: 6px; border-radius: 0; border-bottom: 1px dotted var(--text-2); }
+.qk.none { width: 14px; height: 1px; border-radius: 0; background: var(--line-2); transform: translateY(-3px); }
+.q-none { color: var(--text-2); font-size: 14px; max-width: 70ch; }
+.q-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 18px 28px; margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line); }
+.q-stats .k { display: block; font-size: 12.5px; color: var(--text-3); }
+.q-stats b { display: block; margin-top: 4px; font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+.q-stats .s { display: block; margin-top: 2px; font-size: 12.5px; color: var(--text-2); }
+.q-fine { margin-top: 14px; font-size: 12.5px; color: var(--text-3); max-width: 80ch; }
+.q-table { margin: 18px 0 14px; }
+.q-table summary { font-size: 14px; }
+.q-table .body { padding: 0 12px 14px; }
+.q-table table.data th { position: static; }
+.q-table table.data td, .q-table table.data th { padding: 10px 12px; }
+.q-table .tag { height: 20px; font-size: 11.5px; margin-left: 6px; }
+@media (max-width: 900px) {
+  .q-panel { --plot-h: 170px; }
+  .qc-yoy { font-size: 11px; }
+  .qc-x { font-size: 11px; }
+}
+@media (max-width: 560px) {
+  .q-panel { padding: 18px 16px 8px; }
+  .qc { grid-template-columns: minmax(0, 1fr); }
+  .qc-axis, .qc-grids, .qc-tip, .qc-na { display: none !important; }
+  .qc-cols { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .qc-col { grid-template-rows: none; grid-template-columns: 70px minmax(0, 1fr) 58px 48px; grid-template-areas: "x area val yoy";
+    align-items: center; justify-items: stretch; column-gap: 8px; min-height: 28px; }
+  .qc-area { grid-area: area; height: 14px; }
+  .qc-bar { left: var(--base); bottom: 0; top: 0; width: var(--h); height: auto; transform: none; border-radius: 0 4px 4px 0; }
+  .qc-bar.neg { left: calc(var(--base) - var(--h)); top: 0; border-radius: 4px 0 0 4px; }
+  .qc-x { grid-area: x; margin: 0; text-align: left; font-size: 12px; }
+  .qc-x b { display: inline; margin-right: 6px; }
+  .qc-val { grid-area: val; display: block; text-align: right; font-size: 13px; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .qc-col.blank .qc-val { color: var(--text-3); }
+  .qc-yoy { grid-area: yoy; margin: 0; min-height: 0; text-align: right; font-size: 12px; }
+  .q-stats { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .q-table .body { padding: 0 8px 12px; }
+}
+.qc-yoy.up { color: var(--up); }
+.qc-yoy.down { color: var(--down); }

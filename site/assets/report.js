@@ -187,6 +187,188 @@ function pricePanel(r) {
   </section>`;
 }
 
+// Revenue by quarter (fundamentals.quarters: up to 12 quarters, oldest first, back to back; a quarter the filings don't
+// give soundly has null figures) with gross profit and gross margin for the fiscal year and the last 12 months. Reports
+// written before these fields existed have no "quarters" key and get no section. Gross figures show only where the
+// health check has a gross margin bar: banks, insurers, other financial companies and REITs have none.
+const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const monthYear = (iso) => (iso ? `${MON[+iso.slice(5, 7) - 1]} ${iso.slice(0, 4)}` : "");
+const shortMonth = (iso) => `${MON[+iso.slice(5, 7) - 1]} ’${iso.slice(2, 4)}`;
+const fullDate = (iso) => date(iso, { month: "short", day: "numeric", year: "numeric" });
+// One decimal for millions and billions ($109.4B, $375.0M), floored like money() so a figure never reads larger.
+const amount = (n) => money(n, Math.abs(n) >= 1e6 ? { digits: 1 } : {});
+// Growth on the year-ago quarter: one decimal below 100%, whole percents above.
+const growth = (g) => (g == null ? "" : pct(g, Math.abs(g) >= 1 ? 0 : 1, true));
+// Why a quarter with revenue has no growth figure (fundamentals._quarter_series' yoy_withheld), or null where its
+// year-ago quarter isn't there.
+const WITHHELD = {
+  restated: "Not compared with the same quarter a year before: a later filing restated one of the two (for example after a business was sold), so they aren't on the same footing.",
+  unchecked: "Not compared with the same quarter a year before: the two figures come from different filings that couldn't be checked against each other.",
+  no_base: "Not compared with the same quarter a year before, which had no revenue.",
+};
+
+// Round axis steps (1, 2, 2.5 or 5 times a power of ten) giving three or four gridlines above zero, and always at
+// least two gridlines, so the plot has a height.
+function ticks(lo, hi) {
+  const span = hi - lo || Math.abs(hi) || 1;
+  const raw = span / 3.5;
+  const p = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * p).find((s) => s >= raw);
+  const out = [];
+  for (let v = Math.floor(lo / step) * step; v <= hi + step * 1e-9; v += step) out.push(+v.toPrecision(12));
+  if (out.length < 2 || out[out.length - 1] < hi) out.push(+(out[out.length - 1] + step).toPrecision(12));
+  return out;
+}
+
+function axisLabel(v, top) {
+  if (v === 0) return "$0";
+  const [d, u] = top >= 1e12 ? [1e12, "T"] : top >= 1e9 ? [1e9, "B"] : top >= 1e6 ? [1e6, "M"] : [1e3, "K"];
+  return `${v < 0 ? "-" : ""}$${+(Math.abs(v) / d).toFixed(2)}${u}`;
+}
+
+// A quarter's name for its tooltip, its label for screen readers and the table: its fiscal quarter where the pipeline
+// could number it, and its dates, or only the month it ended around where they are estimated (a blank quarter in a gap
+// of two or more).
+const quarterName = (q) => q.dates_estimated ? `Quarter ended around ${monthYear(q.end)}`
+  : `${q.fiscal_quarter ? `Fiscal Q${q.fiscal_quarter}, ` : "Quarter "}${fullDate(q.start)} to ${fullDate(q.end)}`;
+
+function quarterSection(r) {
+  const f = r.fundamentals;
+  if (!f || !Array.isArray(f.quarters)) return "";
+  const qs = f.quarters;
+  // Nothing to plot unless some quarter had revenue above zero, and nothing is shown where the sales figure looks
+  // incomplete (the health check then measures no sales-based figure either).
+  const plotted = !f.sales_doubt && qs.some((q) => q.revenue > 0);
+  const gbar = (r.health || []).flatMap((g) => g.bars).find((b) => b.key === "gross_margin");
+  const bank = !!f.bank;
+  if (!plotted && !gbar) return "";
+  const what = bank ? "revenue (interest earned less interest paid, plus fees)" : "revenue";
+  const head = `<div class="h-top" id="quarters"><div><h2>Revenue by quarter</h2>
+    <p>${plotted ? `Each bar is one quarter's ${what}, from the company's SEC filings, with its growth on the same quarter a year before.`
+      : "Revenue and gross margin from the company's SEC filings."}</p></div></div>`;
+  const none = f.sales_doubt ? "Quarter-by-quarter revenue isn't shown, since the sales figure in the company's SEC data looks incomplete: profit came out larger than sales."
+    : qs.length ? "Quarter-by-quarter revenue isn't shown, since the company reported no revenue in these quarters."
+    : "Quarter-by-quarter figures aren't available for this company. Companies based outside the US often file only yearly reports with the SEC, and a quarter is left out when its figures in the filings don't check out.";
+  const chart = plotted ? quarterChart(qs, f.quarters_stale) : `<p class="q-none">${none}</p>`;
+  return `${head}<section class="panel q-panel">${chart}${quarterStats(f, plotted, gbar)}${plotted ? quarterTable(qs, !!gbar && qs.some((q) => q.gross_profit != null)) : ""}</section>`;
+}
+
+function quarterChart(qs, stale) {
+  const vals = qs.filter((q) => q.revenue != null).map((q) => q.revenue);
+  const t = ticks(Math.min(0, ...vals), Math.max(...vals));
+  const lo = t[0], hi = t[t.length - 1];
+  const at = (v) => ((v - lo) / (hi - lo)) * 100; // % up from the plot's bottom
+  const base = at(0);
+  const n = qs.length;
+  const derived = qs.some((q) => q.derived && q.revenue != null);
+  const odd = qs.some((q) => q.extra_days && q.yoy != null);
+  const restated = qs.some((q) => q.yoy_withheld === "restated");
+  const unchecked = qs.some((q) => q.yoy_withheld === "unchecked");
+  const first = qs.find((q) => q.revenue != null), last = qs[n - 1];
+  const summary = `Revenue for the ${n} quarters to ${monthYear(last.end)}, from ${amount(first.revenue)} in the quarter ended ${monthYear(first.end)} to ${amount(last.revenue)} in the quarter ended ${monthYear(last.end)}${last.yoy != null ? `, ${last.yoy >= 0 ? "up" : "down"} ${pct(Math.abs(last.yoy), 1)} on a year before` : ""}. The table below lists every quarter.`;
+  const cols = qs.map((q, i) => {
+    const name = quarterName(q);
+    const align = i < 2 ? " left" : i >= n - 2 ? " right" : "";
+    const label = `<span class="qc-x" aria-hidden="true"><b>${q.fiscal_quarter ? `Q${q.fiscal_quarter}` : ""}</b>${shortMonth(q.end)}</span>`;
+    if (q.revenue == null) {
+      const why = "The company's SEC filings don't give this quarter's revenue, or it was left out because its figures didn't check out.";
+      return `<div class="qc-col blank" role="listitem" tabindex="0" aria-label="${esc(`${name}: not available. ${why}`)}">
+        <div class="qc-area" aria-hidden="true"><span class="qc-na">n/a</span></div>${label}
+        <span class="qc-val" aria-hidden="true">n/a</span><span class="qc-yoy" aria-hidden="true"></span>
+        <span class="qc-tip${align}" aria-hidden="true"><b>Not available</b><span>${esc(name)}</span><span>${why}</span></span></div>`;
+    }
+    const v = q.revenue;
+    const bar = `--base:${base.toFixed(2)}%;--h:${Math.abs(at(v) - base).toFixed(2)}%`;
+    const gm = q.gross_profit != null && v > 0 ? q.gross_profit / v : null;
+    const yoyText = q.yoy != null ? `${q.yoy >= 0 ? "Up" : "Down"} ${pct(Math.abs(q.yoy), 1)} on the same quarter a year before.`
+      : WITHHELD[q.yoy_withheld] || "No growth figure, since the same quarter a year before isn't available.";
+    const extra = q.extra_days && q.yoy != null ? ` It ran ${Math.abs(q.extra_days)} days ${q.extra_days > 0 ? "longer" : "shorter"} than that quarter, since the company's fiscal year sometimes has an extra week, which moves growth by several points.` : "";
+    const tip = `<span class="qc-tip${align}" aria-hidden="true"><b>${amount(v)}</b><span>${esc(name)}</span>
+      <span>${yoyText}${extra}</span>${gm != null ? `<span>Gross margin ${pct(gm, 1)}.</span>` : ""}${q.derived ? `<span>Worked out as the fiscal year's total less its first three quarters.</span>` : ""}</span>`;
+    const aria = `${name}: ${amount(v)}. ${yoyText}${extra}${q.derived ? " Worked out as the fiscal year's total less its first three quarters." : ""}`;
+    return `<div class="qc-col${q.derived ? " derived" : ""}" role="listitem" tabindex="0" aria-label="${esc(aria)}">
+      <div class="qc-area" aria-hidden="true"><div class="qc-bar${v < 0 ? " neg" : ""}" style="${bar}"></div></div>${label}
+      <span class="qc-val" aria-hidden="true">${amount(v)}</span>
+      <span class="qc-yoy ${signClass(q.yoy)}${extra ? " adj" : ""}" aria-hidden="true">${growth(q.yoy)}</span>${tip}</div>`;
+  }).join("");
+  const grid = t.map((v) => `<span class="qc-grid${v === 0 ? " zero" : ""}" style="bottom:${at(v)}%"></span>`).join("");
+  const axis = t.map((v) => `<span style="bottom:${at(v)}%">${axisLabel(v, Math.max(Math.abs(lo), hi))}</span>`).join("");
+  const keys = [derived && `<span><i class="qk derived" aria-hidden="true"></i>Fourth quarter worked out as the fiscal year's total less its first three quarters, since companies rarely report it on its own</span>`,
+    odd && `<span><i class="qk adj" aria-hidden="true"></i>Growth over a quarter of a different length, where a fiscal year had an extra week</span>`,
+    restated && `<span><i class="qk none" aria-hidden="true"></i>No growth shown where a later filing restated one of the two quarters (for example after a business was sold), so they aren't on the same footing</span>`,
+    unchecked && `<span><i class="qk none" aria-hidden="true"></i>No growth shown where the two quarters' figures come from filings that couldn't be checked against each other</span>`].filter(Boolean);
+  return `<figure class="qc" style="--n:${n}">
+      <figcaption class="sr-only">${esc(summary)}</figcaption>
+      <div class="qc-axis" aria-hidden="true">${axis}</div>
+      <div class="qc-plot">
+        <div class="qc-grids" aria-hidden="true">${grid}</div>
+        <div class="qc-cols" role="list" aria-label="Revenue by quarter">${cols}</div>
+      </div>
+    </figure>
+    ${stale ? `<p class="qc-stale">The latest quarter in the company's SEC filings ended ${monthYear(last.end)}, so these figures are not current.</p>` : ""}
+    <p class="qc-note">Quarters are the company's own fiscal quarters, labeled with the month each ended.</p>
+    ${keys.length ? `<div class="qc-keys">${keys.join("")}</div>` : ""}`;
+}
+
+// Revenue over the last 12 months, and gross profit and gross margin for the fiscal year and the last 12 months.
+function quarterStats(f, plotted, gbar) {
+  const tiles = [];
+  const tile = (k, v, s, cls = "") => `<div><span class="k">${k}</span><b>${v}</b>${s ? `<span class="s ${cls}">${s}</span>` : ""}</div>`;
+  const fyEnd = f.fiscal_year_end;
+  const newer = f.ttm_end && (!fyEnd || f.ttm_end > fyEnd);
+  if (plotted && f.ttm_revenue != null) {
+    // Against the four quarters a year before, which the pipeline gives only where each quarter's growth is known, so
+    // the two totals are on one footing.
+    const g = f.ttm_prior_revenue > 0 ? f.ttm_revenue / f.ttm_prior_revenue - 1 : null;
+    tiles.push(tile("Revenue, last 12 months", amount(f.ttm_revenue),
+      `12 months to ${monthYear(f.ttm_end)}${g != null ? `, ${g >= 0 ? "up" : "down"} ${pct(Math.abs(g), 1)} on the 12 months before` : ""}`));
+  } else if (plotted && f.revenue != null) {
+    tiles.push(tile("Revenue", amount(f.revenue), fyEnd ? `Fiscal year to ${monthYear(fyEnd)}` : "Latest fiscal year"));
+  }
+  let fine = "";
+  if (gbar) {
+    const fy = fyEnd ? `Fiscal year to ${monthYear(fyEnd)}` : "Latest fiscal year";
+    // From the dollar figures where both are there, since the margins are stored rounded to four places and would
+    // otherwise round differently from the health check's (48.65% there, 48.6% here).
+    const ratio = (gp, rev, m) => (gp != null && rev > 0 ? gp / rev : m);
+    const gm = f.sales_doubt ? null : ratio(f.gross_profit, f.revenue, f.gross_margin);
+    const tm = ratio(f.ttm_gross_profit, f.ttm_revenue, f.ttm_gross_margin);
+    if (gm != null) {
+      tiles.push(tile("Gross margin", pct(gm, 1), `${fy}, gross profit of ${amount(f.gross_profit)}`));
+      if (newer && tm != null) {
+        const d = tm - gm;
+        tiles.push(tile("Gross margin, last 12 months", pct(tm, 1),
+          `12 months to ${monthYear(f.ttm_end)}, gross profit of ${amount(f.ttm_gross_profit)}${Math.abs(d) >= 0.001 ? `, ${Math.abs(d * 100).toFixed(1)} points ${d > 0 ? "above" : "below"} the fiscal year` : ""}`));
+      }
+      fine = `Gross margin is the share of sales left after the direct cost of making or buying what was sold, before spending on research, marketing and running the company.${f.gross_basis && f.gross_basis !== "GrossProfit" ? " The company's filings show no gross profit line, so it is worked out as sales less cost of sales." : ""}`;
+    } else {
+      tiles.push(tile("Gross margin", "Not measured", ""));
+      fine = esc((gbar.note || "").replace(/^Not measured\.\s*/, ""));
+    }
+  }
+  if (!tiles.length) return "";
+  return `<div class="q-stats">${tiles.join("")}</div>${fine ? `<p class="q-fine">${fine}</p>` : ""}`;
+}
+
+// The same figures as a table: the chart's text alternative, and the only place quarterly gross profit is listed.
+function quarterTable(qs, gross) {
+  const rows = [...qs].reverse().map((q) => {
+    const gm = q.gross_profit != null && q.revenue > 0 ? q.gross_profit / q.revenue : null;
+    const when = q.dates_estimated ? `ended around ${esc(monthYear(q.end))}` : `ended ${esc(fullDate(q.end))}`;
+    return `<tr><td>${q.fiscal_quarter ? `Q${q.fiscal_quarter}, ` : ""}${when}${q.derived && q.revenue != null ? ` <span class="tag">Worked out</span>` : ""}</td>
+      <td>${q.revenue == null ? "n/a" : amount(q.revenue)}</td>
+      <td class="${signClass(q.yoy)}">${q.yoy != null ? growth(q.yoy) : q.revenue != null && q.yoy_withheld ? `<span class="faint">Not compared</span>` : ""}${q.extra_days && q.yoy != null ? ` <span class="faint">(${q.extra_days > 0 ? "+" : "-"}${Math.abs(q.extra_days)} days)</span>` : ""}</td>
+      ${gross ? `<td>${q.gross_profit == null ? "n/a" : amount(q.gross_profit)}</td><td>${gm == null ? "n/a" : pct(gm, 1)}</td>` : ""}</tr>`;
+  }).join("");
+  return `<details class="disclose q-table">
+    <summary>Every quarter as a table<i class="ph ph-caret-down" aria-hidden="true"></i></summary>
+    <div class="body"><div class="table-wrap"><table class="data">
+      <thead><tr><th scope="col">Fiscal quarter</th><th scope="col">Revenue</th><th scope="col">Growth on a year before</th>${gross ? `<th scope="col">Gross profit</th><th scope="col">Gross margin</th>` : ""}</tr></thead>
+      <tbody>${rows}</tbody></table></div>
+      <p class="q-fine">Newest first. A quarter is n/a where the company's SEC filings don't give its revenue, or it was left out because its figures didn't check out. Growth is not compared where the quarter a year before had no revenue, or a later filing restated one of the two, so they aren't on the same footing.</p></div>
+  </details>`;
+}
+
 function healthSection(r) {
   if (!r.health) {
     return `<div class="h-top"><div><h2>Health check</h2><p>We could not find a full year of revenue and profit in this company's SEC filings, so it cannot be scored.
@@ -287,6 +469,7 @@ function render(r) {
       <div class="r-price"><div class="p">${price(r.price)}</div>${r.mcap ? `<div class="sub">${money(r.mcap)} market value</div>` : ""}</div>
     </header>
     <div class="r-grid">${verdictPanel(r)}${pricePanel(r)}</div>
+    ${quarterSection(r)}
     ${healthSection(r)}
     ${peersSection(r)}
     ${insiderSection(r)}
