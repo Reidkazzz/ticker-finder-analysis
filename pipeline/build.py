@@ -12,7 +12,7 @@ import random
 import shutil
 import time
 
-from . import fundamentals, insiders, market, net, news, report, screener, universe
+from . import filers, fundamentals, insiders, market, net, news, report, screener, universe
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "site", "data")
@@ -33,6 +33,12 @@ BANK_FIELDS = ("net_interest_income", "noninterest_income", "noninterest_expense
 # years-old quarters as the latest: most companies file a 10-Q within 45 days of a quarter's end and a 10-K within 90
 # days of a year's, so nine months means at least two quarterly reports missed.
 STALE_QUARTER_DAYS = 270
+# A company whose revenue is read the way a lender's or a business development company's is (fundamentals.derive's
+# revenue_basis) goes without figures when its newest fiscal year ended longer ago than this, rather than being scored
+# and valued on years-old results: Ellington Credit's newest 10-K results were for 2024, as it became a closed-end fund
+# in 2025 that reports on Form N-CSR (filers.kind then says it is a fund). Every other such company's newest year ended
+# within 12 months of September 2026.
+BASIS_STALE_DAYS = 548
 
 
 def _round(o):
@@ -129,9 +135,25 @@ def sic_codes(ciks, today, minutes=SIC_MINUTES):
 # several (HDFC Bank's hold 3, so after its 1-for-1 bonus issue of September 2025 the test would have tripled its value).
 SPLIT_AGREE = 1.10
 SPLIT_GAP = 1.25
-# The size above which a US listing without financial figures is named in the run's log (a registrant change, a
-# revenue tag not read), so a gap in the largest companies is seen rather than silently left without a verdict.
+# The size above which a US listing without financial figures is named in the run's log, so a gap in the largest
+# companies is seen rather than silently left without a verdict. Those whose gap is expected (filers.EXPECTED: no yearly
+# report filed yet, a foreign filer, a fund, a company without revenue) are listed by kind; the rest (a registrant
+# change, a revenue tag not read, a filer not looked up yet) get a warning.
 WARN_MCAP = 10e9
+# How the log names each kind of gap (filers.kind) and each way revenue is read for a company that tags no revenue line
+# (fundamentals.derive's revenue_basis).
+GAP_WORDS = {"no_annual": "no yearly report filed yet",
+             "annual_untagged": "first yearly report filed without machine-readable figures",
+             "new": "no quarterly or yearly report filed recently",
+             "foreign": "foreign filers under other accounting rules or currencies",
+             "currency": "yearly reports in another currency", "fund": "funds",
+             "blank_check": "blank-check companies (SPACs)",
+             "no_revenue": "no revenue figure and no profit",
+             "revenue_unread": "yearly revenue under labels not read",
+             "annual_missing": "the SEC's data holds no full year from its yearly reports",
+             "unread": "yearly reports whose figures could not be read"}
+LENDER_WORDS = {"bank": "net interest income plus noninterest income", "net_interest": "a REIT's net interest income",
+                "investment_income": "a business development company's total investment income"}
 
 
 def split_market_values(uni, metrics, prices):
@@ -170,30 +192,79 @@ def main():
     step(f"  {len(uni)} common stocks")
 
     step("Loading SEC financial statements")
-    # The listed companies' market values, which order the lookups of their quarterly figures in their own filings.
-    fund = fundamentals.load_fundamentals(today, {u["cik"]: u.get("mcap") or 0 for u in uni.values()})
-    # Industry codes before the financials are worked out, since code 6798 marks a REIT (report.is_reit).
-    sic = sic_codes(sorted({u["cik"] for u in uni.values() if report.wants_sic(u) and u["cik"] in fund["companies"]}), today)
-    metrics = {}
+    # The listed companies' market values, which order the lookups of their quarterly figures in their own filings, and
+    # the REITs by Nasdaq's labels, whose net interest income alone may be their revenue.
+    fund = fundamentals.load_fundamentals(today, {u["cik"]: u.get("mcap") or 0 for u in uni.values()},
+                                          reits={u["cik"] for u in uni.values() if u.get("industry") == report.REIT_INDUSTRY
+                                                 or u.get("sector") == "Real Estate"})
+    # Industry codes before the financials are worked out, since code 6798 marks a REIT (report.is_reit), and for the
+    # companies whose revenue may be a business development company's total investment income, since code 6770 marks a
+    # blank-check company (a SPAC), which tags the interest on the money it holds in trust the same way.
+    invests = {c for c, f in fund["companies"].items() if fundamentals.investment_income(f)}
+    sic = sic_codes(sorted({u["cik"] for u in uni.values() if (report.wants_sic(u) or u["cik"] in invests)
+                            and u["cik"] in fund["companies"]}), today)
+    metrics, partial = {}, {}
     for sym, u in uni.items():
         c = fund["companies"].get(u["cik"])
         if c:
             # The debt check is for companies outside finance: a broker's or insurer's interest is paid on customer
-            # balances and funding, not on debt the reader missed. Nor does gross profit mean anything for them.
+            # balances and funding, not on debt the reader missed. Nor does gross profit mean anything for them. A
+            # financial company that tags no revenue line has a lender's revenue (fundamentals.derive's revenue_basis).
             d = fundamentals.derive(c, report.normal_tax_rate(u, c, sic.get(u["cik"])),
                                     bank=report.is_bank(u, sic.get(u["cik"])), check_debt=not report.is_financial(u),
-                                    gross=not report.is_financial(u))
+                                    gross=not report.is_financial(u), lender=report.is_financial(u))
+            blank = str(sic.get(u["cik"]) or "") == filers.BLANK_CHECK
+            if d and blank and d.get("revenue_basis") == "investment_income":
+                d = None  # a SPAC's trust interest is no business's revenue (filers.kind says what it is)
+            stale = (today - dt.timedelta(days=BASIS_STALE_DAYS)).isoformat()
+            if d and d.get("revenue_basis") and (d.get("fiscal_year_end") or "") < stale:
+                d = None  # too old to score or value (filers.kind says why, where it can)
             if d:
                 if d.get("reit"):
                     d["reit_type"] = report.REIT_TYPES.get(u["cik"])  # its property type, where reit_types knows it
                 metrics[sym] = d
+            elif not blank:
+                # Without a fiscal year to score, the quarters its reports give (a listing with no 10-K yet).
+                p = fundamentals.pending(c)
+                if p:
+                    partial[sym] = p
+    lenders = {}
+    for m in metrics.values():
+        if m.get("revenue_basis"):
+            lenders[m["revenue_basis"]] = lenders.get(m["revenue_basis"], 0) + 1
+    read = ", ".join(f"{n} from {LENDER_WORDS[b]}" for b, n in sorted(lenders.items())) or "none"
     step(f"  financials for {len(metrics)} companies, {sum(1 for m in metrics.values() if m.get('reit'))} of them REITs"
-         f" and {sum(1 for m in metrics.values() if m.get('bank'))} banks")
+         f" and {sum(1 for m in metrics.values() if m.get('bank'))} banks; revenue of companies that tag no revenue line: "
+         f"{read}")
+    # Why each listing without figures has none (filers.kind), for its report, and the largest US ones in the log.
+    missing = {u["cik"]: u.get("mcap") or 0 for s, u in uni.items() if s not in metrics}
+    profiles = filers.profiles(missing, today, fund["companies"])
+    coverage = {}
+    for s, u in uni.items():
+        if s not in metrics:
+            c = fund["companies"].get(u["cik"])
+            k = filers.kind(profiles.get(u["cik"]), c)
+            if s in partial and not filers.shows_quarters(k, c):
+                del partial[s]  # its quarters would sit oddly beside why it has no figures (a revenue label not read)
+            if k:
+                coverage[s] = {"kind": k, "note": filers.note(u["name"], k, profiles[u["cik"]], c,
+                                                             quarters=bool((partial.get(s) or {}).get("quarters")))}
+    step(f"  quarters shown for {len(partial)} listings without a full fiscal year of figures")
     gaps = sorted(((u["mcap"], s) for s, u in uni.items() if s not in metrics and (u.get("mcap") or 0) >= WARN_MCAP
                    and u.get("country") == "United States"), reverse=True)
-    if gaps:
-        step(f"  WARNING: no financial figures for {len(gaps)} US listings worth ${WARN_MCAP / 1e9:.0f}B or more: "
-             + ", ".join(f"{s} (CIK {uni[s]['cik']})" for _, s in gaps))
+    known = {}
+    for _, s in gaps:
+        k = (coverage.get(s) or {}).get("kind")
+        if k in filers.EXPECTED:
+            known.setdefault(k, []).append(s)
+    if known:
+        step(f"  No financial figures, as expected, for US listings worth ${WARN_MCAP / 1e9:.0f}B or more: "
+             + "; ".join(f"{GAP_WORDS[k]}: {', '.join(known[k])}" for k in filers.EXPECTED if k in known))
+    unexpected = [s for _, s in gaps if (coverage.get(s) or {}).get("kind") not in filers.EXPECTED]
+    if unexpected:
+        step(f"  WARNING: no financial figures for {len(unexpected)} US listings worth ${WARN_MCAP / 1e9:.0f}B or more: "
+             + ", ".join(f"{s} (CIK {uni[s]['cik']}, {GAP_WORDS.get((coverage.get(s) or {}).get('kind'), 'filer not looked up yet')})"
+                         for s in unexpected))
 
     symbols = sorted(uni)
     if args.limit:
@@ -317,18 +388,25 @@ def main():
                              # with null figures for a quarter the filings don't give soundly, and dates_estimated on a
                              # blank quarter whose dates are estimated (fundamentals._quarter_series).
                              # sales_doubt: the sales figure looks incomplete (report.sales_doubtful), so the report
-                             # shows no quarters. quarters_stale: the newest quarter ended more than STALE_QUARTER_DAYS
-                             # before the market date.
+                             # shows no quarters; never for a company whose revenue is read the way a lender's is
+                             # (revenue_basis: "bank", "net_interest" or "investment_income", fundamentals.derive; null
+                             # for every other company), whose profit can exceed that revenue by its investment gains
+                             # while its quarters are sound. quarters_stale: the newest quarter ended more than
+                             # STALE_QUARTER_DAYS before the market date.
                              **{k: m.get(k) for k in ("gross_profit", "gross_margin", "gross_basis", "ttm_revenue",
                                                       "ttm_prior_revenue", "ttm_gross_profit", "ttm_gross_margin",
-                                                      "ttm_end", "quarters")},
-                             "sales_doubt": report.sales_doubtful(m),
+                                                      "ttm_end", "quarters", "revenue_basis")},
+                             "sales_doubt": report.sales_doubtful(m) and not m.get("revenue_basis"),
                              "quarters_stale": bool(m.get("quarters")) and m["quarters"][-1]["end"]
                              < (today - dt.timedelta(days=STALE_QUARTER_DAYS)).isoformat(),
-                             "one_time_note": report.one_time_note(m)} if m else None,
+                             "one_time_note": report.one_time_note(m)} if m else pending_doc(partial.get(s), today),
             "health": groups,
             "health_score": health_score,
             "valuation": fv,
+            # Why a company has no scores or fair value, where the pipeline can tell (filers.kind): {"kind", "note"},
+            # the note in plain English for the report. Null for a scored company and where its filer record isn't
+            # known yet.
+            "coverage": coverage.get(s),
             "news": {"items": items, "overall": mood},
             "insiders": ic,
             "insider_window": args.insider_days,
@@ -363,6 +441,23 @@ def main():
         "sample": bool(args.limit),
     })
     step("Done")
+
+
+def pending_doc(p, today):
+    """A report's fundamentals for a company with quarters but no fiscal year to score (fundamentals.pending), or None:
+    "partial": true, its quarters and latest balance sheet date, and the keys a scored company's fundamentals carry,
+    null (or empty), since no annual figure is worked out from quarters."""
+    if not p:
+        return None
+    return {**dict.fromkeys(("fiscal_year", "fiscal_year_end", "revenue", "net_income", "adj_net_income", "one_time",
+                             "pretax_income", "income_tax", "normal_tax_rate", "tax_basis", "fcf", "cash", "total_debt",
+                             "shares_out", "debt_doubt", "gross_profit", "gross_margin", "gross_basis", "ttm_revenue",
+                             "ttm_prior_revenue", "ttm_gross_profit", "ttm_gross_margin", "ttm_end", "revenue_basis",
+                             "one_time_note")),
+            "partial": True, "history": [], "balance_as_of": p.get("balance_as_of"), "quarters": p["quarters"],
+            "sales_doubt": False,
+            "quarters_stale": bool(p["quarters"]) and p["quarters"][-1]["end"]
+            < (today - dt.timedelta(days=STALE_QUARTER_DAYS)).isoformat()}
 
 
 def universe_all_for_insiders(sample):

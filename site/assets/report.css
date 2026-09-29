@@ -110,10 +110,12 @@ a.peer-row:hover { background: var(--surface-2); }
 .peer-row.total .who span { color: var(--text-3); }
 .peer-row.total .n { font-weight: 500; }
 .peers.wide .peer-row { grid-template-columns: minmax(0, 1fr) 112px 112px 128px; }
+.peers.narrow .peer-row { grid-template-columns: minmax(0, 1fr) 128px; }
 .peers-note { max-width: 80ch; }
 @media (max-width: 560px) {
   .peer-row { grid-template-columns: minmax(0, 1fr) 68px 76px; gap: 8px; padding: 10px 8px; }
   .peers.wide .peer-row { grid-template-columns: minmax(0, 1fr) 54px 54px 64px; gap: 6px; }
+  .peers.narrow .peer-row { grid-template-columns: minmax(0, 1fr) 76px; }
   .peer-row .who { flex-direction: column; align-items: stretch; gap: 0; }
 }
 

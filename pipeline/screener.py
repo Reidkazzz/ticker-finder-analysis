@@ -177,6 +177,10 @@ def run(universe, metrics, prices, analyst_counter):
         checked_by_sector[u["sector"]] = checked_by_sector.get(u["sector"], 0) + 1
         if not m or u["country"] not in ("United States", ""):
             continue
+        if m.get("revenue_basis"):
+            # Revenue read the way a lender's or a business development company's is (fundamentals.derive): its cash,
+            # debt and cash flow are its business, as for the Finance sector, whatever sector Nasdaq files it under.
+            continue
         if not (m.get("loc") or "").startswith("US"):
             continue
         checks, ps = _checks(u, m)

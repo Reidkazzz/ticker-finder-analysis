@@ -94,6 +94,11 @@ SECURITIES = [
     "DebtSecuritiesRealizedGainLoss",
     "DebtAndEquitySecuritiesGainLoss",
 ]
+# A business development company's total investment income, its revenue (DURATION's revenue tags, _revenue_tags).
+INVESTMENT_INCOME = "GrossInvestmentIncomeOperating"
+# Marks a fiscal year whose revenue may not be read from it, as the company's newer years tag revenue otherwise
+# (load_fundamentals, _revenue_tags).
+NOT_BDC = "investment_income_not_revenue"
 # Each metric lists the XBRL tags companies use for it, in order of preference.
 DURATION = {
     "revenue": [
@@ -105,6 +110,13 @@ DURATION = {
         # Utilities that tag their total sales only this way (Xcel Energy's 2025: $14.67B, DTE Energy's $15.81B, MGE
         # Energy's $744M, each as their 10-K shows), which left them without a sales figure.
         "RegulatedAndUnregulatedOperatingRevenue",
+        # A business development company's total investment income: the interest, dividends and fees it earns on the
+        # loans and stakes it holds, the revenue these funds report (Ares Capital's 2025: $3.05B, as its 10-K shows).
+        # BDCs tag no other revenue line, so without it they had no figures at all. Insurers tag it too, for what their
+        # portfolio earns beside the premiums that are most of their revenue, so it never counts for a year a company
+        # tags premiums earned, or whose premiums frame failed (_revenue_tags). It stays last, so a company that tags any
+        # other revenue line keeps that one.
+        INVESTMENT_INCOME,
     ],
     "net_income": ["NetIncomeLoss", "ProfitLoss", "NetIncomeLossAvailableToCommonStockholdersBasic"],
     "operating_income": ["OperatingIncomeLoss"],
@@ -210,8 +222,14 @@ DURATION = {
     # net income left to common shareholders, they leave out the share of earnings that restricted shares get
     # (BankUnited's $5.7M in 2025, with no preferred stock), and some banks tag them only here (Bank of Hawaii's $21.1M).
     "bank_preferred_dividends": ["DividendsPreferredStock", "DividendsPreferredStockCash"],
+    # A business development company's net investment income: its total investment income less its costs (interest on
+    # its borrowing, management and incentive fees), before gains and losses on its loans and stakes. It is the earnings
+    # these funds are valued on and pay their dividends from, as their 10-Ks show it (Ares Capital's 2025: $1.46B,
+    # against $1.30B of net income after the year's losses on its investments; New Mountain Finance's $136.4M against
+    # $16.5M), so report.py values a BDC on it rather than on net income, which swings with a year's marks.
+    "bdc_nii": ["NetInvestmentIncome"],
 }
-TAX_LINES = ("tax_law", "tax_settlement", "tax_disposal", "tax_contingency")
+TAX_LINES =("tax_law", "tax_settlement", "tax_disposal", "tax_contingency")
 TAX_TOTALS = {"tax_settlement"}  # lines whose first tag is the total of the others (see _items)
 # The same reconciliation lines as shares of pretax income (unit "pure"), which many companies tag instead of dollars
 # (EverQuote tagged its valuation allowance only as percentages until 2025), and the effective tax rate the company
@@ -252,6 +270,8 @@ DEBT_CHECK_INSTANT = {"lease_nc"}
 # Frames only banks need (_bank_year). The two in CRITICAL stop the run for the newest years; any other that fails leaves
 # the figures built on it blank for that year.
 BANK_METRICS = {k for k in DURATION if k.startswith("bank_")}
+# Likewise for business development companies' net investment income: a failed frame leaves that year's figure blank.
+BDC_METRICS = {"bdc_nii"}
 # Frames only the cash-flow model needs. One that fails is taken from the last run that read it (CASH_FLOW_CACHE), as
 # the tax frames are, except for companies that filed for that year since (_kept_frames); without that, the figure is
 # unknown for that year, which then leaves the year out of the model.
@@ -635,17 +655,21 @@ def _footings(rows):
     return out
 
 
-def _quarter_tags(c):
+def _quarter_tags(c, nii_alone=False):
     """The tags a company's quarters are read from, which _quarter_lookups looks up: each fiscal year's revenue tag and
     the one each quarter would take first (DURATION), and a bank's net interest income and noninterest income tags where
-    its quarters tag both."""
+    its quarters tag both, or with `nii_alone` (a REIT by its Nasdaq labels) the net interest income tag alone of a
+    company that tags no revenue line in any year, whose revenue that is (derive's revenue_basis "net_interest")."""
     tags = [next(t for t in DURATION["revenue"] if t in facts) for facts in (c.get("quarters") or {}).values()
             if REVENUE_TAGS & facts.keys()]
     tags += [s["revenue_tag"] for s in (c.get("annual") or {}).values() if s.get("revenue_tag")]
+    alone = nii_alone and not tags
     for facts in (c.get("quarters") or {}).values():
         nii = next((t for t in DURATION["bank_nii"] + DURATION["bank_nii_alt"] if t in facts), None)
         if nii and DURATION["bank_noninterest_income"][0] in facts:
             tags += [nii, DURATION["bank_noninterest_income"][0]]
+        elif nii and alone:
+            tags.append(nii)
     return list(dict.fromkeys(tags))
 
 
@@ -684,12 +708,13 @@ def _check_gross_filings(companies):
               "another revenue figure or couldn't be checked", flush=True)
 
 
-def _quarter_lookups(companies, today, listed=None, minutes=QUARTER_LOOKUP_MINUTES, lookups=True):
+def _quarter_lookups(companies, today, listed=None, minutes=QUARTER_LOOKUP_MINUTES, lookups=True, reits=frozenset()):
     """Looks up the tags each listed company's quarters are read from (_quarter_tags) in its own 10-Q and 10-K filings,
     as QUARTER_FACTS describes, and keeps what it has for each on the company: "concept" ({tag: _concept_rows}) and
     "unmatched" (the filings the frames took its figures from that its rows lacked when they were looked up). `listed`
-    is {cik: market value}, a set of CIKs, or None for every company. Lookups not made this run (the SEC throttled, the
-    time ran out, or `lookups` is off) leave the rows kept from an earlier run, if any.
+    is {cik: market value}, a set of CIKs, or None for every company, and `reits` the CIKs whose net interest income
+    alone may be their revenue (_quarter_tags). Lookups not made this run (the SEC throttled, the time ran out, or
+    `lookups` is off) leave the rows kept from an earlier run, if any.
 
     Then fills the gaps in the quarters of a company whose frames leave one (_quarter_gaps) with the periods its own
     filings give under its revenue tags and its gross profit tag, and adds the fiscal years the annual frames lack
@@ -712,7 +737,7 @@ def _quarter_lookups(companies, today, listed=None, minutes=QUARTER_LOOKUP_MINUT
         gaps = _quarter_gaps(c, since)
         years = [s for _, s in sorted((c.get("annual") or {}).items()) if s.get("revenue_tag")]
         basis = next((s["gross_basis"] for s in reversed(years) if s.get("gross_basis")), None)
-        tags = _quarter_tags(c) + ([basis] if basis else [])
+        tags = _quarter_tags(c, cik in reits) + ([basis] if basis else [])
         want[cik] = (list(dict.fromkeys(tags)), gaps)
         for t in want[cik][0]:
             e = cache.get(f"{cik}|{t}")
@@ -900,10 +925,11 @@ def _kept_frames(jobs, frames, metrics, path, what, filed=None):
     return out, stale
 
 
-def load_fundamentals(today=None, listed=None):
+def load_fundamentals(today=None, listed=None, reits=frozenset()):
     """Returns {"years": [...], "companies": {cik: {"annual": {year: {...}}, "latest": {...}, "loc": "US-CA", ...}}}.
     `listed` ({cik: market value}, or a set of CIKs) limits the lookups of quarterly figures in the companies' own
-    filings (_quarter_lookups) to those companies, the most valuable first.
+    filings (_quarter_lookups) to those companies, the most valuable first, and `reits` names the REITs among them
+    (whose net interest income alone may be their revenue).
 
     Raises RuntimeError when the SEC can't supply the newest years' income or cash flow statements or any
     recent balance sheet, rather than publishing figures that would quietly fall back a year for everyone.
@@ -967,7 +993,7 @@ def load_fundamentals(today=None, listed=None):
             else:
                 inst.setdefault(cik, {}).setdefault(period, {})[tag] = d
             if metric in TAX_EVIDENCE or metric in REIT_METRICS or metric in REIT_INSTANT or metric in BANK_METRICS \
-                    or metric in BANK_INSTANT or metric == "bank_shares" or metric in CASH_FLOW_METRICS \
+                    or metric in BDC_METRICS or metric in BANK_INSTANT or metric == "bank_shares" or metric in CASH_FLOW_METRICS \
                     or metric in DEBT_CHECK_INSTANT or metric in GROSS or metric in OVERHEAD or metric in INSURANCE \
                     or metric in AMORTIZATION:
                 # A company that files few tax tags could otherwise take its location from an old filing, and the REIT
@@ -997,16 +1023,27 @@ def load_fundamentals(today=None, listed=None):
     for cik, c in info.items():
         facts = annual.get(cik, {})
         has_capex = any(_capex(fy) is not None for fy in facts.values())
-        c["annual"] = {y: _annual(facts.get(y, {}), has_capex, ("capex", y) in failed, reported.get((cik, y), False),
-                                  unknown | {m for m, p in tax_unknown if p == y}
-                                  | {m for m, p in failed if p == y
-                                     and (m in REIT_METRICS or m in BANK_METRICS or m in CASH_FLOW_METRICS
-                                          or m in GROSS or m in OVERHEAD or m in INSURANCE or m in AMORTIZATION)}
-                                  # A cash-flow model figure from the last run's copy of a frame (_kept_frames) is
-                                  # unknown for a company that filed since.
-                                  | {m for (m, p), known in stale.items()
-                                     if p == y and (known is None or cik not in known)})
-                       for y in years}
+        def year(y, extra=frozenset()):
+            return _annual(facts.get(y, {}), has_capex, ("capex", y) in failed, reported.get((cik, y), False),
+                           unknown | extra | {m for m, p in tax_unknown if p == y}
+                           | {m for m, p in failed if p == y
+                              and (m in REIT_METRICS or m in BANK_METRICS or m in BDC_METRICS
+                                   or m in CASH_FLOW_METRICS
+                                   or m in GROSS or m in OVERHEAD or m in INSURANCE or m in AMORTIZATION)}
+                           # A cash-flow model figure from the last run's copy of a frame (_kept_frames) is
+                           # unknown for a company that filed since.
+                           | {m for (m, p), known in stale.items()
+                              if p == y and (known is None or cik not in known)})
+        c["annual"] = {y: year(y) for y in years}
+        # Total investment income is revenue only for a business development company, whose newest year with a revenue
+        # figure is read from it. A company that has since tagged its revenue otherwise keeps its older years without
+        # it, so its growth never compares two readings (Sui Group's 2022 and 2023, from when it lent as Mill City
+        # Ventures, beside its revenue as a digital asset holder since).
+        newest = next((a for _, a in sorted(c["annual"].items(), reverse=True) if a.get("revenue_tag")), None)
+        not_bdc = bool(newest) and newest["revenue_tag"] != INVESTMENT_INCOME
+        if not_bdc:
+            for y in [y for y, a in c["annual"].items() if a.get("revenue_tag") == INVESTMENT_INCOME]:
+                c["annual"][y] = year(y, {NOT_BDC})
         c["latest"] = _balance_sheet(inst.get(cik, {}), quarters, bank_failed, lease_failed)
         s = next((shares[cik][q] for q in quarters if q in shares.get(cik, {})), None)
         if s is not None:
@@ -1016,6 +1053,12 @@ def load_fundamentals(today=None, listed=None):
             c["wc_history"] = history[cik]  # {year: change in working capital} before `years` (_one_off_cash)
         if qfacts.get(cik):
             c["quarters"] = qfacts[cik]  # {(start, end): {tag: value}} for each three-month period (_quarter_series)
+            if not_bdc:
+                # Nor do its quarters take their revenue from it (a quarter that has nothing else is left out).
+                c["quarters"] = {k: {t: v for t, v in q.items() if t != INVESTMENT_INCOME} for k, q in c["quarters"].items()
+                                 if q.keys() - {INVESTMENT_INCOME}}
+                if not c["quarters"]:
+                    del c["quarters"]
         companies[cik] = c
     # The registrants listings moved from are looked up with them (SUCCESSORS). A revenue frame lost this run leaves
     # that quarter out for every company: a gap the SEC's frames will fill again, not thousands of companies' to look up
@@ -1023,7 +1066,7 @@ def load_fundamentals(today=None, listed=None):
     if listed is not None:
         listed = dict(listed) if isinstance(listed, dict) else dict.fromkeys(listed, 0)
         listed.update({old: listed[new] for new, old in SUCCESSORS.items() if new in listed})
-    _quarter_lookups(companies, today, listed, lookups="revenue" not in qlost)
+    _quarter_lookups(companies, today, listed, lookups="revenue" not in qlost, reits=reits)
     _check_gross_filings(companies)
     for new, old in SUCCESSORS.items():
         if old in companies:
@@ -1147,8 +1190,19 @@ def _off_footing(facts, rev, gp, same=lambda d: d is not None):
     return any(abs(x - o) <= 0.005 * abs(o) for x in totals for o in others)
 
 
+def _revenue_tags(facts, unknown=frozenset()):
+    """The revenue tags (DURATION) one fiscal year's figures may be read from: all of them, less a BDC's total
+    investment income (INVESTMENT_INCOME) where the company tags premiums earned that year, as an insurer does, or
+    where the premiums frame failed and that can't be told, or where its newer years tag revenue otherwise (NOT_BDC in
+    `unknown`, load_fundamentals)."""
+    if NOT_BDC in unknown or "premiums" in unknown or any(t in facts for t in INSURANCE["premiums"]):
+        return DURATION["revenue"][:-1]
+    return DURATION["revenue"]
+
+
 def _annual(facts, has_capex, capex_failed, report, unknown=frozenset()):
-    rev = _first(facts, DURATION["revenue"])
+    tags = _revenue_tags(facts, unknown)
+    rev = _first(facts, tags)
     ocf = _val(_first(facts, DURATION["ocf"]))
     capex = _capex(facts)
     dep = _val(_first(facts, DEPRECIATION))
@@ -1176,13 +1230,13 @@ def _annual(facts, has_capex, capex_failed, report, unknown=frozenset()):
         # The fiscal year's first day and the tag its revenue came from, which its quarters are matched on
         # (_quarter_series), and its gross profit (_gross_profit; None where it can't be read soundly).
         "start": period.get("start"),
-        "revenue_tag": next((t for t in DURATION["revenue"] if t in facts), None),
+        "revenue_tag": next((t for t in tags if t in facts), None),
         # Every revenue tag's figure for the same dates, which tells tags that agree apart (_quarter_series).
-        "revenue_tags": {t: facts[t]["val"] for t in DURATION["revenue"] if t in facts and rev
+        "revenue_tags": {t: facts[t]["val"] for t in tags if t in facts and rev
                          and (facts[t].get("start"), facts[t]["end"]) == (rev.get("start"), rev["end"])},
         # The filing each revenue tag's figure (and a bank's net interest and noninterest income's) came from, which
         # tells whether it and the quarters share a footing (_quarter_series, _quarter_lookups).
-        "revenue_accns": {t: facts[t].get("accn") for t in DURATION["revenue"] + DURATION["bank_nii"]
+        "revenue_accns": {t: facts[t].get("accn") for t in tags + DURATION["bank_nii"]
                           + DURATION["bank_nii_alt"] + DURATION["bank_noninterest_income"] if t in facts},
         "gross_accns": {t: facts[t].get("accn") for tags in GROSS.values() for t in tags if t in facts},
         **_gross_profit(facts, rev, unknown, capex_failed),
@@ -1195,11 +1249,20 @@ def _annual(facts, has_capex, capex_failed, report, unknown=frozenset()):
         # REIT that tags no depreciation (report.reit_kind).
         "depreciation": None if capex_failed or "reit_depreciation" in unknown else _val(_first(facts, REIT_DEPRECIATION)),
         "depreciation_failed": bool(capex_failed or "reit_depreciation" in unknown),
+        # A business development company's net investment income (DURATION's bdc_nii), for the same dates as its
+        # revenue, so a figure for another period never stands in; None where untagged or its frame failed.
+        "nii": None if "bdc_nii" in unknown or not rev or "NetInvestmentIncome" not in facts
+        or (facts["NetInvestmentIncome"].get("start"), facts["NetInvestmentIncome"]["end"]) != (rev.get("start"), rev["end"])
+        else facts["NetInvestmentIncome"]["val"],
         "common_gap": None if "preferred" in unknown else _common_gap(facts, ni, _val(rev)),
         "preferred": None if "preferred" in unknown else _val(facts.get("PreferredStockDividendsIncomeStatementImpact")) or 0,
         # Whether net income is the whole business's, minority holders' share included (ProfitLoss), because the
         # company tags no net income of its own (_ffo).
         "ni_whole": "NetIncomeLoss" not in facts and "ProfitLoss" in facts,
+        # The net income left to common shareholders as tagged, which a lender valued on its book value is measured on
+        # however much preferred dividends take (derive's common_gap_reported).
+        "ni_common": _val(facts.get("NetIncomeLossAvailableToCommonStockholdersBasic"))
+        if "NetIncomeLoss" in facts or "ProfitLoss" in facts else None,
         # Operating cash flow, from continuing operations where the company tags that, which settles which reading of
         # a REIT's discontinued operations to trust (_ffo).
         "ocf": _val(_first(facts, DURATION["ocf"][::-1])),
@@ -2315,9 +2378,10 @@ def _tax_gap(pretax, tax, rate):
     return tax - min(max(tax, rate * pretax), 0.0)
 
 
-def _adjust(series, years, cash, tax_rate, abroad=False):
+def _adjust(series, years, cash, tax_rate, abroad=False, portfolio=False):
     """{year index: (net income without one-time items, [items])} for each of `years` (indexes into `series`, the
-    window the company is measured over).
+    window the company is measured over). With `portfolio` (derive's lenders whose investments are the business),
+    gains and losses on investment securities are never one-time.
 
     Adds back one-time charges and takes out one-time gains: write-downs, gains and losses on selling a business,
     assets or investment securities and on paying off debt (all from their XBRL tags), untagged income below
@@ -2348,6 +2412,8 @@ def _adjust(series, years, cash, tax_rate, abroad=False):
     has = [x for x in years if series[x].get("net_income") is not None]
     vals = {}
     for k, sign in (("gw_impairment", -1), ("impairment", -1), ("sale", 1), ("securities", 1), ("debt_extinguishment", 1)):
+        if k == "securities" and portfolio:
+            continue  # its gains and losses on its investments stay in its results (derive)
         vals[k] = {x: None if series[x].get(k) is None else sign * series[x][k] for x in has}
     for x in has:
         # Goodwill written down this year and last, tagged together as another write-down (Brunswick's 2025: $385.8M
@@ -2868,7 +2934,8 @@ def _quarter_series(f, series, bank=False, gross=True):
             accns = s.get("revenue_accns") or {}
             if bank:
                 nii = next((t for t in nii_tags if t in accns), None)
-                own = {"bank": {accns[nii], accns[fees_tag]}} if nii and fees_tag in accns else {}
+                parts = [nii] if bank == "nii" else [nii, fees_tag]
+                own = {"bank": {accns[t] for t in parts}} if nii and all(t in accns for t in parts) else {}
             else:
                 own = {t: {accns.get(t)} for t in (s.get("revenue_tags") or {})}
             mine = own.get("bank" if bank else s.get("revenue_tag"), set())
@@ -2948,9 +3015,9 @@ def _quarter_series(f, series, bank=False, gross=True):
             continue
         if bank:
             nii = next((t for t in nii_tags if t in facts), None)
-            rev, tag = _bank_year(facts)["bank_revenue"], "bank"
-            accns = {facts[nii].get("accn"), facts[fees_tag].get("accn")} if nii and fees_tag in facts else {None}
-            tags = [nii, fees_tag] if nii and fees_tag in facts else []
+            tags = [nii] if bank == "nii" and nii else [nii, fees_tag] if nii and fees_tag in facts else []
+            rev = sum(facts[t]["val"] for t in tags) if tags else None
+            tag, accns = "bank", {facts[t].get("accn") for t in tags} if tags else {None}
             if any(stray(accn, b) for accn in accns):
                 continue
         else:
@@ -3257,7 +3324,7 @@ def _quarter_gross(p, basis, concept=None):
     return v if v is not None and v <= p["revenue"] else None
 
 
-def derive(f, tax_rate=OWN_RATE, bank=False, check_debt=True, gross=True):
+def derive(f, tax_rate=OWN_RATE, bank=False, check_debt=True, gross=True, lender=False):
     """Turns raw line items into the ratios the screener and reports use. Missing data stays None.
 
     Earnings-based measures (the adj_ keys and profitable_years) leave out one-time items. `tax_rate` is the
@@ -3270,13 +3337,22 @@ def derive(f, tax_rate=OWN_RATE, bank=False, check_debt=True, gross=True):
 
     A `bank` (report.is_bank) takes its revenue as banks count it (_bank_year), whatever its revenue tags say, and gets
     the measures analysts judge banks by (_bank_fields). Every other company gets "bank": False.
+
+    A `lender` (a financial company, as build.py tells) or a REIT that tags no revenue line takes its revenue from a
+    lender's income statement lines instead, and a business development company's is its total investment income
+    (DURATION): "revenue_basis" says which ("bank", "net_interest" or "investment_income"; None for every other
+    company).
     """
     years = sorted(f["annual"])
     series = [f["annual"][y] for y in years]
     if not bank:
         # Gains or losses on stakes in other companies under the broader tags, where none is tagged under SECURITIES
         # (_items' other_securities; a bank reads its own, bank_securities, below).
+        # Not where it is the year's gain or loss on selling a business or assets, tagged under both, which would then come
+        # out twice (Medallion Financial's 2025 $24.6M gain on selling a stake, tagged as a disposal of an equity-method
+        # investment and as a gain on investments in the same 10-K).
         series = [dict(s, securities=s["other_securities"]) if s.get("securities") == 0 and s.get("other_securities")
+                  and not (s.get("sale") and abs(s["other_securities"] - s["sale"]) <= 0.001 * abs(s["sale"]))
                   else s for s in series]
     if bank:
         # A bank whose net income has no frame for a year it tagged its pretax income and tax for has what they leave
@@ -3319,6 +3395,22 @@ def derive(f, tax_rate=OWN_RATE, bank=False, check_debt=True, gross=True):
         series = [dict(s, revenue=rent(s) + (s.get("revenue") or 0), rent_revenue=True)
                   if (s.get("revenue") or 0) < 0.5 * rent(s) and assets > 0 and rent(s) >= LEASE_MIN * assets else s
                   for s in series]
+    basis = None
+    if (lender or reit) and not bank and all(s.get("revenue") is None for s in series):
+        # A lender that tags no revenue line at all has its revenue as a bank counts it (_bank_year), from the lines of a
+        # lender's income statement it tags: net interest income plus noninterest income (Synchrony Financial's 2025:
+        # $18.47B plus $0.52B, as its 10-K shows), or for a REIT, where it tags no noninterest income, net interest
+        # income alone, which is how a mortgage REIT's income statement opens (Annaly's 2025: $1.14B; AGNC's $675M). A
+        # lender outside real estate needs both parts, since net interest income alone can be a sliver of a business
+        # that earns mostly fees (Nelnet's loan servicing). The newest year with results sets which, and every year is
+        # read that one way, so growth never compares two (Redwood Trust tagged noninterest income until 2023 only).
+        newest = next((s for s in reversed(series) if s.get("net_income") is not None), {})
+        if newest.get("bank_revenue") is not None:
+            basis, key = "bank", "bank_revenue"
+        elif reit and newest.get("bank_nii") is not None:
+            basis, key = "net_interest", "bank_nii"
+        if basis:
+            series = [dict(s, revenue=s.get(key)) for s in series]
     i_last = next((i for i in reversed(range(len(series)))
                    if series[i].get("revenue") is not None and series[i].get("net_income") is not None), None)
     if i_last is None:
@@ -3327,6 +3419,15 @@ def derive(f, tax_rate=OWN_RATE, bank=False, check_debt=True, gross=True):
     ys, ss = years[max(0, i_last - 3): i_last + 1], series[max(0, i_last - 3): i_last + 1]
     last, prev = ss[-1], ss[-2] if len(ss) > 1 else {}
     L = f["latest"]
+    if basis is None and last.get("revenue_tag") == INVESTMENT_INCOME:
+        basis = "investment_income"  # a business development company (DURATION's revenue tags)
+    if basis and any(s.get("net_income") is not None for s in series[i_last + 1:]):
+        # A later year's results give no revenue read this way, so its newest figures would be years old (Nelnet's
+        # net interest income and noninterest income, both tagged for 2022 and only the first since).
+        return None
+    if basis:
+        # A lender's debt and cash are its business, as a bank's are, and gross profit means nothing for it.
+        check_debt = gross = False
 
     lt_debt = L.get("lt_debt") or 0
     total_debt = L.get("total_debt") or 0
@@ -3345,7 +3446,12 @@ def derive(f, tax_rate=OWN_RATE, bank=False, check_debt=True, gross=True):
     window = list(range(max(0, i_last - 3), i_last + 1))
     one_off_cash = _one_off_cash(years, series, window, f.get("wc_history"))
     abroad = not (f.get("loc") or "US").startswith("US")
-    found = _adjust(series, window, max(cash, L.get("peak_cash") or 0), tax_rate, abroad)
+    # A REIT that lends and a business development company hold their loans and securities as the business, marked to
+    # market with the hedges against them, so gains and losses on those investments are part of their results, as for
+    # the lenders they are compared with: Annaly's 2025 $1.75B gain on its investments came beside a $0.49B loss on its
+    # hedges, which no tag read here marks as one-time, and taking out the gain alone left $0.28B of its $2.03B of profit.
+    portfolio = basis in ("net_interest", "investment_income") or basis == "bank" and reit
+    found = _adjust(series, window, max(cash, L.get("peak_cash") or 0), tax_rate, abroad, portfolio)
     adjusted = [found[j] for j in window]
     adj_ni, one_time = adjusted[-1]
     tax_normal, tax_basis = _normal_rate(series, i_last, window, tax_rate)
@@ -3358,13 +3464,24 @@ def derive(f, tax_rate=OWN_RATE, bank=False, check_debt=True, gross=True):
              **({"ffo": ffo[j][0], "adj_ffo": ffo[j][1]} if reit else {}),
              **({"gross_profit": s.get("gross_profit")} if gross else {})}
             for j, y, s in zip(window, ys, ss) if s.get("revenue") is not None or s.get("net_income") is not None]
-    quarters, ttm = _quarter_series(f, series[:i_last + 1], bank, gross)
+    # A lender's quarters are read the way its years are (revenue_basis).
+    quarters, ttm = _quarter_series(f, series[:i_last + 1], True if bank or basis == "bank" else
+                                    "nii" if basis == "net_interest" else False, gross)
     recent3 = [a for a, _ in adjusted[-3:] if a is not None]
     if bank:
         # A bank's gains and losses on investment securities are part of its noninterest income, so the one-time ones
         # (_adjust) come out of the revenue its growth and efficiency are measured on, as banks show it themselves
         # (Truist's 2024 revenue of $13.3B included a $6.65B loss on selling securities to reinvest at higher rates).
         ss = [dict(s, revenue=_core_revenue(s.get("revenue"), items)) for s, (_, items) in zip(ss, adjusted)]
+        last, prev = ss[-1], ss[-2] if len(ss) > 1 else {}
+    elif basis == "bank":
+        # So are a lender's (revenue_basis "bank"), and its one-time gains and losses on selling a business or assets,
+        # booked among its other income, where they fit inside it: Synchrony Financial's 2024 revenue of $19.53B
+        # included the $1.07B gain on selling Pets Best, so without it 2025's $18.99B was growth of 2.8%, not a fall.
+        ss = [dict(s, revenue=_core_revenue(s.get("revenue"), [i for i in items or [] if not i["kind"].startswith("sale")
+                                                                or i["amount"] <= abs(s.get("bank_noninterest_income")
+                                                                                      or 0)], sales=True))
+              for s, (_, items) in zip(ss, adjusted)]
         last, prev = ss[-1], ss[-2] if len(ss) > 1 else {}
     revs = [(y, s["revenue"]) for y, s in zip(ys, ss) if s.get("revenue")]
     core = last.get("revenue")
@@ -3468,10 +3585,143 @@ def derive(f, tax_rate=OWN_RATE, bank=False, check_debt=True, gross=True):
         "ttm_gross_margin": ttm["gross_profit"] / ttm["revenue"] if ttm and ttm["gross_profit"] is not None
         and ttm["revenue"] > 0 else None,
         "ttm_end": ttm["end"] if ttm else None,
+        # Where the revenue of a company that tags no revenue line comes from, or None (see the docstring): a lender's
+        # net interest income plus noninterest income ("bank"), a REIT's net interest income ("net_interest"), or a
+        # business development company's total investment income ("investment_income").
+        "revenue_basis": basis,
+        # The newest year's net investment income, a business development company's earnings (DURATION's bdc_nii; None
+        # where untagged), and the part of its net income that is not the common shareholders' (preferred dividends,
+        # and minority holders' share where net income includes it: _common_gap), which report.py takes off the
+        # earnings of a lender valued on its book value, as it does a bank's.
+        "nii": last.get("nii"),
+        "common_gap": last["common_gap"] if last.get("common_gap") is not None else last.get("preferred") or 0,
+        # The newest year's preferred dividends as the income statement tags them (None where the frame failed).
+        "preferred_dividends": last.get("preferred"),
+        # The newest year's net income less the net income left to common shareholders as the company tags them, however
+        # large (_reported_gap), and whether that net income is the whole business's, minority holders' share included
+        # (ProfitLoss), rather than the company's own, whose gap to the common shareholders' is then preferred dividends.
+        "common_gap_reported": _reported_gap(ni, last.get("ni_common")),
+        "ni_whole": bool(last.get("ni_whole")),
         "loc": f.get("loc"),
         **(_reit_fields(ffo, window, series, rev, equity, L) if reit else {"reit": False}),
         **(_bank_fields(last, prev, adj_ni, one_time, L) if bank else {"bank": False}),
     }
+
+
+def _reported_gap(ni, common):
+    """Net income `ni` less the net income left to common shareholders as tagged (`common`), or None without both or where
+    the tagged figure is a scale slip (a thousand or a million times off) or the gap is larger than either. Unlike
+    _common_gap it isn't capped at COMMON_GAP_MAX of net income or sales, since preferred dividends can take far more
+    of a lender's earnings: Chimera Investment's 2025 net income of $230.5M left $144.5M to its common shareholders, and
+    NexPoint Real Estate Finance's $123.1M, with its operating partnership's other unitholders' share, left $75.7M."""
+    if ni is None or common is None or not ni:
+        return None
+    if any(abs(common * k - ni) <= 0.02 * abs(ni) for k in (1e3, 1e6)):
+        return None
+    gap = ni - common
+    return gap if abs(gap) <= max(abs(ni), abs(common)) else None
+
+
+def investment_income(f):
+    """Whether any fiscal year of a company's (a fundamentals record) takes its revenue from total investment income
+    (INVESTMENT_INCOME), as a business development company's does."""
+    return any(s.get("revenue_tag") == INVESTMENT_INCOME for s in ((f or {}).get("annual") or {}).values())
+
+
+def pending(f):
+    """What a company's filings support where derive() finds no fiscal year with both revenue and net income (a company
+    that has filed quarterly reports but no annual report yet, as after a listing or a spin-off): its quarters of
+    revenue and its latest balance sheet, {"quarters", "balance_as_of", "cash", "total_debt", "equity", "shares_out",
+    "shares_as_of"}, or None where no quarter has revenue. No annual figure is ever worked out from the quarters.
+
+    The quarters are those whose revenue the frames give under one tag, the first (DURATION) the newest such quarter
+    uses, as _quarter_series lists them ({"start", "end", "fiscal_quarter": None, "revenue", "gross_profit": None,
+    "derived": False, "yoy", "extra_days", "yoy_withheld"}, oldest first, back to back with blank quarters in whole-
+    quarter gaps), with growth on the quarter a year before where both come from one filing (a 10-Q gives both) or from
+    filings on one footing (_footings). A figure from a filing other than the company's own 10-Qs and 10-Ks gives way to
+    the latest one they give for the period, or is left out; a quarter more than QUARTER_SCALE from the middle of the
+    others, or overlapping another, is left out, as the fiscal year check in _quarter_series can't be made."""
+    D, day = dt.date.fromisoformat, dt.timedelta(days=1)
+    raw, L = f.get("quarters") or {}, f.get("latest") or {}
+    concept, unmatched = f.get("concept") or {}, f.get("unmatched") or set()
+    spans = sorted((D(a), D(b)) for (a, b), facts in raw.items()
+                   if QUARTER_DAYS[0] <= (D(b) - D(a)).days + 1 <= QUARTER_DAYS[1] and REVENUE_TAGS & facts.keys())
+    out = []
+    if spans:
+        newest = raw[tuple(x.isoformat() for x in spans[-1])]
+        tag = next(t for t in DURATION["revenue"] if t in newest)
+        rows = {t: rs for t, rs in concept.items() if t == tag}
+        footing = _footings(rows) if rows else {}
+        periods = []
+        for a, b in spans:
+            d = raw[(a.isoformat(), b.isoformat())].get(tag)
+            if d is None:
+                continue
+            val, accn = d["val"], d.get("accn")
+            if accn in unmatched:
+                row = next((r for r in reversed(rows.get(tag) or []) if (r[0], r[1]) == (a.isoformat(), b.isoformat())),
+                           None)
+                if row is None:
+                    continue
+                val, accn = row[2], row[3]
+            periods.append({"start": a, "end": b, "revenue": val, "accn": accn})
+        # Two readings of one quarter can't be told apart, so neither counts.
+        drop = set()
+        for i, (p, q) in enumerate(zip(periods, periods[1:])):
+            if q["start"] <= p["end"] - SEAM_DAYS * day:
+                drop |= {i, i + 1}
+        periods = [p for i, p in enumerate(periods) if i not in drop]
+        mid = statistics.median(p["revenue"] for p in periods) if periods else 0
+        if mid > 0:
+            periods = [p for p in periods if 1 / QUARTER_SCALE <= p["revenue"] / mid <= QUARTER_SCALE]
+        given = {(footing.get(r[3]), r[0], r[1]): r[2] for r in rows.get(tag) or []}
+
+        def same_footing(x, y):
+            if x["accn"] and x["accn"] == y["accn"]:
+                return True
+            return any(all(abs(given.get((fo, p["start"].isoformat(), p["end"].isoformat()), math.inf) - p["revenue"])
+                           <= RESTATED_GAP * abs(p["revenue"]) for p in (x, y)) for fo in set(footing.values()))
+
+        slots = []
+        for p in periods[-(QUARTERS_SHOWN + 4):]:
+            if slots:
+                gap = (p["start"] - slots[-1]["end"]).days - 1
+                n = round(gap / QUARTER_MEAN) if gap > SEAM_DAYS else 0
+                if gap > SEAM_DAYS and not (n == 1 and QUARTER_DAYS[0] <= gap <= QUARTER_DAYS[1]
+                                            or n > 1 and abs(gap - n * QUARTER_MEAN) <= BLANK_SLACK):
+                    slots = []
+                elif gap > SEAM_DAYS:
+                    first = slots[-1]["end"] + day
+                    for k in range(1, n + 1):
+                        b = p["start"] - day if k == n else first + dt.timedelta(days=round(k * (gap + 1) / n)) - day
+                        slots.append({"start": slots[-1]["end"] + day, "end": b, "revenue": None, "accn": None,
+                                      "estimated": n > 1})
+            slots.append(p)
+        for s in slots:
+            ago = next((x for x in slots if abs((s["end"] - x["end"]).days - 365) <= YEAR_AGO_DAYS), None)
+            yoy = extra = withheld = None
+            if ago is not None and s["revenue"] is not None and ago["revenue"] is not None:
+                if ago["revenue"] <= 0:
+                    withheld = "no_base"
+                elif same_footing(s, ago):
+                    yoy = s["revenue"] / ago["revenue"] - 1
+                    extra = (s["end"] - s["start"]).days - (ago["end"] - ago["start"]).days
+                else:
+                    withheld = "unchecked"
+            out.append({"start": s["start"].isoformat(), "end": s["end"].isoformat(), "fiscal_quarter": None,
+                        "revenue": s["revenue"], "gross_profit": None, "derived": False, "yoy": yoy,
+                        "extra_days": extra if extra is not None and abs(extra) >= EXTRA_DAYS else None,
+                        "yoy_withheld": withheld, **({"dates_estimated": True} if s.get("estimated") else {})})
+        out = out[-QUARTERS_SHOWN:]
+        while out and out[0]["revenue"] is None:
+            out.pop(0)
+    if not out:
+        return None
+    return {"quarters": out, "balance_as_of": L.get("as_of"),
+            "cash": (L.get("cash") or 0) + (L.get("st_investments") or 0) + (L.get("lt_securities") or 0)
+            if L.get("as_of") else None,
+            "total_debt": L.get("total_debt") if L.get("as_of") else None, "equity": L.get("equity"),
+            "shares_out": L.get("shares_out"), "shares_as_of": L.get("shares_as_of")}
 
 
 def _bank_fees(s):
@@ -3485,13 +3735,15 @@ def _bank_fees(s):
     return dict(s, bank_noninterest_income=fees, bank_revenue=nii + fees, revenue=nii + fees)
 
 
-def _core_revenue(revenue, items):
-    """A bank's revenue without the one-time gains and losses on investment securities among `items` (_adjust)."""
+def _core_revenue(revenue, items, sales=False):
+    """A bank's revenue without the one-time gains and losses on investment securities among `items` (_adjust), and
+    with `sales` those on selling a business or assets too."""
     if revenue is None:
         return None
+    kinds = ("securities_gain", "securities_loss") + (("sale_gain", "sale_loss") if sales else ())
     for i in items or []:
-        if i["kind"] in ("securities_gain", "securities_loss"):
-            revenue -= i["amount"] if i["kind"] == "securities_gain" else -i["amount"]
+        if i["kind"] in kinds:
+            revenue -= i["amount"] if i["kind"].endswith("_gain") else -i["amount"]
     return revenue
 
 
