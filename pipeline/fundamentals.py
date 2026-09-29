@@ -554,15 +554,16 @@ def _quarter_gaps(c, since):
     return gaps
 
 
-# The tags a company's whole set of facts (companyfacts) is read for when its answer for one tag comes back empty
-# (_concept_rows): every tag its quarters can be read from.
-FACTS_TAGS = REVENUE_TAGS | {t for tags in GROSS.values() for t in tags} | set(
-    DURATION["bank_nii"] + DURATION["bank_nii_alt"] + DURATION["bank_noninterest_income"])
+# The tags a company's whole set of facts (companyfacts) is kept for when its answer for one tag comes back empty
+# (_tag_figures): every duration tag, ratio and share count the frames are read for, which covers every tag looked up
+# in a company's own filings (its quarters' tags, one-time items, revenue, a bank's lines and net income).
+FACTS_TAGS = {t for tags in (*DURATION.values(), *RATIOS.values(), *GROSS.values()) for t in tags} | {
+    "WeightedAverageNumberOfDilutedSharesOutstanding"}
 _facts_lock = threading.Lock()
 
 
 def _company_facts(cik, memo={}):
-    """{tag: [figures in USD]} for FACTS_TAGS from a company's whole set of facts (companyfacts, one larger request),
+    """{tag: {unit: [figures]}} for FACTS_TAGS from a company's whole set of facts (companyfacts, one larger request),
     read once a run."""
     with _facts_lock:
         if cik not in memo:
@@ -570,28 +571,39 @@ def _company_facts(cik, memo={}):
                 facts = sec_json(f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json")["facts"]["us-gaap"]
             except NotFound:
                 facts = {}
-            memo[cik] = {t: (facts[t].get("units") or {}).get("USD") for t in FACTS_TAGS if t in facts}
+            memo[cik] = {t: facts[t].get("units") or {} for t in FACTS_TAGS if t in facts}
         return memo[cik]
+
+
+def _tag_figures(cik, tag, units=("USD",)):
+    """The figures the company's filings give for one tag (companyconcept, one request), in the first of `units` its
+    answer has, or [] where it never tagged it. A tag is only looked up for a company the frames show using it, so an
+    answer without figures is a wrong one: in September 2026 the SEC answered "USD": {} for about 120 of the tags
+    looked up for companies' quarters and 27 of those looked up for their one-time items and net income, every time
+    they were asked (Abbott Laboratories' revenue from customer contracts, 122 figures, and its net income; Pentair's
+    write-downs of intangible assets; CTO Realty Growth's net income, which left its proxy's figure, $2.6M left to
+    common shareholders, standing for its 10-K's $10.1M). The company's whole set of facts, which has them, is read
+    instead, and where that has none either this raises, so the lookup counts as failed and is made again on the next
+    run."""
+    try:
+        answer = sec_json(f"https://data.sec.gov/api/xbrl/companyconcept/CIK{cik:010d}/us-gaap/{tag}.json")["units"]
+    except NotFound:
+        return []
+    pick = lambda got: next((got[u] for u in units if u in got), None)
+    figures = pick(answer)
+    if not isinstance(figures, list) or not figures:
+        figures = pick(_company_facts(cik).get(tag) or {})
+        if not isinstance(figures, list) or not figures:
+            raise ValueError(f"no figures in the SEC's answers for {tag} of CIK {cik}")
+    return figures
 
 
 def _concept_rows(cik, tag, since):
     """[[start, end, value, accession number, date filed]] of every three-month and one-year figure ending on or after
     `since` that the company's 10-Q and 10-K filings (their amendments and transition reports; 20-F and 40-F for a
-    foreign filer) give for one tag, oldest filing first. A tag is only looked up for a company the frames show using
-    it, so an answer without figures is a wrong one: in September 2026 the SEC answered "USD": {} for about 120 such
-    tags, Abbott Laboratories' revenue from customer contracts (122 figures) and General Dynamics' among them, every
-    time they were asked. The company's whole set of facts, which has them, is read instead, and where that has none
-    either this raises, to be looked up again on the next run."""
-    try:
-        units = sec_json(f"https://data.sec.gov/api/xbrl/companyconcept/CIK{cik:010d}/us-gaap/{tag}.json")["units"]
-    except NotFound:
-        return []
-    if not isinstance(units.get("USD"), list) or not units["USD"]:
-        units = {"USD": _company_facts(cik).get(tag)}
-        if not isinstance(units["USD"], list) or not units["USD"]:
-            raise ValueError(f"no figures in the SEC's answers for {tag} of CIK {cik}")
+    foreign filer) give for one tag (_tag_figures), oldest filing first."""
     out = set()
-    for f in units["USD"]:
+    for f in _tag_figures(cik, tag):
         if f.get("start") and f.get("end") and f.get("accn") and f.get("val") is not None and f["end"] >= since \
                 and f.get("form", "").startswith(("10-Q", "10-K", "20-F", "40-F")):
             days = (dt.date.fromisoformat(f["end"]) - dt.date.fromisoformat(f["start"])).days + 1
@@ -1544,8 +1556,8 @@ def _net_income(facts, report=False):
 
 
 def _report_net_income(cik, ends):
-    """{fiscal year end: net income} from the company's own 10-K filings, the latest filing winning."""
-    facts = sec_json(f"https://data.sec.gov/api/xbrl/companyconcept/CIK{cik:010d}/us-gaap/NetIncomeLoss.json")["units"].get("USD", [])
+    """{fiscal year end: net income} from the company's own 10-K filings (_tag_figures), the latest filing winning."""
+    facts = _tag_figures(cik, "NetIncomeLoss")
     out = {}
     for f in sorted(facts, key=lambda f: f.get("filed", "")):
         if f.get("form", "").startswith("10-K") and f.get("start") and f["end"] in ends:
@@ -1587,6 +1599,11 @@ def _check_net_income(annual):
 
 ITEM_CACHE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".cache", "item_facts.json")
 ITEM_MINUTES = 20  # time budget for looking up one-time item and revenue figures; the rest wait for the next run
+# Marks an item cache whose absences (None) all come from answers _tag_figures checked. Absences cached before that
+# (September 2026) may be the SEC's empty answers rather than a 10-K without the figure, and only another lookup tells
+# them apart, so a cache without the mark has them dropped and looked up again, once: in a copy of September 2026, 191
+# figures took 157 lookups, 17 of which were such answers (Humana's $128M write-down of intangible assets in 2025).
+ITEM_ABSENCES_CHECKED = "absences_checked"
 
 
 def _check_items(annual, minutes=ITEM_MINUTES, flagged=None,
@@ -1600,10 +1617,11 @@ def _check_items(annual, minutes=ITEM_MINUTES, flagged=None,
 
     A figure counts as the annual report's when it came from a filing that supplied the company's pretax income, tax,
     operating income or operating cash flow for that year or the next two (whose annual reports repeat it). The
-    others are looked up in the company's 10-K filings, one request per company and tag, and the answers are kept in
-    .cache/item_facts.json, since a filing never changes. Figures still unchecked when the SEC throttles or the time
-    budget runs out stay as the frame has them, and the next run checks them. `flagged` ({(cik, tag): [(year, fact)]})
-    names other figures to check the same way instead (_check_bank_items), and `what` how the summary counts them."""
+    others are looked up in the company's 10-K filings, one request per company and tag (_report_items), and the
+    answers are kept in .cache/item_facts.json, since a filing never changes. Figures still unchecked when the SEC
+    throttles, answers without figures (_tag_figures) or the time budget runs out stay as the frame has them, and the
+    next run checks them. `flagged` ({(cik, tag): [(year, fact)]}) names other figures to check the same way instead
+    (_check_bank_items), and `what` how the summary counts them."""
     if flagged is None:
         flagged = {}  # (cik, tag) -> [(year, fact)]
         for cik, by_year in annual.items():
@@ -1620,6 +1638,12 @@ def _check_items(annual, minutes=ITEM_MINUTES, flagged=None,
             cache = json.load(fh)
     except (OSError, ValueError):
         cache = {}
+    if not cache.get(ITEM_ABSENCES_CHECKED):
+        absent = sum(1 for v in cache.values() if v is None)
+        cache = {k: v for k, v in cache.items() if v is not None}
+        cache[ITEM_ABSENCES_CHECKED] = True
+        print(f"  {absent} figures cached as absent from the 10-K are looked up again, as the SEC's empty answers "
+              "were once taken for absences", flush=True)
     key = lambda cik, t, d: f"{cik}|{t}|{d['accn']}|{d.get('start')}|{d['end']}"
     todo = [ct for ct, facts in flagged.items() if any(key(*ct, d) not in cache for _, d in facts)]
     todo.sort(key=lambda ct: -max(y for y, _ in flagged[ct]))  # the newest years matter most
@@ -1724,14 +1748,9 @@ def _check_bank_items(annual, reported, minutes=BANK_ITEM_MINUTES):
 def _report_items(cik, tag):
     """{(start, end): [value, accession]} for one line item from the company's annual reports (10-K, or 20-F and 40-F
     for foreign companies), the latest filing winning. In dollars, or in shares or as a ratio for a tag with no
-    dollars."""
-    try:
-        units = sec_json(f"https://data.sec.gov/api/xbrl/companyconcept/CIK{cik:010d}/us-gaap/{tag}.json")["units"]
-    except NotFound:
-        return {}
-    facts = next((units[u] for u in ("USD", "shares", "pure") if u in units), [])
+    dollars (_tag_figures)."""
     out = {}
-    for f in sorted(facts, key=lambda f: f.get("filed", "")):
+    for f in sorted(_tag_figures(cik, tag, ("USD", "shares", "pure")), key=lambda f: f.get("filed", "")):
         if f.get("form", "").startswith(("10-K", "20-F", "40-F")) and f.get("start"):
             out[(f["start"], f["end"])] = [f["val"], f.get("accn")]
     return out
