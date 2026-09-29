@@ -29,6 +29,10 @@ SIC_MINUTES = 6
 BANK_FIELDS = ("net_interest_income", "noninterest_income", "noninterest_expense", "provision", "efficiency_ratio",
                "adj_net_income_common", "adj_eps", "tangible_equity", "tce_ratio", "adj_roa", "adj_roe_common",
                "adj_rotce", "returns_as_of", "tce_unread")
+# A report says when its newest quarter of revenue ended longer ago than this (quarters_stale), rather than presenting
+# years-old quarters as the latest: most companies file a 10-Q within 45 days of a quarter's end and a 10-K within 90
+# days of a year's, so nine months means at least two quarterly reports missed.
+STALE_QUARTER_DAYS = 270
 
 
 def _round(o):
@@ -166,7 +170,8 @@ def main():
     step(f"  {len(uni)} common stocks")
 
     step("Loading SEC financial statements")
-    fund = fundamentals.load_fundamentals(today)
+    # The listed companies' market values, which order the lookups of their quarterly figures in their own filings.
+    fund = fundamentals.load_fundamentals(today, {u["cik"]: u.get("mcap") or 0 for u in uni.values()})
     # Industry codes before the financials are worked out, since code 6798 marks a REIT (report.is_reit).
     sic = sic_codes(sorted({u["cik"] for u in uni.values() if report.wants_sic(u) and u["cik"] in fund["companies"]}), today)
     metrics = {}
@@ -174,9 +179,10 @@ def main():
         c = fund["companies"].get(u["cik"])
         if c:
             # The debt check is for companies outside finance: a broker's or insurer's interest is paid on customer
-            # balances and funding, not on debt the reader missed.
+            # balances and funding, not on debt the reader missed. Nor does gross profit mean anything for them.
             d = fundamentals.derive(c, report.normal_tax_rate(u, c, sic.get(u["cik"])),
-                                    bank=report.is_bank(u, sic.get(u["cik"])), check_debt=not report.is_financial(u))
+                                    bank=report.is_bank(u, sic.get(u["cik"])), check_debt=not report.is_financial(u),
+                                    gross=not report.is_financial(u))
             if d:
                 if d.get("reit"):
                     d["reit_type"] = report.REIT_TYPES.get(u["cik"])  # its property type, where reit_types knows it
@@ -297,6 +303,28 @@ def main():
                              **({"bank": True, **{k: m.get(k) for k in BANK_FIELDS}} if m.get("bank") else {}),
                              # Why the debt read looks far too small (fundamentals._debt_check), or null.
                              "debt_doubt": m.get("debt_doubt"),
+                             # Gross profit and gross margin for the fiscal year (and in each history entry, where
+                             # known), where it comes from ("GrossProfit", the company's own line, or the cost of
+                             # revenue tag taken from revenue), and the same for the trailing twelve months to ttm_end;
+                             # none of them, nor a history entry's gross_profit, for financial companies and REITs.
+                             # ttm_prior_revenue is the revenue of the four quarters a year before the twelve months,
+                             # where each of the four has its growth.
+                             # "quarters": up to 12 quarters of revenue, oldest first, each {start, end, fiscal_quarter,
+                             # revenue, gross_profit, derived (a fourth quarter worked out as the year less its first
+                             # three), yoy (growth on the quarter a year before), extra_days (how many days longer
+                             # than that quarter it ran, where 5 or more), yoy_withheld (why a quarter with revenue and
+                             # a year-ago quarter with revenue has no growth: "restated", "unchecked" or "no_base")},
+                             # with null figures for a quarter the filings don't give soundly, and dates_estimated on a
+                             # blank quarter whose dates are estimated (fundamentals._quarter_series).
+                             # sales_doubt: the sales figure looks incomplete (report.sales_doubtful), so the report
+                             # shows no quarters. quarters_stale: the newest quarter ended more than STALE_QUARTER_DAYS
+                             # before the market date.
+                             **{k: m.get(k) for k in ("gross_profit", "gross_margin", "gross_basis", "ttm_revenue",
+                                                      "ttm_prior_revenue", "ttm_gross_profit", "ttm_gross_margin",
+                                                      "ttm_end", "quarters")},
+                             "sales_doubt": report.sales_doubtful(m),
+                             "quarters_stale": bool(m.get("quarters")) and m["quarters"][-1]["end"]
+                             < (today - dt.timedelta(days=STALE_QUARTER_DAYS)).isoformat(),
                              "one_time_note": report.one_time_note(m)} if m else None,
             "health": groups,
             "health_score": health_score,

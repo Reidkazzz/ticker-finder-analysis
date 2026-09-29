@@ -734,6 +734,10 @@ def peer_table(universe, metrics, sic=None):
             "ffo_roe": m.get("adj_ffo_roe") if kind == "property" and not _thin_equity(m) else None,
             "fcf_yield": m["fcf"] / u["mcap"] if m.get("fcf") is not None else None,
             "net_margin": m.get("net_margin"),
+            # The newest fiscal year's gross margin (fundamentals._gross_profit), which the health check ranks among the
+            # company's peers (_gross_bar). None for financial companies and REITs, and where the sales figure is in
+            # doubt. Not a matching feature, so peers and valuations don't change with it.
+            "gross_margin": m.get("gross_margin") if has_rev else None,
             "growth": m.get("revenue_growth"),
             # A sales figure that can't be right leaves nothing to match on, so the company falls back to its
             # Nasdaq industry label and is never another company's peer.
@@ -1296,6 +1300,70 @@ BANK_HINTS = {
 }
 
 
+# Why a company has no gross margin (fundamentals._gross_profit's gross_why), for its health check bar and its report.
+# Banks, insurers, other financial companies and REITs (gross_applies) get neither.
+GROSS_NOTES = {
+    "no_line": "Not measured. Its SEC data has no gross profit line, nor a cost of sales line this site can use to work "
+               "one out.",
+    "partial": "Not measured. Its SEC filings show no gross profit line, and its cost of sales can't be confirmed to "
+               "cover all the direct cost of what it sells, so a margin worked out from it could be overstated.",
+    "unknown": "Not measured. Its gross profit could not be read reliably from its SEC filings.",
+}
+
+
+def gross_applies(u, m):
+    """Whether gross profit means anything for the company: not for a bank, an insurer (fundamentals.INSURANCE) or
+    another financial company, nor for a REIT, whose fundamentals then carry none."""
+    return bool(m) and not m.get("reit") and not m.get("bank") and not financial(u, m) \
+        and m.get("gross_why") not in ("insurer", "bank", "reit", "financial")
+
+
+def gross_note(u, m):
+    """Why the company shows no gross margin, in plain English, or None where it has one or it doesn't apply."""
+    if not gross_applies(u, m) or m.get("gross_margin") is not None:
+        return None
+    return DOUBT_BAR_NOTE if sales_doubtful(m) else GROSS_NOTES.get(m.get("gross_why"), GROSS_NOTES["unknown"])
+
+
+def _month_year(iso):
+    return dt.date.fromisoformat(iso).strftime("%b %Y") if iso else ""
+
+
+def _gross_bar(bar, u, m, peer_rows):
+    """The gross margin bar: the newest fiscal year's gross profit as a share of sales (fundamentals._gross_profit),
+    ranked against the company's peers that have one (higher is better), as a share of them it beats. Unscored with
+    fewer than five such peers. Not for financial companies and REITs, which health() leaves it out for."""
+    gm = m.get("gross_margin")
+    if gm is None:
+        return {**bar("gross_margin", "Gross margin", "n/a", None, gross_note(u, m)), "band": "neutral"}
+    rivals = [r.get("gross_margin") for r in peer_rows if r.get("gross_margin") is not None]
+    s = _pct_rank(gm, rivals, lower_is_better=False)
+    what = "the direct cost of making or buying what it sells"
+    if gm >= 0:
+        # "Keeps 62 cents of every sales dollar after ..., more than 71% of similar companies."
+        note = f"Keeps {cents(gm)} of every sales dollar after {what}" + (
+            ". Too few similar companies report a gross profit to compare it with." if s is None else
+            f", {'more' if s >= 100 else 'less'} than any of the {len(rivals)} similar companies that report one."
+            if s >= 100 or s <= 1 else f", {'more' if s >= 50 else 'less'} than {s if s >= 50 else 100 - s}% of "
+            "similar companies.")
+    else:
+        # Past a dollar more for every sales dollar, as a multiple of sales ("came to 182 times its sales").
+        times = 1 - gm
+        note = f"{what[0].upper()}{what[1:]} came to " + (
+            f"more than its sales, {cents(gm)} more for every sales dollar." if gm > -1 else
+            f"{times:,.0f} times its sales." if times >= 10 else f"{times:.1f} times its sales.") + (
+            " Too few similar companies report a gross profit to compare it with." if s is None else
+            f" That is {'higher' if s >= 100 else 'lower'} than any of the {len(rivals)} similar companies that "
+            "report one." if s >= 100 or s <= 1 else
+            f" That is {'higher' if s >= 50 else 'lower'} than {s if s >= 50 else 100 - s}% of similar companies.")
+    if m.get("gross_basis") and m["gross_basis"] != "GrossProfit":
+        note += " Worked out as sales less cost of sales, since its filings show no gross profit line."
+    ttm, end = m.get("ttm_gross_margin"), m.get("ttm_end")
+    if ttm is not None and end and end > (m.get("fiscal_year_end") or ""):
+        note += f" Over the 12 months to {_month_year(end)}: {pct(ttm)}."
+    return bar("gross_margin", "Gross margin", pct(gm), s, note)
+
+
 def health(u, m, price, high52, peers, table, news_overall, insider):
     """Returns grouped bars. Each: key, label, value (display), score 1-100, note (plain English)."""
     mcap = u.get("mcap")
@@ -1372,6 +1440,10 @@ def health(u, m, price, high52, peers, table, news_overall, insider):
     p = _ffo_profit_bars(bar, no_sales, m, me, table, doubt) if reit else banked["Profitability"] if banked else []
     nm = m.get("adj_net_margin")
     reported = lambda x: f" That leaves out last year's one-time items. With them it was {pct(x)}." if adjusted and x is not None else ""
+    if gross_applies(u, m):
+        # Gross profit means nothing for a bank, an insurer or another financial company, nor for a REIT, so they
+        # have no such bar (and no gross profit figures in their fundamentals).
+        p.append(no_sales("gross_margin", "Gross margin") if doubt else _gross_bar(bar, u, m, peer_rows))
     if not reit and not banked:
         p.append(no_sales("net_margin", "Net profit margin") if doubt else bar("net_margin", "Net profit margin", pct(nm), None if nm is None else _lerp(nm, [(-0.2, 1), (0, 20), (0.08, 55), (0.15, 80), (0.25, 100)]),
                      ("No revenue data." if nm is None else f"Keeps {cents(nm)} of profit from every dollar of sales." if nm >= 0 else

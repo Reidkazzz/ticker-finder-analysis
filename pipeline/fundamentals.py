@@ -269,6 +269,122 @@ LEASE_MIN = 0.04
 TAX_CACHE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".cache", "tax_frames.json")
 CASH_FLOW_CACHE = os.path.join(os.path.dirname(TAX_CACHE), "cash_flow_frames.json")
 
+# Gross profit (_gross_profit): the company's own gross profit line, or else its revenue less its cost of revenue, the
+# larger of the two cost tags where it tags both (one can be a part of the other). Read for each fiscal year and quarter.
+# Tags that leave depreciation out of the cost (CostOfGoodsAndServiceExcludingDepreciationDepletionAndAmortization, 234
+# companies for 2025) are not read, since a gross profit without the wear on the equipment that makes the goods
+# overstates it. Frames that fail leave that year's gross profit unknown for every company, rather than a company that
+# tags its own line read from its cost tags instead.
+GROSS = {"gross_profit": ["GrossProfit"], "cost_of_revenue": ["CostOfRevenue", "CostOfGoodsAndServicesSold"]}
+# A cost of revenue line counts only when it is at least this share of everything the company spent to earn its revenue
+# (revenue less operating income): most of the costs of a retailer, distributor or manufacturer that shows no gross
+# profit line (Walmart's 2025 cost of sales came to 78% of its costs, Amazon's to 56%, Costco's to 91%). A smaller line
+# is often only a part of the direct costs: a restaurant's food (Bloomin' Brands' came to 30% of its costs, which would
+# give a 70% gross margin), a utility's fuel (CenterPoint's, 0.1%), a health insurer's pharmacy products (UnitedHealth's,
+# 12%, giving 89%) or an oil producer's (Matador's, 8%). On September 2026 data, of the 1,750 companies outside finance
+# that tag their own gross profit line and operating income, 58% had a cost of revenue of at least this share, and of
+# the 442 that tag only a cost line, 46%.
+COST_SHARE_MIN = 0.5
+# A smaller cost line still counts where it and the company's overhead (OVERHEAD: research and development, and selling,
+# general and administrative costs, or selling and marketing plus general and administrative) come to EXPLAINED of its
+# costs: nothing large is left between them that could be more of the direct cost, as with a drug maker or a software
+# company, whose direct costs are small (Meta's cost of revenue came to 31% of its 2025 costs and, with its overhead,
+# 100%; Gilead's to 32% and 92%). A partial line leaves much of the costs unexplained: a restaurant's labor and rent
+# (Bloomin' Brands' 36%, Yum Brands' 66%), a utility's operations and depreciation (WEC Energy's 43%), an oil producer's
+# field costs (EQT's 35%), a health insurer's medical costs (UnitedHealth's 26%). Of the 240 companies whose cost line
+# fell short of COST_SHARE_MIN on 2025 data, 151 passed this test (139 of 235 on 2024 data); of the 1,750 that tag their
+# own gross profit line, 84% would have passed it had they tagged only the cost (89% passing either test). An overhead
+# frame that fails only leaves this test out for that year, which can hide a gross profit but never show a wrong one.
+OVERHEAD = {"research": ["ResearchAndDevelopmentExpense", "ResearchAndDevelopmentExpenseExcludingAcquiredInProcessCost"],
+            "sga": ["SellingGeneralAndAdministrativeExpense"],
+            "selling": ["SellingAndMarketingExpense"], "admin": ["GeneralAndAdministrativeExpense"]}
+EXPLAINED = (0.85, 1.10)
+# Premiums earned and the benefits and claims paid on them, which make a company partly an insurer (CVS Health's 2025
+# premiums came to 34% of its revenue, Cigna's benefit costs to 97%, Molina's premiums to 95%). Gross profit means
+# nothing for an insurer, as for other financial companies, so a company whose premiums or benefits come to INSURER_SHARE
+# of its revenue has none: CVS Health's cost of products sold leaves out the medical costs of its Aetna insurance, which
+# would give it a 45% gross margin. Frames that fail leave that year's gross profit unknown for every company.
+INSURANCE = {"premiums": ["PremiumsEarnedNet"],
+             "benefits": ["PolicyholderBenefitsAndClaimsIncurredNet", "BenefitsLossesAndExpenses"]}
+INSURER_SHARE = 0.1
+# A cost of revenue line under the generic tags can still leave out the depreciation of the equipment that earns the
+# revenue, shown on a line of its own: Lumen's "cost of services and products (exclusive of depreciation and
+# amortization)" ($6.64B for 2025, beside $2.75B of depreciation and amortization) would give a 46.5% gross margin
+# instead of 24%, Royal Caribbean's cruise operating expenses 49% instead of 40%, Waste Management's 40% instead of 29%.
+# Such a line shows as costs that the cost line and the overhead (OVERHEAD) leave unexplained coming to about the
+# depreciation: the depreciation and amortization the cash flow statement adds back (DEPRECIATION, the largest reading)
+# less the amortization of acquired intangibles (AMORTIZATION), which companies usually show on a line of their own
+# whatever their cost of revenue includes. A cost line whose unexplained costs, less that amortization, come to
+# DEPRECIATION_LEFT_OUT of the depreciation, where the depreciation is at least DEPRECIATION_MIN of revenue, counts as
+# partial: on September 2026 data, 31 of the 370 companies whose 2025 gross profit was read from a cost line, among them
+# Southern Copper, Verisk, Clean Harbors, Norwegian Cruise Line, Casella Waste and Liberty Energy. Smaller depreciation
+# overstates a margin by fewer points, and a company's own gross profit line stands. An amortization frame that fails
+# counts as no amortization, which can hide a gross profit but never show a wrong one.
+AMORTIZATION = {"amortization": ["AmortizationOfIntangibleAssets"]}
+DEPRECIATION_MIN = 0.06
+DEPRECIATION_LEFT_OUT = (0.75, 1.4)
+# A gross profit line and a cost of revenue line that add up to another revenue tag's figure, more than FOOTING_GAP
+# from the revenue figure used, show that the revenue is on another footing than the gross profit (_off_footing):
+# NetApp's "Revenues" for its quarter to July 31, 2026 ($1.82B) is its hybrid cloud business alone, while its gross
+# profit and cost of revenue ($1.42B and $0.61B) add up to its revenue from customer contracts ($2.03B); Molson Coors'
+# revenue for its quarter to June 30, 2026 ($3.60B) is before the excise taxes its gross profit and cost of sales leave
+# out ($1.06B and $2.03B, adding up to $3.10B). A margin on such a revenue figure would be off, so none is shown. Where
+# the two lines add up to no revenue figure at all, the cost line is only part of the direct cost and the company's own
+# gross profit line stands.
+FOOTING_GAP = 0.03
+
+# Quarterly figures (derive's quarters): revenue under the same tags as the annual figure, a bank's net interest and
+# noninterest income (its revenue, as _bank_year counts it), and the gross profit tags. One frame per tag and calendar
+# quarter holds each company's three-month figure that best fits that quarter, from its latest filing, so companies
+# whose fiscal quarters don't follow the calendar are there too (Walmart's May to July quarter is in the second
+# quarter's frame). QUARTER_FRAMES quarters are read, the open one included (Adobe's quarter to August 28 is already in
+# the third quarter's frame by late September): twelve quarters to show, four more for each one's growth over the year
+# before, and three more for the oldest of those when it is a fourth quarter worked out from its year (Apple's to
+# September 2022 needs its quarters from October 2021). A bank's other ways of reading its revenue (_bank_year) are
+# not read quarterly: on September 2026 data 285 of the 294 banks tagged both parts directly for the first quarter of
+# 2026, and the rest go without quarters.
+QUARTERLY = {"revenue": DURATION["revenue"], **GROSS, "bank_nii": DURATION["bank_nii"],
+             "bank_nii_alt": DURATION["bank_nii_alt"], "bank_noninterest_income": DURATION["bank_noninterest_income"]}
+QUARTER_FRAMES = 20
+QUARTERS_SHOWN = 12
+# A frame that fails is taken from the last run's copy (only each company's value, dates and filing), as the tax frames
+# are, since a past quarter's figures change only when a later filing repeats or restates them; with no copy, that
+# quarter's figures under that metric are unknown for every company.
+QUARTER_CACHE = os.path.join(os.path.dirname(TAX_CACHE), "quarter_frames.json")
+# Each frame keeps only the latest filed figure for a period, so a quarter and the year or the year-ago quarter it is
+# combined with can come from filings on different footings: a later 10-Q or 10-K restates the figures it repeats after
+# a business is sold or an accounting change (Kontoor Brands' 2026 10-Qs gave its first two quarters of 2025 without its
+# Lee brand, $423M and $493M against $623M and $658M as first filed, beside its third quarter and its year as first
+# filed, which would give a fourth quarter of $1.38B instead of the $1.02B it reported; Bank of America's 2026 10-K
+# restated its 2023 and 2024 revenue, beside quarters as first filed). Nothing in the frames tells such figures apart, so
+# each listed company's own 10-Q and 10-K figures under the revenue tags its quarters are read from (a bank's net
+# interest income and noninterest income) are looked up (companyconcept, one request per tag) and kept in QUARTER_FACTS:
+# {"cik|tag": {"checked": date, "rows": [[start, end, value, accession number, date filed], ...] for each three-month
+# and one-year figure of each filing, "unmatched": {accession number: date first unmatched}}}. Each filing that gives a
+# figure other than the last filing before it gave for the same period (by more than RESTATED_GAP) starts a new
+# footing (_footings), and figures are only combined (a fourth quarter worked out from its year, growth on the year
+# before, the last twelve months) where one footing's filings give them all as shown, or they come from one filing. A
+# tag is looked up again when the frames show a filing its rows lack (a new 10-Q or 10-K), and while one stays
+# unmatched (the frames also carry figures from other filings, such as an 8-K giving a business bought, which never
+# match), every QUARTER_RECHECK_DAYS for QUARTER_UNMATCHED_DAYS after it was first seen. New filings are looked up
+# first, then companies never looked up, the most valuable first, within QUARTER_LOOKUP_MINUTES a run
+# (QUARTER_SEED_MINUTES on a run with more than QUARTER_SEED_TAGS never looked up, as the first is, with about 6,900
+# tags); the rest wait for the next run, and until then their figures from different filings are not combined. The
+# same rows fill the periods the frames lack (_quarter_lookups): a frame holds one figure per company, so where two of a
+# company's quarters best fit the same calendar quarter one of them is left out (Costco's 12-week second quarter, late
+# November to mid-February, loses to its third in the first quarter's frame), and an annual frame sometimes leaves out
+# a fiscal year (Lam Research's to June 30, 2024). A company's gross profit tag (or its cost of revenue tag,
+# _gross_profit's basis) is looked up the same way, since a later filing can restate gross profit alone, moving costs
+# into or out of the cost of sales while revenue stands: a fourth quarter's gross profit, and the last twelve months',
+# are only worked out where their gross profit figures are on one footing.
+QUARTER_FACTS = os.path.join(os.path.dirname(TAX_CACHE), "quarter_facts.json")
+QUARTER_UNMATCHED_DAYS = 30
+QUARTER_RECHECK_DAYS = 7
+QUARTER_LOOKUP_MINUTES = 10
+QUARTER_SEED_MINUTES = 20
+QUARTER_SEED_TAGS = 1000
+RESTATED_GAP = 0.002
+
 # Debt, read by _debt(). Instrument tags (convertibles, notes, credit lines) often restate pieces of the
 # broad totals in footnotes, so they only count when they add up to more than the broad tags do.
 DEBT_FAMILIES = [  # (whole amount, noncurrent part, current part)
@@ -359,6 +475,315 @@ def _quarters(today, n=5):
             q, y = 3, y - 1
         out.append(f"CY{y}Q{q + 1}I")
     return out  # newest first
+
+
+def _duration_quarters(today, n=QUARTER_FRAMES):
+    """The quarterly duration frames to read, newest first, the quarter still open included (QUARTERLY)."""
+    y, q = today.year, (today.month - 1) // 3
+    out = []
+    for _ in range(n):
+        out.append(f"CY{y}Q{q + 1}")
+        q -= 1
+        if q < 0:
+            q, y = 3, y - 1
+    return out
+
+
+def _quarter_facts(jobs, frames):
+    """({cik: {(start, end): {tag: {"val": value, "accn": the filing's accession number}}}} for every three-month period
+    in the quarterly frames (QUARTERLY), the metrics left out for some quarter). A frame that failed is taken from the
+    copy the last run kept in QUARTER_CACHE, which then keeps this run's; one with no copy leaves its metric out for that
+    quarter for every company, since a missing tag would silently change which tag wins for some."""
+    key = lambda job: f"{job[4]}|{job[6]}"
+    try:
+        with open(QUARTER_CACHE, encoding="utf-8") as fh:
+            cache = json.load(fh)
+    except (OSError, ValueError):
+        cache = {}
+    kept, reused, lost = {}, [], set()
+    for job, frame in zip(jobs, frames):
+        if frame is not None:
+            kept[key(job)] = {str(cik): [d["val"], d["start"], d["end"], d.get("accn")] for cik, d in frame.items()
+                              if d.get("start") and d.get("end") and d.get("val") is not None}
+        elif key(job) in cache:
+            kept[key(job)] = cache[key(job)]
+            reused.append(key(job).replace("|", " "))
+        else:
+            lost.add((job[1], job[6]))
+    out = {}
+    for job in jobs:
+        if (job[1], job[6]) in lost:
+            continue
+        for cik, (val, start, end, *accn) in kept[key(job)].items():
+            out.setdefault(int(cik), {}).setdefault((start, end), {})[job[4]] = {"val": val,
+                                                                                  "accn": accn[0] if accn else None}
+    if reused:
+        print(f"  {len(reused)} quarterly frames failed and were taken from the last run: " + ", ".join(reused),
+              flush=True)
+    if lost:
+        print("  Quarterly figures left blank for every company after SEC request failures: "
+              + ", ".join(sorted(f"{m} {p}" for m, p in lost)), flush=True)
+    if len(reused) < len(jobs):
+        try:
+            os.makedirs(os.path.dirname(QUARTER_CACHE), exist_ok=True)
+            tmp = QUARTER_CACHE + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as fh:
+                json.dump(kept, fh, separators=(",", ":"))
+            os.replace(tmp, QUARTER_CACHE)
+        except OSError:
+            pass
+    return out, {m for m, _ in lost}
+
+
+def _quarter_gaps(c, since):
+    """[(first day, last day)] of each gap between two of a company's quarters with revenue (fundamentals record `c`)
+    that ends after `since`, other than a fourth quarter of a fiscal year in its annual figures, which is worked out
+    from the year instead (_quarter_series)."""
+    D, day = dt.date.fromisoformat, dt.timedelta(days=1)
+    ps = sorted((D(a), D(b)) for (a, b), facts in (c.get("quarters") or {}).items()
+                if QUARTER_DAYS[0] <= (D(b) - D(a)).days + 1 <= QUARTER_DAYS[1] and REVENUE_TAGS & facts.keys())
+    ends = {D(s["end"]) for s in (c.get("annual") or {}).values() if s.get("end") and s.get("revenue") is not None}
+    gaps = []
+    for (_, b1), (a2, b2) in zip(ps, ps[1:]):
+        gap = (a2 - b1).days - 1
+        if b2 < since or gap <= QUARTER_DAYS[0] // 2:
+            continue
+        if gap <= QUARTER_DAYS[1] and any(abs((a2 - day - e).days) <= SEAM_DAYS for e in ends):
+            continue
+        gaps.append((b1 + day, a2 - day))
+    return gaps
+
+
+# The tags a company's whole set of facts (companyfacts) is read for when its answer for one tag comes back empty
+# (_concept_rows): every tag its quarters can be read from.
+FACTS_TAGS = REVENUE_TAGS | {t for tags in GROSS.values() for t in tags} | set(
+    DURATION["bank_nii"] + DURATION["bank_nii_alt"] + DURATION["bank_noninterest_income"])
+_facts_lock = threading.Lock()
+
+
+def _company_facts(cik, memo={}):
+    """{tag: [figures in USD]} for FACTS_TAGS from a company's whole set of facts (companyfacts, one larger request),
+    read once a run."""
+    with _facts_lock:
+        if cik not in memo:
+            try:
+                facts = sec_json(f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json")["facts"]["us-gaap"]
+            except NotFound:
+                facts = {}
+            memo[cik] = {t: (facts[t].get("units") or {}).get("USD") for t in FACTS_TAGS if t in facts}
+        return memo[cik]
+
+
+def _concept_rows(cik, tag, since):
+    """[[start, end, value, accession number, date filed]] of every three-month and one-year figure ending on or after
+    `since` that the company's 10-Q and 10-K filings (their amendments and transition reports; 20-F and 40-F for a
+    foreign filer) give for one tag, oldest filing first. A tag is only looked up for a company the frames show using
+    it, so an answer without figures is a wrong one: in September 2026 the SEC answered "USD": {} for about 120 such
+    tags, Abbott Laboratories' revenue from customer contracts (122 figures) and General Dynamics' among them, every
+    time they were asked. The company's whole set of facts, which has them, is read instead, and where that has none
+    either this raises, to be looked up again on the next run."""
+    try:
+        units = sec_json(f"https://data.sec.gov/api/xbrl/companyconcept/CIK{cik:010d}/us-gaap/{tag}.json")["units"]
+    except NotFound:
+        return []
+    if not isinstance(units.get("USD"), list) or not units["USD"]:
+        units = {"USD": _company_facts(cik).get(tag)}
+        if not isinstance(units["USD"], list) or not units["USD"]:
+            raise ValueError(f"no figures in the SEC's answers for {tag} of CIK {cik}")
+    out = set()
+    for f in units["USD"]:
+        if f.get("start") and f.get("end") and f.get("accn") and f.get("val") is not None and f["end"] >= since \
+                and f.get("form", "").startswith(("10-Q", "10-K", "20-F", "40-F")):
+            days = (dt.date.fromisoformat(f["end"]) - dt.date.fromisoformat(f["start"])).days + 1
+            if QUARTER_DAYS[0] <= days <= QUARTER_DAYS[1] or 350 <= days <= 380:
+                out.add((f["start"], f["end"], f["val"], f["accn"], f.get("filed") or ""))
+    return [list(r) for r in sorted(out, key=lambda r: (r[4], r[3], r[1], r[0]))]
+
+
+def _footings(rows):
+    """{accession number: footing} for the filings in `rows` ({tag: _concept_rows}): footings are numbered from 0 in the
+    order the filings were made, and a filing starts a new one where it gives a figure for a period that differs by more
+    than RESTATED_GAP from the figure the last filing before it gave for the same period and tag (QUARTER_FACTS). A
+    restatement that reaches the comparatives one filing at a time (Aramark's 10-Qs for fiscal 2024, each giving its
+    year-ago quarter without Vestis, spun off) so starts a footing with each, which leaves figures uncombined rather than
+    ever combining two restatements: Freedom Holding's 10-K of June 2025 restated its 2024 revenue, and its 10-Qs from
+    August 2025 its fiscal 2025 quarters again, beside that 10-K's year as first filed."""
+    filings = {}
+    for t, rs in rows.items():
+        for start, end, val, accn, filed in rs:
+            f = filings.setdefault(accn, [filed, []])
+            f[0] = min(f[0], filed)
+            f[1].append(((t, start, end), val))
+    last, out, n = {}, {}, 0
+    for accn, (_, facts) in sorted(filings.items(), key=lambda x: (x[1][0], x[0])):
+        if any(k in last and abs(v - last[k]) > RESTATED_GAP * max(abs(v), abs(last[k])) for k, v in facts):
+            n += 1
+        out[accn] = n
+        last.update(facts)
+    return out
+
+
+def _quarter_tags(c):
+    """The tags a company's quarters are read from, which _quarter_lookups looks up: each fiscal year's revenue tag and
+    the one each quarter would take first (DURATION), and a bank's net interest income and noninterest income tags where
+    its quarters tag both."""
+    tags = [next(t for t in DURATION["revenue"] if t in facts) for facts in (c.get("quarters") or {}).values()
+            if REVENUE_TAGS & facts.keys()]
+    tags += [s["revenue_tag"] for s in (c.get("annual") or {}).values() if s.get("revenue_tag")]
+    for facts in (c.get("quarters") or {}).values():
+        nii = next((t for t in DURATION["bank_nii"] + DURATION["bank_nii_alt"] if t in facts), None)
+        if nii and DURATION["bank_noninterest_income"][0] in facts:
+            tags += [nii, DURATION["bank_noninterest_income"][0]]
+    return list(dict.fromkeys(tags))
+
+
+def _frame_accns(c, tag):
+    """The filings the frames took a company's figures under `tag` from, for its quarters and fiscal years."""
+    out = {facts[tag].get("accn") for facts in (c.get("quarters") or {}).values() if tag in facts}
+    out |= {({**(s.get("revenue_accns") or {}), **(s.get("gross_accns") or {})}).get(tag)
+            for s in (c.get("annual") or {}).values()}
+    return out - {None}
+
+
+def _gave(rows, start, end, accn, revenue):
+    """Whether one filing (accession number `accn`) gave `revenue` for a period, within RESTATED_GAP, under any revenue
+    tag in a company's own filings ("concept"): Costco's 10-Q for its third quarter of fiscal 2026 gave the year-ago
+    quarter's revenue only as revenue from customer contracts, beside the cost of sales the frames take from it."""
+    return any(r[3] == accn and (r[0], r[1]) == (start, end) and abs(r[2] - revenue) <= RESTATED_GAP * abs(revenue)
+               for t, rs in rows.items() if t in REVENUE_TAGS for r in rs)
+
+
+def _check_gross_filings(companies):
+    """Keeps a fiscal year's gross profit from another filing than its revenue (_gross_profit's gross_accn) only where
+    that filing gave the same revenue (within RESTATED_GAP), as the company's own filings show ("concept",
+    _quarter_lookups): Caterpillar's 2025 revenue in the frames comes from a later filing than its cost of sales, with
+    the same figure. Otherwise, or where that can't be seen, the year has no gross profit."""
+    dropped = 0
+    for c in companies.values():
+        for s in (c.get("annual") or {}).values():
+            accn = s.pop("gross_accn", None)
+            if accn is None or s.get("gross_profit") is None:
+                continue
+            if not _gave(c.get("concept") or {}, s.get("start"), s.get("end"), accn, s["revenue"]):
+                s.update(gross_profit=None, gross_basis=None, gross_why="unknown")
+                dropped += 1
+    if dropped:
+        print(f"  {dropped} fiscal years' gross profit left out, from another filing than their revenue that gave "
+              "another revenue figure or couldn't be checked", flush=True)
+
+
+def _quarter_lookups(companies, today, listed=None, minutes=QUARTER_LOOKUP_MINUTES, lookups=True):
+    """Looks up the tags each listed company's quarters are read from (_quarter_tags) in its own 10-Q and 10-K filings,
+    as QUARTER_FACTS describes, and keeps what it has for each on the company: "concept" ({tag: _concept_rows}) and
+    "unmatched" (the filings the frames took its figures from that its rows lacked when they were looked up). `listed`
+    is {cik: market value}, a set of CIKs, or None for every company. Lookups not made this run (the SEC throttled, the
+    time ran out, or `lookups` is off) leave the rows kept from an earlier run, if any.
+
+    Then fills the gaps in the quarters of a company whose frames leave one (_quarter_gaps) with the periods its own
+    filings give under its revenue tags and its gross profit tag, and adds the fiscal years the annual frames lack
+    ("fy_extra", {(start, end): {tag: {"val", "accn"}}}), which only work out a fourth quarter (_quarter_series). A
+    period the frames have keeps the frames' figures, and one overlapping them is left out."""
+    try:
+        with open(QUARTER_FACTS, encoding="utf-8") as fh:
+            cache = json.load(fh)
+    except (OSError, ValueError):
+        cache = {}
+    D, day = dt.date.fromisoformat, dt.timedelta(days=1)
+    oldest = _duration_quarters(today)[-1]
+    since = dt.date(int(oldest[2:6]), 3 * int(oldest[-1]) - 2, 1)
+    rows_since = (since - 400 * day).isoformat()
+    value = listed if isinstance(listed, dict) else {}
+    want, refresh, seed = {}, [], []
+    for cik, c in companies.items():
+        if listed is not None and cik not in listed or not c.get("quarters"):
+            continue
+        gaps = _quarter_gaps(c, since)
+        years = [s for _, s in sorted((c.get("annual") or {}).items()) if s.get("revenue_tag")]
+        basis = next((s["gross_basis"] for s in reversed(years) if s.get("gross_basis")), None)
+        tags = _quarter_tags(c) + ([basis] if basis else [])
+        want[cik] = (list(dict.fromkeys(tags)), gaps)
+        for t in want[cik][0]:
+            e = cache.get(f"{cik}|{t}")
+            if e is None or "rows" not in e:
+                seed.append((cik, t))
+                continue
+            known = {r[3] for r in e["rows"]}
+            unmatched = e.get("unmatched") or {}
+            shown = _frame_accns(c, t)
+            if shown - known - unmatched.keys() or today >= D(e["checked"]) + QUARTER_RECHECK_DAYS * day and any(
+                    a in shown and D(first) + QUARTER_UNMATCHED_DAYS * day >= today for a, first in unmatched.items()):
+                refresh.append((cik, t))
+    seed.sort(key=lambda ct: -(value.get(ct[0]) or 0))  # the most valuable companies first
+    todo = (refresh + seed) if lookups else []
+    if len(seed) > QUARTER_SEED_TAGS:
+        minutes = max(minutes, QUARTER_SEED_MINUTES)
+    stop, blocked = time.monotonic() + minutes * 60, threading.Event()
+
+    def look(ct):
+        if blocked.is_set() or time.monotonic() > stop:
+            return None
+        try:
+            return _concept_rows(*ct, rows_since)
+        except Throttled:
+            blocked.set()
+        except Exception:  # one bad response shouldn't cost the rest; the next run tries again
+            pass
+        return None
+
+    looked = 0
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        for (cik, t), rows in zip(todo, pool.map(look, todo)):
+            if rows is not None:
+                old = (cache.get(f"{cik}|{t}") or {}).get("unmatched") or {}
+                missing = _frame_accns(companies[cik], t) - {r[3] for r in rows}
+                cache[f"{cik}|{t}"] = {"checked": today.isoformat(), "rows": rows,
+                                       "unmatched": {a: old.get(a, today.isoformat()) for a in sorted(missing)}}
+                looked += 1
+    if looked:
+        try:
+            os.makedirs(os.path.dirname(QUARTER_FACTS), exist_ok=True)
+            tmp = QUARTER_FACTS + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as fh:
+                json.dump(cache, fh, separators=(",", ":"))
+            os.replace(tmp, QUARTER_FACTS)
+        except OSError:
+            pass
+    added = unchecked = 0
+    for cik, (tags, gaps) in want.items():
+        c = companies[cik]
+        entries = {t: cache[f"{cik}|{t}"] for t in tags if "rows" in (cache.get(f"{cik}|{t}") or {})}
+        c["concept"] = {t: e["rows"] for t, e in entries.items()}
+        c["unmatched"] = {a for e in entries.values() for a in e.get("unmatched") or {}}
+        unchecked += len(entries) < len(tags)
+        if not gaps:
+            continue
+        q, extra = c.setdefault("quarters", {}), c.setdefault("fy_extra", {})
+        spans = [(D(a), D(b)) for a, b in q]
+        fys = [(D(s["start"]), D(s["end"])) for s in c["annual"].values() if s.get("start") and s.get("end")]
+        for t, rows in c["concept"].items():
+            latest = {}
+            for start, end, val, accn, _ in rows:
+                latest[(start, end)] = (val, accn)  # the latest filing wins, as in a frame
+            for (start, end), (val, accn) in sorted(latest.items()):
+                a, b = D(start), D(end)
+                if b < since:
+                    continue
+                if (b - a).days + 1 >= 350:
+                    if not any(a <= y1 - SEAM_DAYS * day and b >= y0 + SEAM_DAYS * day for y0, y1 in fys):
+                        extra.setdefault((start, end), {})[t] = {"val": val, "accn": accn}
+                elif (start, end) in q:
+                    if t not in q[(start, end)]:
+                        q[(start, end)][t] = {"val": val, "accn": accn}
+                        added += 1
+                elif not any(a <= s1 - SEAM_DAYS * day and b >= s0 + SEAM_DAYS * day for s0, s1 in spans):
+                    q[(start, end)] = {t: {"val": val, "accn": accn}}
+                    spans.append((a, b))
+                    added += 1
+    print(f"  Quarterly revenue tags of {len(want)} listed companies: {looked} of {len(todo)} lookups due were made "
+          f"({len(refresh)} for new filings)" + (" (the SEC throttled the rest)" if blocked.is_set() else "")
+          + ("" if lookups else " (none this run, since a quarterly revenue frame failed)")
+          + f", {unchecked} companies still to look up; {sum(1 for w in want.values() if w[1])} had gaps in their "
+          f"quarterly frames, {added} quarterly figures added", flush=True)
 
 
 def _frame(taxonomy, tag, unit, period):
@@ -463,8 +888,10 @@ def _kept_frames(jobs, frames, metrics, path, what, filed=None):
     return out, stale
 
 
-def load_fundamentals(today=None):
+def load_fundamentals(today=None, listed=None):
     """Returns {"years": [...], "companies": {cik: {"annual": {year: {...}}, "latest": {...}, "loc": "US-CA", ...}}}.
+    `listed` ({cik: market value}, or a set of CIKs) limits the lookups of quarterly figures in the companies' own
+    filings (_quarter_lookups) to those companies, the most valuable first.
 
     Raises RuntimeError when the SEC can't supply the newest years' income or cash flow statements or any
     recent balance sheet, rather than publishing figures that would quietly fall back a year for everyone.
@@ -489,7 +916,16 @@ def load_fundamentals(today=None):
         jobs += [("instant", metric, q, "us-gaap", t, "USD", q) for metric, tags in INSTANT.items() for t in tags]
         jobs.append(("instant", "shares_out", q, "dei", "EntityCommonStockSharesOutstanding", "shares", q))
         jobs.append(("instant", "bank_shares", q, "us-gaap", BANK_SHARES, "shares", q))
-    frames, stale = _kept_frames(jobs, _tax_frames(jobs, _fetch_all(jobs)), CASH_FLOW_METRICS, CASH_FLOW_CACHE,
+    for metric, tags in {**GROSS, **OVERHEAD, **INSURANCE, **AMORTIZATION}.items():
+        for y in years:
+            jobs += [("annual", metric, y, "us-gaap", t, "USD", f"CY{y}") for t in tags]
+    # Quarterly frames, fetched with the rest so a pause for the SEC's limits covers them too, but kept apart: one that
+    # fails never stops the run (_quarter_facts).
+    qjobs = [("quarter", metric, p, "us-gaap", t, "USD", p) for metric, tags in QUARTERLY.items()
+             for p in _duration_quarters(today) for t in tags]
+    fetched = _fetch_all(jobs + qjobs)
+    qfacts, qlost = _quarter_facts(qjobs, fetched[len(jobs):])
+    frames, stale = _kept_frames(jobs, _tax_frames(jobs, fetched[:len(jobs)]), CASH_FLOW_METRICS, CASH_FLOW_CACHE,
                                  "cash-flow model", filed="ocf")
 
     failed = {(j[1], j[2]) for j, f in zip(jobs, frames) if f is None}
@@ -520,7 +956,8 @@ def load_fundamentals(today=None):
                 inst.setdefault(cik, {}).setdefault(period, {})[tag] = d
             if metric in TAX_EVIDENCE or metric in REIT_METRICS or metric in REIT_INSTANT or metric in BANK_METRICS \
                     or metric in BANK_INSTANT or metric == "bank_shares" or metric in CASH_FLOW_METRICS \
-                    or metric in DEBT_CHECK_INSTANT:
+                    or metric in DEBT_CHECK_INSTANT or metric in GROSS or metric in OVERHEAD or metric in INSURANCE \
+                    or metric in AMORTIZATION:
                 # A company that files few tax tags could otherwise take its location from an old filing, and the REIT
                 # and bank lines would move other companies' locations (SunPower's from California to New York).
                 continue
@@ -551,7 +988,8 @@ def load_fundamentals(today=None):
         c["annual"] = {y: _annual(facts.get(y, {}), has_capex, ("capex", y) in failed, reported.get((cik, y), False),
                                   unknown | {m for m, p in tax_unknown if p == y}
                                   | {m for m, p in failed if p == y
-                                     and (m in REIT_METRICS or m in BANK_METRICS or m in CASH_FLOW_METRICS)}
+                                     and (m in REIT_METRICS or m in BANK_METRICS or m in CASH_FLOW_METRICS
+                                          or m in GROSS or m in OVERHEAD or m in INSURANCE or m in AMORTIZATION)}
                                   # A cash-flow model figure from the last run's copy of a frame (_kept_frames) is
                                   # unknown for a company that filed since.
                                   | {m for (m, p), known in stale.items()
@@ -564,7 +1002,17 @@ def load_fundamentals(today=None):
             c["latest"]["shares_out"], c["latest"]["shares_as_of"] = s
         if history.get(cik):
             c["wc_history"] = history[cik]  # {year: change in working capital} before `years` (_one_off_cash)
+        if qfacts.get(cik):
+            c["quarters"] = qfacts[cik]  # {(start, end): {tag: value}} for each three-month period (_quarter_series)
         companies[cik] = c
+    # The registrants listings moved from are looked up with them (SUCCESSORS). A revenue frame lost this run leaves
+    # that quarter out for every company: a gap the SEC's frames will fill again, not thousands of companies' to look up
+    # one by one.
+    if listed is not None:
+        listed = dict(listed) if isinstance(listed, dict) else dict.fromkeys(listed, 0)
+        listed.update({old: listed[new] for new, old in SUCCESSORS.items() if new in listed})
+    _quarter_lookups(companies, today, listed, lookups="revenue" not in qlost)
+    _check_gross_filings(companies)
     for new, old in SUCCESSORS.items():
         if old in companies:
             companies[new] = _successor(companies.get(new), companies[old])
@@ -599,6 +1047,13 @@ def _successor(new, old):
         latest.update(shares_out=newest["shares_out"], shares_as_of=newest.get("shares_as_of"))
     out["latest"] = latest
     out["wc_history"] = {**(old.get("wc_history") or {}), **(new.get("wc_history") or {})}
+    # Quarters from both, the new registrant's winning where both have one (its first 10-Q repeats the year-ago quarter),
+    # and both registrants' own filings under each tag, which _footings orders by the date filed.
+    out["quarters"] = {**(old.get("quarters") or {}), **(new.get("quarters") or {})}
+    out["concept"] = {t: sorted((old.get("concept") or {}).get(t, []) + (new.get("concept") or {}).get(t, []),
+                                key=lambda r: (r[4], r[3], r[1], r[0]))
+                      for t in {**(old.get("concept") or {}), **(new.get("concept") or {})}}
+    out["unmatched"] = (old.get("unmatched") or set()) | (new.get("unmatched") or set())
     return out
 
 
@@ -608,6 +1063,76 @@ def _first(facts, tags):
 
 def _val(fact):
     return fact["val"] if fact else None
+
+
+def _gross_profit(facts, rev, unknown=frozenset(), capex_failed=False):
+    """{"gross_profit", "gross_basis", "gross_why"} for one fiscal year's facts, whose revenue fact is `rev`: the
+    company's own gross profit line (basis "GrossProfit"), or its revenue less its cost of revenue (basis: the cost tag),
+    both None where it can't be read soundly, and then why ("gross_why"): "insurer" (INSURANCE), "no_line" (neither a
+    gross profit nor a cost of revenue line for the year), "partial" (a cost line that may be only part of the direct
+    cost), or "unknown" (no revenue, the SEC frames failed, or figures that don't fit together).
+
+    Every figure must cover the revenue's own dates. One from another filing than the revenue's is named
+    ("gross_accn"), for _check_gross_filings to confirm that filing gave the same revenue, so a restated gross profit is
+    never set against revenue as first filed or the reverse. The gross profit line must not exceed revenue,
+    nor add up with a cost line to another revenue tag's figure far from this one (_off_footing). A cost line counts
+    only when the company tags no gross profit line and operating income is there to show that the cost line is most
+    of its costs (COST_SHARE_MIN) or that it and the company's overhead are nearly all of them (EXPLAINED), and not when
+    it leaves out depreciation (DEPRECIATION_LEFT_OUT), which a failed capex frame (`capex_failed`, whose frames hold the
+    depreciation) leaves unknown."""
+    none = lambda why: {"gross_profit": None, "gross_basis": None, "gross_why": why, "gross_accn": None}
+    if rev is None or not rev.get("val") or rev["val"] <= 0 or unknown & (set(GROSS) | set(INSURANCE)):
+        return none("unknown")
+    period = (rev.get("start"), rev.get("end"))
+    same = lambda d: d is not None and (d.get("start"), d.get("end")) == period
+    other = lambda d: d["accn"] if d.get("accn") and rev.get("accn") and d["accn"] != rev["accn"] else None
+    insured = [facts[t]["val"] for tags in INSURANCE.values() for t in tags if same(facts.get(t))]
+    if any(v >= INSURER_SHARE * rev["val"] for v in insured):
+        return none("insurer")
+    gp = facts.get("GrossProfit")
+    if gp is not None:
+        if same(gp) and gp["val"] <= rev["val"] and not _off_footing(facts, rev["val"], gp["val"], same):
+            return {"gross_profit": gp["val"], "gross_basis": "GrossProfit", "gross_why": None,
+                    "gross_accn": other(gp)}
+        return none("unknown")
+    costs = [facts[t] for t in GROSS["cost_of_revenue"] if same(facts.get(t)) and facts[t]["val"] >= 0]
+    oi = facts.get("OperatingIncomeLoss")
+    if not costs:
+        return none("unknown" if any(t in facts for t in GROSS["cost_of_revenue"]) else "no_line")
+    if not same(oi):
+        return none("partial")
+    cost = max(costs, key=lambda d: d["val"])
+    spent = rev["val"] - oi["val"]
+    if spent <= 0 or capex_failed:
+        return none("unknown")
+    line = lambda k: max([0] + [facts[t]["val"] for t in OVERHEAD[k] if same(facts.get(t))])
+    overhead = None if unknown & set(OVERHEAD) else line("research") + max(line("sga"), line("selling") + line("admin"))
+    if cost["val"] < COST_SHARE_MIN * spent:
+        if not overhead or not EXPLAINED[0] <= (cost["val"] + overhead) / spent <= EXPLAINED[1]:
+            return none("partial")
+    if overhead:
+        amortized = 0 if unknown & set(AMORTIZATION) else \
+            max([0] + [facts[t]["val"] for t in AMORTIZATION["amortization"] if same(facts.get(t))])
+        worn = max([0] + [facts[t]["val"] for t in DEPRECIATION if same(facts.get(t))]) - amortized
+        left = spent - cost["val"] - overhead - amortized
+        if worn >= DEPRECIATION_MIN * rev["val"] \
+                and DEPRECIATION_LEFT_OUT[0] * worn <= left <= DEPRECIATION_LEFT_OUT[1] * worn:
+            return none("partial")
+    return {"gross_profit": rev["val"] - cost["val"],
+            "gross_basis": next(t for t in GROSS["cost_of_revenue"] if facts.get(t) is cost), "gross_why": None,
+            "gross_accn": other(cost)}
+
+
+def _off_footing(facts, rev, gp, same=lambda d: d is not None):
+    """Whether a period's gross profit line `gp` and a cost of revenue line in `facts` add up to another revenue tag's
+    figure, more than FOOTING_GAP from its revenue `rev`, and so to no figure within 1% of it (see FOOTING_GAP). `same`
+    tells which facts are for the period."""
+    totals = [gp + facts[t]["val"] for t in GROSS["cost_of_revenue"] if same(facts.get(t))]
+    if not totals or any(abs(x - rev) <= 0.01 * abs(rev) for x in totals):
+        return False
+    others = [facts[t]["val"] for t in DURATION["revenue"]
+              if same(facts.get(t)) and abs(facts[t]["val"] - rev) > FOOTING_GAP * abs(rev)]
+    return any(abs(x - o) <= 0.005 * abs(o) for x in totals for o in others)
 
 
 def _annual(facts, has_capex, capex_failed, report, unknown=frozenset()):
@@ -626,16 +1151,29 @@ def _annual(facts, has_capex, capex_failed, report, unknown=frozenset()):
     else:
         fcf = ocf
     ni = _net_income(facts, report)
+    # From the net income tags a company without revenue tags uses, or a bank's net interest income (Truist tags
+    # neither revenue nor NetIncomeLoss).
+    period = rev or _first(facts, DURATION["net_income"] + DURATION["bank_nii"] + DURATION["bank_nii_alt"]) or {}
     return {
         "revenue": _val(rev),
         "net_income": ni,
         "operating_income": _val(facts.get("OperatingIncomeLoss")),
         "fcf": fcf,
         "diluted_shares": _val(facts.get("WeightedAverageNumberOfDilutedSharesOutstanding")),
-        # From the net income tags a company without revenue tags uses, or a bank's net interest income (Truist tags
-        # neither revenue nor NetIncomeLoss).
-        "end": (rev or _first(facts, DURATION["net_income"] + DURATION["bank_nii"] + DURATION["bank_nii_alt"])
-                or {}).get("end"),
+        "end": period.get("end"),
+        # The fiscal year's first day and the tag its revenue came from, which its quarters are matched on
+        # (_quarter_series), and its gross profit (_gross_profit; None where it can't be read soundly).
+        "start": period.get("start"),
+        "revenue_tag": next((t for t in DURATION["revenue"] if t in facts), None),
+        # Every revenue tag's figure for the same dates, which tells tags that agree apart (_quarter_series).
+        "revenue_tags": {t: facts[t]["val"] for t in DURATION["revenue"] if t in facts and rev
+                         and (facts[t].get("start"), facts[t]["end"]) == (rev.get("start"), rev["end"])},
+        # The filing each revenue tag's figure (and a bank's net interest and noninterest income's) came from, which
+        # tells whether it and the quarters share a footing (_quarter_series, _quarter_lookups).
+        "revenue_accns": {t: facts[t].get("accn") for t in DURATION["revenue"] + DURATION["bank_nii"]
+                          + DURATION["bank_nii_alt"] + DURATION["bank_noninterest_income"] if t in facts},
+        "gross_accns": {t: facts[t].get("accn") for tags in GROSS.values() for t in tags if t in facts},
+        **_gross_profit(facts, rev, unknown, capex_failed),
         "pretax": _val(_first(facts, PRETAX)),
         "pretax_has_equity_method": PRETAX[0] in facts,
         **{k: _val(_first(facts, DURATION[k])) for k in ("income_tax", "discontinued", "equity_method", "minority")},
@@ -2145,7 +2683,562 @@ def _preferred_claim(L):
     return 0 if assets and pref > assets else pref
 
 
-def derive(f, tax_rate=OWN_RATE, bank=False, check_debt=True):
+# The shortest and longest periods read as a quarter: three calendar months run 90 to 92 days, 13 and 14 weeks 91 and
+# 98, 12 weeks 84 (Costco's first three quarters), and Costco's fourth quarter 16 weeks or, in a 53-week year, 17 (119).
+QUARTER_DAYS = (80, 122)
+# How far apart the dates of back-to-back periods, or of a fiscal year's first day and its first quarter's, may be.
+SEAM_DAYS = 3
+# How many days a year-ago quarter's end may be from a year before a quarter's (52 weeks is 364 days, 53 weeks 371).
+YEAR_AGO_DAYS = 15
+# How much longer or shorter than its year-ago quarter a quarter must be for its growth to carry the difference
+# (extra_days): the fourth quarter of a 53-week year has an extra week, which alone adds about 8% to its growth.
+EXTRA_DAYS = 5
+# The least and most a worked-out fourth quarter may be against the average of the year's first three. Beyond them the
+# year's quarters are taken not to match its annual figure and are all left blank (_quarter_series). On September 2026
+# data the middle 90% of fourth quarters came to 0.53 to 1.68 times the other three.
+Q4_RATIO = (0.25, 4.0)
+# How far from a quarter of its fiscal year's revenue (or, for a year not yet in an annual report, the newest year's)
+# a quarter's revenue may be before it is taken for a misread and left blank: Plexus tagged its quarters' revenue a
+# thousand times too small in its 10-Qs from late 2023 (1.0 for about $1.0B).
+QUARTER_SCALE = 10
+# The most a quarter of a fiscal year not yet in an annual report may be against a quarter of the newest year's revenue.
+# Nvidia's fastest growth took a quarter to 2.6 times its previous year's average; L3Harris tagged its whole 2025 revenue
+# ($21.9B) as its fourth quarter's, 4.1 times, and the annual frames lack that year.
+LATER_SCALE = 3
+# How far four reported quarters may add up from their fiscal year's revenue before the year's quarters are taken not to
+# match it and left blank.
+YEAR_SUM_GAP = 0.02
+# The most a worked-out fourth quarter's gross margin may differ from the average of the year's first three before its
+# gross profit is left blank.
+Q4_MARGIN_GAP = 0.2
+# A fourth quarter is not worked out from figures rounded so coarsely that their rounding could move it by a percent: the
+# year and its first three quarters all multiples of the same power of ten, at least ROUNDING_MAX of the fourth quarter.
+# NextEra Energy's revenue from customer contracts, a footnote figure in round hundreds of millions ($25.8B for 2025,
+# $6.0B, $6.4B and $7.4B for its first three quarters), gives a fourth quarter of $6.0B where its 10-K's year less its
+# third quarter 10-Q's nine months, also rounded, gives $6.1B.
+ROUNDING_MAX = 0.01
+# A 10-Q gives three-month figures for its own quarter and the one a year before it; a 10-K can give them for the
+# quarters of its year and the year before (a recast after a spin-off, as General Electric's and Honeywell's). A
+# quarter's figure from a filing that gives it otherwise, its period more than ODD_DAYS from those (a filing's own
+# period being the latest day its figures run to, and a 10-K one that gives a year ending then), is a misdated or stray
+# one, and gives way to the latest figure a filing gives for the quarter as one of its own, or leaves the quarter
+# blank: Ball's 10-Q
+# for its first quarter of 2024 tagged its restated first quarter of 2023 ($2.98B, without its aerospace business) to
+# July to September 2022 as well, beside $3.95B as filed; JBT Marel's second quarter of 2024 reads $421M from its 10-Q
+# for the second quarter of 2026, against $402M as filed and as its 2025 10-Q repeated it.
+ODD_DAYS = 15
+# The average length of a quarter in days, and how far from a whole number of them a quarter's first day may fall from
+# the first day of its fiscal year, for a year not in an annual report yet (whose start and length are taken from the
+# newest year's), for the quarter to be numbered: after Ferguson moved its year end from July to December, its quarter
+# from January to March 2026 would otherwise read as the third quarter of a year starting in August.
+QUARTER_MEAN = 91.3
+FISCAL_GRID_DAYS = 25
+# How far from a whole number of average quarters a gap of two or more quarters between quarters with revenue may be
+# for blank quarters to fill it (_quarter_series): Costco's missing 12-week second and third quarters run 168 days,
+# 15 short of two average quarters.
+BLANK_SLACK = 20
+
+
+def _quarter_series(f, series, bank=False, gross=True):
+    """(quarters, trailing twelve months) for derive(). Up to QUARTERS_SHOWN quarters, oldest first, back to back and
+    ending with the newest, each {"start", "end", "fiscal_quarter", "revenue", "gross_profit", "derived", "yoy",
+    "extra_days", "yoy_withheld"}, and "dates_estimated" on a blank quarter whose dates are estimated; a quarter the
+    filings don't give soundly has None for its figures. The twelve months are {"end", "revenue", "gross_profit",
+    "prior_revenue"} for the newest four quarters when all four have revenue on one footing, else None; "prior_revenue"
+    is the four quarters' a year before, where each quarter has its growth.
+
+    Each quarterly frame holds a company's latest filed figure for the quarter, and each annual frame its latest filed
+    figure for the year. A quarter's revenue is read as the fiscal year's (`series`, derive's years): the first revenue
+    tag the company uses (DURATION), or for a `bank` net interest income plus noninterest income (_bank_year). A quarter
+    that doesn't tag its fiscal year's revenue tag counts under another only when the two agree: the same figure for
+    that year and in each of its quarters that has both or, for a year without both, in every quarter and year that has
+    both. A tag whose figure is zero where another's is above it doesn't count (Flowserve tags Revenues as zero beside
+    its revenue from customer contracts). A REIT whose revenue includes rent tagged apart (derive) has no quarterly
+    revenue, since its rent is not read quarterly. A figure from a filing other than the company's own 10-Qs and 10-Ks
+    ("unmatched", _quarter_lookups: an 8-K giving a business it bought, such as Neuronetics' third quarter of 2023 in the
+    frames, Greenbrook's) gives way to the latest figure its own filings give for the period, and a fiscal year from
+    such a filing is not one of the company's (Amcor's 2023 in the annual frames is Berry Global's year to September).
+
+    Companies seldom report their fourth quarter on its own, so it is worked out as the fiscal year's revenue less its
+    first three quarters, where all three are there back to back from the fiscal year's first day under the same tag and
+    the rest of the year is a quarter long ("derived": true). Periods are matched on their dates, so fiscal years ending
+    in any month or running 52 or 53 weeks fit. A period that runs across the end of a fiscal year is no quarter of it.
+
+    Figures are only combined where they come from one filing, or where the filings on one footing give them all as
+    they are shown (_footings, from the company's own filings, "concept"), so a restatement never lands in a worked-out
+    quarter or a growth rate: a fourth quarter whose year and first three quarters in the frames are not on one footing
+    is worked out from the latest footing whose filings give all four figures, or left blank; growth on the year before
+    is left out ("yoy_withheld": "restated" where each quarter is on some footing but not the same one, "unchecked"
+    where that can't be told, the company's filings not being looked up yet or not giving a figure, and "no_base" where
+    the year-ago quarter had no revenue). A fiscal
+    year whose quarters don't match its annual figure has all its quarters left blank: a worked-out fourth quarter at or
+    below zero or outside Q4_RATIO of the other three, four reported quarters more than YEAR_SUM_GAP from the year, or a
+    quarter as large as the whole year (Comfort Systems' 2025 revenue in the frames is its first quarter's). A quarter
+    more than QUARTER_SCALE from a quarter of its year's revenue (above LATER_SCALE of the newest year's, for a year not
+    in an annual report yet), or equal to a year's revenue, is left blank.
+
+    Gross profit (with `gross`) is read on the newest fiscal year's basis (_gross_profit), for the quarters of the
+    years on that basis, so every quarter's is measured one way (The Hackett Group's 2023 gross profit line comes to
+    29% of revenue, and its 2025 revenue less cost of sales to 38%): the gross profit line, or revenue less the same
+    cost tag, from the same filing as the quarter's revenue or one that gave the same revenue. Each quarter's growth
+    ("yoy") is against the quarter a year before, and "extra_days" is how many days longer (or, below zero, shorter)
+    the quarter ran, where that is at least EXTRA_DAYS.
+    Between two quarters with revenue, a gap as long as a whole number of quarters is filled with blank quarters, and
+    any other gap (a fiscal year's end moved) starts the series again after it. Nothing is returned when the newest
+    quarter ended more than two quarters before the newest fiscal year did, so an old series never passes for a current
+    one."""
+    D, day = dt.date.fromisoformat, dt.timedelta(days=1)
+    seam = SEAM_DAYS * day
+    if any(s.get("rent_revenue") for s in series):
+        return [], None
+    concept, unmatched = f.get("concept") or {}, f.get("unmatched") or set()
+    raw = f.get("quarters") or {}
+    # The SEC's companyconcept answers run days behind its frames: Coca-Cola's 10-Q for its quarter to July 3, 2026 was
+    # in the frames weeks before it was in its companyconcept answer. A filing the rows lack that gives a period ending
+    # after every row is such a new 10-Q or 10-K rather than another company's figures in an 8-K, so its figures in the
+    # frames (its own quarter or year, and the year-ago ones it repeats) join the rows as its latest filing.
+    ends = [r[1] for rs in concept.values() for r in rs]
+    newer = {facts[t]["accn"] for (_, b), facts in raw.items() for t in facts
+             if facts[t].get("accn") in unmatched and ends and b > max(ends)}
+    newer |= {accn for x in series for accn in (x.get("revenue_accns") or {}).values()
+              if accn in unmatched and ends and (x.get("end") or "") > max(ends)}
+    if newer:
+        concept = {t: rs + [[a, b, facts[t]["val"], facts[t]["accn"], "9999-12-31"]
+                            for (a, b), facts in sorted(raw.items()) if facts.get(t, {}).get("accn") in newer]
+                   + [[x["start"], x["end"], x["revenue_tags"][t], x["revenue_accns"][t], "9999-12-31"] for x in series
+                      if (x.get("revenue_accns") or {}).get(t) in newer and t in (x.get("revenue_tags") or {})]
+                   for t, rs in concept.items()}
+        unmatched = unmatched - newer
+    nii_tags, fees_tag = DURATION["bank_nii"] + DURATION["bank_nii_alt"], DURATION["bank_noninterest_income"][0]
+    # Revenue footings from the revenue tags alone (a bank's two parts): a restatement of gross profit only is no
+    # restatement of revenue, and gross profit has its own (gross_together).
+    concept_gross = concept
+    concept = {t: rs for t, rs in concept.items() if t in REVENUE_TAGS or t in nii_tags or t == fees_tag}
+    footing = _footings(concept) if concept else {}
+
+    def latest_row(tag, start, end):
+        """The latest [start, end, value, accession number, filed] the company's own filings give for a period."""
+        return next((r for r in reversed(concept.get(tag) or []) if (r[0], r[1]) == (start, end)), None)
+
+    # Each filing's own period: the latest day its figures run to, and whether it gives a year ending then (a 10-K).
+    period = {}
+    for rs in (f.get("concept") or {}).values():
+        for r in rs:
+            e, yearly = D(r[1]), (D(r[1]) - D(r[0])).days >= 300
+            end, annual = period.get(r[3], (e, yearly))
+            period[r[3]] = (max(end, e), annual or yearly) if e <= end else (e, yearly)
+
+    def stray(accn, b):
+        """Whether a filing gives a quarter ending on `b` other than as one of its own (ODD_DAYS)."""
+        if accn not in period:
+            return False
+        gap = (period[accn][0] - b).days
+        if period[accn][1]:
+            return not -ODD_DAYS <= gap <= 2 * 371 + ODD_DAYS
+        return min(abs(gap), abs(gap - 364), abs(gap - 371)) > ODD_DAYS
+
+    def own_row(tag, start, end):
+        """The latest row the company's own filings give for a quarter as one of their own."""
+        return next((r for r in reversed(concept.get(tag) or []) if (r[0], r[1]) == (start, end)
+                     and not stray(r[3], D(end))), None)
+
+    fys = []
+    for s in series:
+        if s.get("start") and s.get("end") and s.get("revenue") is not None:
+            a, b = D(s["start"]), D(s["end"])
+            accns = s.get("revenue_accns") or {}
+            if bank:
+                nii = next((t for t in nii_tags if t in accns), None)
+                own = {"bank": {accns[nii], accns[fees_tag]}} if nii and fees_tag in accns else {}
+            else:
+                own = {t: {accns.get(t)} for t in (s.get("revenue_tags") or {})}
+            mine = own.get("bank" if bank else s.get("revenue_tag"), set())
+            if 350 <= (b - a).days + 1 <= 380 and not mine & unmatched:
+                fys.append({"a": a, "b": b, "revenue": s["revenue"], "tag": "bank" if bank else s.get("revenue_tag"),
+                            "tags": s.get("revenue_tags") or {}, "accns": own,
+                            "gross_profit": s.get("gross_profit") if gross else None,
+                            "basis": s.get("gross_basis") if gross else None})
+    if not fys or not raw:
+        return [], None
+    newest = max(fys, key=lambda y: y["b"])
+    # Fiscal years the annual frames lack, from the company's own filings (_quarter_lookups), which only work out their
+    # fourth quarter: under the newest year's revenue tag, with gross profit on its basis.
+    for (start, end), vals in (f.get("fy_extra") or {}).items():
+        a, b = D(start), D(end)
+        tag, basis = newest["tag"], newest["basis"]
+        if bank or tag not in vals or b > newest["b"] or any(a <= y["b"] - seam and b >= y["a"] + seam for y in fys):
+            continue
+        cost = vals[basis]["val"] if basis and basis != "GrossProfit" and basis in vals else None
+        fys.append({"a": a, "b": b, "revenue": vals[tag]["val"], "tag": tag, "tags": {tag: vals[tag]["val"]},
+                    "accns": {tag: {vals[tag]["accn"]}}, "basis": basis,
+                    "gross_profit": vals["GrossProfit"]["val"] if basis == "GrossProfit" and "GrossProfit" in vals
+                    and vals["GrossProfit"]["accn"] == vals[tag]["accn"] else vals[tag]["val"] - cost
+                    if cost is not None and vals[basis]["accn"] == vals[tag]["accn"] else None})
+    fys.sort(key=lambda y: y["a"])
+
+    def fiscal_year(p):
+        """(the fiscal year a period falls in, one of fys, or None; whether it is instead the newest one, for a period
+        after it whose year is not in an annual report yet)."""
+        y = next((y for y in fys if p["start"] >= y["a"] - seam and p["end"] <= y["b"] + seam), None)
+        return (y, False) if y else (newest, True) if p["start"] > newest["b"] else (None, False)
+
+    # Where fiscal years end: those in the annual reports, and the day before the oldest begins.
+    year_ends = [y["b"] for y in fys] + [fys[0]["a"] - day]
+
+    def pairs_of(rows):
+        """{(tag, tag): whether the two gave the same figure, within half a percent, in every one of `rows` (each
+        {tag: value}) that has both}."""
+        out = {}
+        for vals in rows:
+            items = [(t, v) for t, v in vals.items() if t in REVENUE_TAGS]
+            for i, (t1, v1) in enumerate(items):
+                for t2, v2 in items[i + 1:]:
+                    key = tuple(sorted((t1, t2)))
+                    out[key] = out.get(key, True) and abs(v1 - v2) <= 0.005 * max(abs(v1), abs(v2))
+        return out
+
+    if not bank:
+        # Two revenue tags agree for a fiscal year when both gave the same figure for the year and in each of its
+        # quarters (and, for the newest year, those after it) that has both: Sonoco's revenue from customer contracts
+        # was its whole revenue in 2025, the only tag its 2025 quarters use, but not in 2022. For a year without both
+        # tags, they must have given the same figure in every quarter and year that has both, and in at least one (ADP
+        # tags its quarters one way and its years both ways).
+        vals = lambda facts: {t: v["val"] for t, v in facts.items()}
+        overall = pairs_of([vals(facts) for facts in raw.values()] + [y["tags"] for y in fys])
+        yearly = {}
+        for y in fys:
+            inside = [vals(facts) for (a, b), facts in raw.items()
+                      if D(a) >= y["a"] - seam and (D(b) <= y["b"] + seam or y is newest and D(a) > y["b"])]
+            yearly[id(y)] = pairs_of([y["tags"]] + inside)
+
+        def agree(t1, t2, y=None):
+            key = tuple(sorted((t1, t2)))
+            if t1 == t2:
+                return True
+            if y is not None and t1 in y["tags"] and t2 in y["tags"]:
+                return yearly[id(y)].get(key, False)
+            return overall.get(key, False)
+    else:
+        agree = lambda t1, t2, y=None: True
+
+    periods = []
+    for (start, end), facts in raw.items():
+        a, b = D(start), D(end)
+        if not QUARTER_DAYS[0] <= (b - a).days + 1 <= QUARTER_DAYS[1] \
+                or any(a <= e - seam and b >= e + seam for e in year_ends):
+            continue
+        if bank:
+            nii = next((t for t in nii_tags if t in facts), None)
+            rev, tag = _bank_year(facts)["bank_revenue"], "bank"
+            accns = {facts[nii].get("accn"), facts[fees_tag].get("accn")} if nii and fees_tag in facts else {None}
+            tags = [nii, fees_tag] if nii and fees_tag in facts else []
+            if any(stray(accn, b) for accn in accns):
+                continue
+        else:
+            # The fiscal year's own tag, else one that agrees with it, so a quarter that also tags another revenue
+            # figure still counts: Sempra's 2025 quarters tag its operating revenue as utilities do, and its revenue
+            # from customer contracts, a smaller figure first in DURATION, beside it.
+            y = fiscal_year({"start": a, "end": b})[0]
+            above = any(facts[t]["val"] > 0 for t in REVENUE_TAGS & facts.keys())
+            tag = next((t for t in DURATION["revenue"] if t in facts and (facts[t]["val"] or not above)
+                        and (y is None or agree(t, y["tag"], y))), None)
+            rev = facts[tag]["val"] if tag else None
+            accns, tags = {facts[tag].get("accn")} if tag else set(), [tag]
+            row = latest_row(tag, start, end) if accns & unmatched else None
+            if tag and any(stray(accn, b) for accn in accns):
+                row = own_row(tag, start, end)
+                if row is None:
+                    continue
+            if row is not None:
+                rev, accns = row[2], {row[3]}
+                facts = {**facts, tag: {"val": row[2], "accn": row[3]}}
+        if rev is not None:
+            periods.append({"start": a, "end": b, "revenue": rev, "tag": tag, "facts": facts, "derived": False,
+                            "accns": accns, "tags": tags})
+    periods.sort(key=lambda p: (p["end"], p["start"]))
+
+    # Two periods that overlap by more than a seam are two readings of one quarter. The one under its fiscal year's
+    # revenue tag counts, where only one is (Waters' 2025 first quarter, to March 31, beside a business it was buying
+    # tagged to March 29 under another tag); otherwise which is right can't be told, and neither counts.
+    drop = set()
+    for i, (p, q) in enumerate(zip(periods, periods[1:])):
+        if q["start"] <= p["end"] - seam:
+            y = fiscal_year(p)[0] or fiscal_year(q)[0]
+            own = [bool(y and not bank and y["tag"] in x["facts"]) for x in (p, q)]
+            drop |= {i + 1} if own == [True, False] else {i} if own == [False, True] else {i, i + 1}
+    periods = [p for i, p in enumerate(periods) if i not in drop]
+
+    def scaled(p):
+        (y, later), r = fiscal_year(p), p["revenue"]
+        if any(abs(r - x["revenue"]) <= 0.001 * abs(x["revenue"]) for x in fys if abs(x["revenue"]) >= 1e7):
+            return False  # a year's revenue tagged as a quarter's (L3Harris' 2024)
+        return y is None or y["revenue"] <= 0 \
+            or 1 / QUARTER_SCALE <= r / (y["revenue"] / 4) <= (LATER_SCALE if later else QUARTER_SCALE)
+    periods = [p for p in periods if scaled(p)]
+
+    # Each footing's figure for each tag and period: the latest filing on that footing that gives it, which every other
+    # filing on it agrees with (_footings).
+    within, footings = {}, sorted(set(footing.values()), reverse=True)
+    for t, rs in concept.items():
+        for start, end, val, accn, _ in rs:
+            within[(footing[accn], t, start, end)] = (val, accn)  # rows run oldest filing first, so the latest wins
+
+    def on(x, fo):
+        """A figure (a quarter, a year, or a fourth quarter worked out from its year and first three quarters) as the
+        filings on footing `fo` give it, with the filings, or None where they don't give every part of it."""
+        got, accns = [], set()
+        for a, b in x.get("parts") or [(x["start"], x["end"])]:
+            vals = [within.get((fo, t, a.isoformat(), b.isoformat())) for t in x["tags"]]
+            if not vals or None in vals:
+                return None
+            got.append(sum(v for v, _ in vals))
+            accns |= {accn for _, accn in vals}
+        return (got[0] - sum(got[1:]) if x.get("parts") else got[0]), accns
+
+    def shown_on(x, fo):
+        """Whether the filings on footing `fo` give a figure as it is shown (a worked-out one within half a percent)."""
+        v = on(x, fo)
+        return v is not None and abs(v[0] - x["revenue"]) <= (0.005 if x.get("parts") else RESTATED_GAP) * abs(
+            x["revenue"])
+
+    def consistent(figures):
+        """Whether figures (periods, years and worked-out fourth quarters) may be combined: all from one filing, or
+        all given as they are shown by the filings on one footing (_footings). The second holds for a quarter and its
+        year-ago quarter from the 10-Q that first gave both, though a restatement of other periods came between."""
+        accns = set().union(*(x["accns"] for x in figures))
+        if None not in accns and len(accns) == 1:
+            return True
+        return any(all(shown_on(x, fo) for x in figures) for fo in footings)
+
+    def restated(figures):
+        """Whether figures that are not consistent are each on some footing, so that a restatement stands between them,
+        rather than their filings being unknown (not looked up yet, or not the company's own)."""
+        return bool(footings) and all(any(shown_on(x, fo) for fo in footings) for x in figures)
+
+    gross_memo = {}
+
+    def gross_together(basis, items):
+        """Whether gross profit figures (`items`, [(start, end, value)] under `basis`, the gross profit tag or the cost
+        tag) are all given as they are by the filings on one footing of that tag (_footings)."""
+        rows = concept_gross.get(basis) or []
+        if basis not in gross_memo:
+            fo = _footings({basis: rows})
+            gross_memo[basis] = (set(fo.values()), {(fo[r[3]], r[0], r[1]): r[2] for r in rows})
+        footings_g, at = gross_memo[basis]
+        return bool(items) and any(all(abs(at.get((x, a.isoformat(), b.isoformat()), math.inf) - v)
+                                       <= RESTATED_GAP * abs(v) for a, b, v in items) for x in footings_g)
+
+    def refooted(q4):
+        """A fourth quarter worked out from its year and first three quarters ("parts", "tags") as the latest footing
+        whose filings give all four figures has them, with those filings and the quarters' figures, or None. Each
+        quarter must be within QUARTER_SCALE of a quarter of the year, as scaled() asks of the frames' quarters: Primo
+        Brands' holding company, before it took over the business, filed a 10-Q giving its own third quarter of 2024 as
+        zero, beside the business's year and first two quarters."""
+        for fo in footings:
+            v = on(q4, fo)
+            if v is not None:
+                parts = [on({"start": a, "end": b, "tags": q4["tags"]}, fo)[0] for a, b in q4["parts"][1:]]
+                year = v[0] + sum(parts)
+                if year > 0 and all(1 / QUARTER_SCALE <= x / (year / 4) <= QUARTER_SCALE for x in parts):
+                    return v[0], v[1], parts
+        return None
+
+    # Fourth quarters worked out from the year, and years whose quarters don't match their annual figure.
+    derived, mismatched = [], []
+    for y in fys:
+        inside = [p for p in periods if p["start"] >= y["a"] - seam and p["end"] <= y["b"] + seam]
+        first3, at = [], y["a"]
+        for p in inside:
+            if len(first3) < 3 and abs((p["start"] - at).days) <= SEAM_DAYS:
+                first3.append(p)
+                at = p["end"] + day
+        rest = [p for p in inside if first3 and p["start"] > first3[-1]["end"]]
+        # The year's revenue under the tag its quarters use, where they all use one the year tags too (an agreeing
+        # tag's figure can differ by up to half a percent, which would all land in a worked-out fourth quarter).
+        used = {p["tag"] for p in first3 + rest}
+        tag = next(iter(used)) if len(used) == 1 and not bank and next(iter(used)) in y["tags"] else y["tag"]
+        whole = y["revenue"] if bank else y["tags"].get(tag, y["revenue"])
+        tags = first3[0]["tags"] if first3 else []
+        year = {"start": y["a"], "end": y["b"], "revenue": whole, "accns": y["accns"].get(tag) or {None},
+                "tags": tags if bank else [tag]}
+        if y["revenue"] > 0 and any(p["revenue"] >= 0.999 * y["revenue"] for p in inside):
+            mismatched.append(y)  # a quarter as large as the whole year (NiSource's year tagged as its fourth quarter)
+        elif len(first3) == 3 and len(rest) == 1 and abs((rest[0]["start"] - at).days) <= SEAM_DAYS \
+                and abs((rest[0]["end"] - y["b"]).days) <= SEAM_DAYS:
+            if abs(sum(p["revenue"] for p in first3 + rest) - whole) > YEAR_SUM_GAP * abs(whole):
+                mismatched.append(y)
+        elif len(first3) == 3 and not rest:
+            a, b = at, y["b"]
+            if not QUARTER_DAYS[0] <= (b - a).days + 1 <= QUARTER_DAYS[1] \
+                    or any(not agree(p["tag"], y["tag"], y) for p in first3) \
+                    or any(p["start"] <= b - seam and p["end"] >= a + seam for p in periods):
+                continue
+            # One set of tags for the year and all three quarters, which the filings on a footing are read under.
+            q4 = {"start": a, "end": b, "derived": True, "tags": tags,
+                  "parts": [(y["a"], y["b"])] + [(p["start"], p["end"]) for p in first3]}
+            uniform = all(x["tags"] == tags for x in first3 + [year])
+            if consistent(first3 + [year]):
+                value, accns, parts = whole - sum(p["revenue"] for p in first3), year["accns"].union(
+                    *(p["accns"] for p in first3)), [p["revenue"] for p in first3]
+            else:
+                value, accns, parts = uniform and refooted(q4) or (None, None, [0])
+                if value is None or value <= 0 or sum(parts) <= 0 \
+                        or not Q4_RATIO[0] <= value / (sum(parts) / 3) <= Q4_RATIO[1] \
+                        or _grain([value + sum(parts)] + parts) >= ROUNDING_MAX * value:
+                    continue  # left blank: its year and quarters as the filings last gave them don't fit together
+                derived.append({**q4, "revenue": value, "gross_profit": None, "accns": accns})
+                continue
+            mean = sum(parts) / 3
+            if value <= 0 or mean <= 0 or not Q4_RATIO[0] <= value / mean <= Q4_RATIO[1]:
+                mismatched.append(y)
+                continue
+            if _grain([whole] + parts) >= ROUNDING_MAX * value:
+                continue
+            gps = [_quarter_gross(p, y["basis"], concept) if y["basis"] == newest["basis"] else None for p in first3]
+            # The year's gross profit less the first three quarters', on the year's basis: its gross profit line, or
+            # its revenue (under the quarters' tag, as above) less its cost of revenue.
+            gp = None if y["gross_profit"] is None or None in gps else \
+                y["gross_profit"] - sum(gps) if y["basis"] == "GrossProfit" else \
+                whole - (y["revenue"] - y["gross_profit"]) - sum(gps)
+            margins = [g / p["revenue"] for g, p in zip(gps, first3) if g is not None and p["revenue"] > 0]
+            # The year's gross profit line (or cost) and its first three quarters' on one footing (gross_together).
+            basis = y["basis"]
+            gitems = [] if gp is None else [(y["a"], y["b"], y["gross_profit"] if basis == "GrossProfit"
+                                              else y["revenue"] - y["gross_profit"])] \
+                + [(p["start"], p["end"], p["facts"][basis]["val"]) for p in first3]
+            if gp is not None and (gp > value or len(margins) < 3 or not gross_together(basis, gitems)
+                                   or abs(gp / value - sum(margins) / 3) > Q4_MARGIN_GAP):
+                gp = None
+            derived.append({**q4, "revenue": value, "gross_profit": gp, "accns": accns, "basis": basis,
+                            "gitems": gitems if gp is not None else []})
+    periods = [p for p in periods if fiscal_year(p)[1] or fiscal_year(p)[0] not in mismatched]
+    for p in periods:
+        y = fiscal_year(p)[0]
+        p["gross_profit"] = _quarter_gross(p, y["basis"], concept) if y and y["basis"] == newest["basis"] else None
+        p["basis"] = y["basis"] if y else None
+        p["gitems"] = [(p["start"], p["end"], p["facts"][p["basis"]]["val"])] if p["gross_profit"] is not None else []
+    periods = sorted(periods + derived, key=lambda p: p["end"])
+    if not periods or periods[-1]["end"] < newest["b"] - 183 * day:
+        return [], None
+
+    # Back to back, with blank quarters in each gap as long as a whole number of quarters: one quarter long
+    # (QUARTER_DAYS), or within BLANK_SLACK days of two or more average quarters. Where a gap holds a fiscal year's end,
+    # the blank quarters on either side of it end and begin there; any other dates in a gap of two or more quarters are
+    # estimated. A gap of any other length (a fiscal year's end moved, with a stub period between: Red Cat's 14 months
+    # from November 2023, when it moved its year end from April to December) starts the series again after it.
+    slots = []
+    for p in periods[-(QUARTERS_SHOWN + 4):]:
+        if slots:
+            gap = (p["start"] - slots[-1]["end"]).days - 1
+            n = round(gap / QUARTER_MEAN) if gap > SEAM_DAYS else 0
+            if gap > SEAM_DAYS and not (n == 1 and QUARTER_DAYS[0] <= gap <= QUARTER_DAYS[1]
+                                        or n > 1 and abs(gap - n * QUARTER_MEAN) <= BLANK_SLACK):
+                slots = []
+            elif gap > SEAM_DAYS:
+                first, last = slots[-1]["end"] + day, p["start"] - day
+                # The last day of each blank quarter but the last: a fiscal year's end near where it would fall, or an
+                # estimate.
+                ends = []
+                for k in range(1, n):
+                    guess = first + dt.timedelta(days=round(k * (gap + 1) / n)) - day
+                    near = [e for e in year_ends if abs((e - guess).days) <= QUARTER_MEAN / 2]
+                    ends.append((min(near, key=lambda e: abs((e - guess).days)), False) if near else (guess, True))
+                ends.append((last, False))
+                for k, (b, guessed) in enumerate(ends):
+                    slots.append({"start": slots[-1]["end"] + day, "end": b, "revenue": None, "gross_profit": None,
+                                  "derived": False, "accns": {None},
+                                  "estimated": guessed or k > 0 and ends[k - 1][1]})
+        slots.append(p)
+    # Fiscal quarter numbers, counted from the start of the fiscal year a quarter falls in: the first days of the years
+    # in the annual reports and of those right after them, with any years beyond taken to run as long as the nearest,
+    # where the quarter lines up with them (FISCAL_GRID_DAYS).
+    starts = sorted({y["a"] for y in fys} | {y["b"] + day for y in fys})
+    while starts[0] > slots[0]["start"]:
+        starts.insert(0, starts[0] - (fys[0]["b"] - fys[0]["a"] + day))
+    while starts[-1] <= slots[-1]["start"]:
+        starts.append(starts[-1] + (newest["b"] - newest["a"] + day))
+
+    def number(s):
+        y, later = fiscal_year(s)
+        if y is not None and not later:
+            base, strict = y["a"], False
+        else:
+            begun = [x for x in starts if x <= s["start"] + 10 * day]
+            if not begun:
+                return None
+            base, strict = begun[-1], True
+        off = (s["start"] - base).days
+        n = round(off / QUARTER_MEAN)
+        return n + 1 if 0 <= n <= 3 and not (strict and abs(off - n * QUARTER_MEAN) > FISCAL_GRID_DAYS) else None
+
+    out, agos = [], []
+    for s in slots:
+        ago = next((x for x in slots if abs((s["end"] - x["end"]).days - 365) <= YEAR_AGO_DAYS), None)
+        yoy = extra = withheld = None
+        if ago is not None and s["revenue"] is not None and ago["revenue"] is not None:
+            if ago["revenue"] <= 0:
+                withheld = "no_base"
+            elif consistent([s, ago]):
+                yoy = s["revenue"] / ago["revenue"] - 1
+                extra = (s["end"] - s["start"]).days - (ago["end"] - ago["start"]).days
+            else:
+                withheld = "restated" if restated([s, ago]) else "unchecked"
+        agos.append(ago if yoy is not None else None)
+        out.append({"start": s["start"].isoformat(), "end": s["end"].isoformat(), "fiscal_quarter": number(s),
+                    "revenue": s["revenue"], "gross_profit": s["gross_profit"], "derived": s["derived"], "yoy": yoy,
+                    "extra_days": extra if extra is not None and abs(extra) >= EXTRA_DAYS else None,
+                    "yoy_withheld": withheld, **({"dates_estimated": True} if s.get("estimated") else {})})
+    out = out[-QUARTERS_SHOWN:]
+    while out and out[0]["revenue"] is None:
+        out.pop(0)
+    recent, ttm = slots[-4:], None
+    if len(recent) == 4 and all(s["revenue"] is not None for s in recent) and consistent(recent) \
+            and 350 <= (recent[-1]["end"] - recent[0]["start"]).days + 1 <= 380:
+        # Gross profit for the twelve months where each quarter's is known, from gross profit figures on one footing.
+        gps = [s["gross_profit"] for s in recent]
+        if None not in gps and (len({s.get("basis") for s in recent}) > 1
+                                or not gross_together(recent[0].get("basis"), [x for s in recent for x in s["gitems"]])):
+            gps = [None]
+        before = agos[-4:]
+        ttm = {"end": recent[-1]["end"].isoformat(), "revenue": sum(s["revenue"] for s in recent),
+               "gross_profit": sum(gps) if None not in gps else None,
+               "prior_revenue": sum(x["revenue"] for x in before)
+               if None not in before and len({id(x) for x in before}) == 4 else None}
+    return out, ttm
+
+
+def _grain(values):
+    """The largest power of ten that every one of `values` (whole numbers of dollars) is a multiple of."""
+    g = 1
+    while g < 1e12 and all(round(v) % (g * 10) == 0 for v in values):
+        g *= 10
+    return g
+
+
+def _quarter_gross(p, basis, concept=None):
+    """A quarter's gross profit on a fiscal year's basis (_gross_profit's gross_basis), or None: its gross profit line,
+    or its revenue less the cost tag named, never above its revenue, and from the same filing as its revenue or one
+    that gave the same revenue (_gave, from the company's own filings `concept`)."""
+    if not basis or basis not in p["facts"]:
+        return None
+    facts, accn = p["facts"], p["facts"][basis].get("accn")
+    # Its filing's revenue, where the frames have it under another tag, or else its own filings.
+    same = lambda t, d: t in REVENUE_TAGS and d.get("accn") == accn \
+        and abs(d["val"] - p["revenue"]) <= RESTATED_GAP * abs(p["revenue"])
+    if accn not in p["accns"] and not any(same(t, d) for t, d in facts.items()) \
+            and not _gave(concept or {}, p["start"].isoformat(), p["end"].isoformat(), accn, p["revenue"]):
+        return None
+    if basis == "GrossProfit":
+        v = _val(facts.get("GrossProfit"))
+        if v is not None and _off_footing(facts, p["revenue"], v):
+            return None
+    else:
+        cost = _val(facts.get(basis))
+        v = p["revenue"] - cost if cost is not None and cost >= 0 else None
+    return v if v is not None and v <= p["revenue"] else None
+
+
+def derive(f, tax_rate=OWN_RATE, bank=False, check_debt=True, gross=True):
     """Turns raw line items into the ratios the screener and reports use. Missing data stays None.
 
     Earnings-based measures (the adj_ keys and profitable_years) leave out one-time items. `tax_rate` is the
@@ -2204,7 +3297,7 @@ def derive(f, tax_rate=OWN_RATE, bank=False, check_debt=True):
         # sliver of what it earns in interest (Granite Point's $12.5M in 2025, on $2B of assets).
         assets = (f.get("latest") or {}).get("total_assets") or 0
         rent = lambda s: s.get("lease_income") or 0
-        series = [dict(s, revenue=rent(s) + (s.get("revenue") or 0))
+        series = [dict(s, revenue=rent(s) + (s.get("revenue") or 0), rent_revenue=True)
                   if (s.get("revenue") or 0) < 0.5 * rent(s) and assets > 0 and rent(s) >= LEASE_MIN * assets else s
                   for s in series]
     i_last = next((i for i in reversed(range(len(series)))
@@ -2239,9 +3332,14 @@ def derive(f, tax_rate=OWN_RATE, bank=False, check_debt=True):
     tax_normal, tax_basis = _normal_rate(series, i_last, window, tax_rate)
 
     ffo = _ffo(series, window, found) if reit else {}
+    # Gross profit means nothing for a bank, an insurer or another financial company (`gross` is False), nor for a REIT,
+    # so none is read for them.
+    gross = gross and not bank and not reit
     hist = [{"year": y, "revenue": s.get("revenue"), "net_income": s.get("net_income"), "fcf": s.get("fcf"),
-             **({"ffo": ffo[j][0], "adj_ffo": ffo[j][1]} if reit else {})}
+             **({"ffo": ffo[j][0], "adj_ffo": ffo[j][1]} if reit else {}),
+             **({"gross_profit": s.get("gross_profit")} if gross else {})}
             for j, y, s in zip(window, ys, ss) if s.get("revenue") is not None or s.get("net_income") is not None]
+    quarters, ttm = _quarter_series(f, series[:i_last + 1], bank, gross)
     recent3 = [a for a, _ in adjusted[-3:] if a is not None]
     if bank:
         # A bank's gains and losses on investment securities are part of its noninterest income, so the one-time ones
@@ -2329,6 +3427,28 @@ def derive(f, tax_rate=OWN_RATE, bank=False, check_debt=True):
         "revenue_years": len(pairs) + 1 if revs else 0,
         "dilution": dil,
         "history": hist,
+        # The newest fiscal year's gross profit and its share of revenue (_gross_profit), and where it comes from: the
+        # company's gross profit line ("GrossProfit") or its revenue less the cost tag named. None for financial
+        # companies and REITs, and where it can't be read soundly.
+        "gross_profit": last.get("gross_profit") if gross else None,
+        "gross_margin": last["gross_profit"] / rev if gross and last.get("gross_profit") is not None and rev and rev > 0
+        else None,
+        "gross_basis": last.get("gross_basis") if gross else None,
+        # Why there is no gross profit, where there is none: _gross_profit's reason, or "bank", "reit" or "financial"
+        # for the companies it doesn't apply to.
+        "gross_why": (last.get("gross_why") or ("unknown" if last.get("gross_profit") is None else None)) if gross
+        else "bank" if bank else "reit" if reit else "financial",
+        # Up to QUARTERS_SHOWN quarters of revenue and gross profit, oldest first, and the newest four quarters'
+        # together (_quarter_series): the trailing twelve months' revenue, gross profit and gross margin, and the day
+        # they end, None where four quarters in a row can't be read on one footing, and the revenue of the four quarters
+        # a year before them, where each of the four has its growth on the year before.
+        "quarters": quarters,
+        "ttm_revenue": ttm["revenue"] if ttm else None,
+        "ttm_prior_revenue": ttm["prior_revenue"] if ttm else None,
+        "ttm_gross_profit": ttm["gross_profit"] if ttm else None,
+        "ttm_gross_margin": ttm["gross_profit"] / ttm["revenue"] if ttm and ttm["gross_profit"] is not None
+        and ttm["revenue"] > 0 else None,
+        "ttm_end": ttm["end"] if ttm else None,
         "loc": f.get("loc"),
         **(_reit_fields(ffo, window, series, rev, equity, L) if reit else {"reit": False}),
         **(_bank_fields(last, prev, adj_ni, one_time, L) if bank else {"bank": False}),
