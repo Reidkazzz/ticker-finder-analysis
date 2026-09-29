@@ -94,15 +94,28 @@ const TRACK_RECORD = {
   bank: `${TESTED} For banks it helped: in each of the four years, the banks it called undervalued did better than those it called overvalued, by 5.5 to 16 percentage points, about 9 on average. ${LISTED}`,
   financial: `${TESTED} For financial companies other than banks the record is mixed: the ones it called undervalued did better than those it called overvalued in three of the four years, by 3 to 19 percentage points, but worse in the other, by 9.5. ${LISTED}`,
   reit: `${TESTED} For REITs the verdicts did not help: in three of the four years, the REITs it called undervalued did worse than those it called overvalued. Read the verdict as how the price compares with similar REITs, not as a forecast. ${LISTED}`,
+  // Lenders whose revenue is read from net interest income and business development companies (revenue_basis) had no
+  // figures when the backtest ran, so none of them was in it.
+  untested: "How well the verdicts work for this kind of company hasn't been measured yet. We re-ran this model as it would have run in late September of 2022, 2023, 2024 and 2025, using only the SEC filings public at the time, and followed each stock's return over the next 12 months, but lenders whose revenue is read from their net interest income, and business development companies, had no figures on this site then, so none was in that test. Read the verdict as how today's price compares with similar companies, not as a prediction.",
   other: `${TESTED} For companies outside finance, most of those valued here, the verdicts barely predicted which stocks would do better. The ones called undervalued beat those called overvalued by 0.5 to 5 percentage points in three of the years and trailed them by 5.5 in the other, close to even overall. Calls on the very largest companies were no better: the best-known ones it called overvalued, such as Nvidia and Eli Lilly, more often went on to beat other large companies than to trail them. Read the verdict as how today's price compares with similar companies and with a simple forecast of the company's cash, not as a prediction. ${LISTED}`,
 };
+
+// Which of a lender's two peer estimates its fair value used ([price to earnings, price to book]); both where it has no
+// fair value, whose explanation then names the methods that would apply.
+function lenderMethods(r) {
+  const names = (r.valuation?.methods || []).map((m) => m.name);
+  if (!names.length) return [true, true];
+  return [names.includes("Peer price to earnings"), names.includes("Peer price to book")];
+}
 
 // What kind of company the fair value treats this as, which decides the methods it uses (report.fair_value).
 function valuationKind(r) {
   const f = r.fundamentals || {};
   if (f.bank) return "bank";
   if (f.reit === "property") return "reit";
-  if (r.sector === "Finance" || f.reit === "mortgage") return "financial";
+  // A company whose revenue is read the way a lender's or a business development company's is (revenue_basis) is valued
+  // as a financial one whatever sector Nasdaq files it under (report.financial).
+  if (r.sector === "Finance" || f.reit === "mortgage" || f.revenue_basis) return "financial";
   return "other";
 }
 
@@ -136,11 +149,22 @@ function howItWorks(r) {
     items.push(item("Price to tangible book and price to earnings", "Tangible book value is what the shareholders own, less goodwill and other intangible assets. Banks are valued this way and on their earnings, not on sales or a cash-flow model, since their borrowing is their raw material."));
   } else if (kind === "reit") {
     items.push(item("Price to FFO and value to sales", "Funds from operations (FFO) is the profit measure REITs report: net income with property depreciation added back and property sales left out."));
+  } else if (r.fundamentals?.revenue_basis === "investment_income") {
+    // The methods its fair value used, where it has one: both, or one where the other can't be worked out.
+    const [pe, pb] = lenderMethods(r);
+    const on = pe && !pb ? "price to net investment income" : pb && !pe ? "price to book" : "price to net investment income and price to book";
+    items.push(item(on[0].toUpperCase() + on.slice(1), `A business development company is a fund listed as a company that lends to and invests in private companies. Its borrowing and its loans are the business itself, so it is valued on similar business development companies' ${on}, with no sales multiple or cash-flow model. Net investment income is what its loans and stakes earn in interest, dividends and fees, less its costs, before the gains and losses on them that swing its net income from year to year. Book value is its net asset value: the loans and stakes it holds as its books carry them, less what it owes. Both are counted after any preferred stock, which is owed to preferred shareholders first.`));
+  } else if (r.fundamentals?.revenue_basis && r.fundamentals.reit === "mortgage") {
+    const [pe, pb] = lenderMethods(r);
+    const on = pe && !pb ? "price to earnings" : pb && !pe ? "price to book" : "price to earnings and price to book";
+    items.push(item(on[0].toUpperCase() + on.slice(1), `A REIT that lends or holds mortgage bonds pays for them mostly with borrowed money, so it is valued on similar REITs that lend: their ${on} (book value being its loans and securities as its books carry them, less what it owes), with no sales multiple or cash-flow model. Its gains and losses on its investments and hedges count in its earnings, since they are part of its business. Earnings and book value are counted after any preferred stock, which is owed to preferred shareholders first.`));
+  } else if (r.fundamentals?.revenue_basis === "bank") {
+    items.push(item("Price to earnings", "A lender whose revenue is its net interest income (interest earned less interest paid) plus fees is valued on similar companies' price to earnings. Most lenders it is compared with count their interest before what they pay on their borrowing, so their sales aren't on the same footing and no sales multiple is used, nor a cash-flow model, since borrowing is a lender's raw material."));
   } else {
     items.push(item("Price to sales and price to earnings", "Insurers, lenders and other financial companies borrow and invest as part of the business, so they are valued on similar companies' price to sales and price to earnings (a mortgage REIT on price to earnings, and a lender also on price to book), with no cash-flow model."));
   }
   items.push(item("The verdict", "The midpoint is the middle of the estimates counted (with two, their average). A midpoint more than 50% above or below the price needs two independent estimates to agree, and estimates from the same similar companies count as one. The range spans the estimates and is at least 10% either side of the midpoint. Undervalued means today's price is below the range, overvalued means above it."));
-  items.push(item("How well has this worked?", TRACK_RECORD[kind]));
+  items.push(item("How well has this worked?", r.fundamentals?.revenue_basis ? TRACK_RECORD.untested : TRACK_RECORD[kind]));
   return `<details class="disclose how" style="margin-top:18px">
     <summary><i class="ph ph-question" aria-hidden="true" style="margin:0;color:var(--text-2);transform:none"></i>How this fair value is worked out<i class="ph ph-caret-down" aria-hidden="true"></i></summary>
     <div class="body"><ul class="how-list">${items.join("")}</ul></div>
@@ -150,12 +174,15 @@ function howItWorks(r) {
 function verdictPanel(r) {
   const v = r.valuation;
   if (!v || !VERDICT[v.verdict]) {
-    // A fair value withheld for a stated reason (older data has none, so it gets the general explanation).
-    const why = v?.withheld ? esc(v.withheld) : `There is not enough reliable data to estimate a fair value. This happens when we could not find a full year of financials in the company's SEC filings,
+    // A fair value withheld for a stated reason, or why the company has no figures to value (coverage, from its SEC
+    // filings: too new, a foreign filer, a fund). Older data has neither, so it gets the general explanation.
+    const why = v?.withheld ? esc(v.withheld) : r.coverage?.note ? esc(r.coverage.note) : `There is not enough reliable data to estimate a fair value. This happens when we could not find a full year of financials in the company's SEC filings,
       which is common for new listings and foreign companies, foreign banks among them. It also happens when a company is losing money and has no positive cash flow to value,
       since comparing it with others on sales says little about what it is worth.`;
+    const kind = !v && r.coverage?.kind;
+    const word = kind === "fund" ? "Not valued" : kind === "no_annual" || kind === "annual_untagged" ? "Not enough data yet" : "Not enough data";
     return `<section class="panel panel-pad verdict"><h2>Verdict</h2>
-      <p class="word" style="font-size:28px">Not enough data</p>
+      <p class="word" style="font-size:28px">${word}</p>
       <p class="line">${why}</p>${oneTimeNote(r)}</section>`;
   }
   const up = v.upside;
@@ -242,7 +269,12 @@ function quarterSection(r) {
   const gbar = (r.health || []).flatMap((g) => g.bars).find((b) => b.key === "gross_margin");
   const bank = !!f.bank;
   if (!plotted && !gbar) return "";
-  const what = bank ? "revenue (interest earned less interest paid, plus fees)" : "revenue";
+  // A company whose revenue is read from a lender's income statement or a business development company's investment
+  // income (fundamentals.revenue_basis; older data has none) says which.
+  const what = bank || f.revenue_basis === "bank" ? "revenue (interest earned less interest paid, plus fees)"
+    : f.revenue_basis === "net_interest" ? "revenue (net interest income: interest earned less interest paid)"
+    : f.revenue_basis === "investment_income" ? "revenue (total investment income: the interest, dividends and fees its loans and stakes earn)"
+    : "revenue";
   const head = `<div class="h-top" id="quarters"><div><h2>Revenue by quarter</h2>
     <p>${plotted ? `Each bar is one quarter's ${what}, from the company's SEC filings, with its growth on the same quarter a year before.`
       : "Revenue and gross margin from the company's SEC filings."}</p></div></div>`;
@@ -371,8 +403,10 @@ function quarterTable(qs, gross) {
 
 function healthSection(r) {
   if (!r.health) {
-    return `<div class="h-top"><div><h2>Health check</h2><p>We could not find a full year of revenue and profit in this company's SEC filings, so it cannot be scored.
-      This is common for companies with no sales yet, funds, SPACs and foreign filers, foreign banks among them.</p></div></div>`;
+    // Where the pipeline could tell why from the company's SEC filings (coverage), the verdict panel above says it.
+    const why = r.coverage?.note && !r.valuation ? "Not scored, for the reason given under the verdict above." : `We could not find a full year of revenue and profit in this company's SEC filings, so it cannot be scored.
+      This is common for companies with no sales yet, funds, SPACs and foreign filers, foreign banks among them.`;
+    return `<div class="h-top"><div><h2>Health check</h2><p>${why}</p></div></div>`;
   }
   const s = r.health_score;
   const band = s == null ? "" : s >= 70 ? "strong" : s >= 40 ? "fair" : "weak";
@@ -419,13 +453,16 @@ function peersSection(r) {
   const head = `<div class="h-top" id="peers"><div><h2>Similar companies</h2><p>${esc(r.peer_basis)}</p></div></div>`;
   if (!list.length || !pm) return head;
   // Non-financial companies also get price to sales, the measure their health check ranks. Banks get price to tangible
-  // book (ptbv) in place of a sales multiple and have no sales_label; every other report has sales_label.
+  // book (ptbv) in place of a sales multiple and have no sales_label, and so do companies valued as lenders on price to
+  // book (pb) or on earnings alone; every other report has sales_label.
   const cols = [pm.ps_label && ["ps", pm.ps_label], pm.ptbv_label && ["ptbv", pm.ptbv_label],
-    pm.sales_label && ["sales", pm.sales_label], ["pe", pm.pe_label]].filter(Boolean);
+    pm.pb_label && ["pb", pm.pb_label], pm.sales_label && ["sales", pm.sales_label], ["pe", pm.pe_label]].filter(Boolean);
+  // Price to book sits near 1x for lenders, so it gets two decimals.
+  const cell = (k, v) => (k === "pb" && v != null && v < 10 ? `${v.toFixed(2)}x` : mult(v));
   const row = (who, name, x) => `<div class="who"><b>${esc(who)}</b><span>${esc(name)}</span></div>
-    ${cols.map(([k]) => `<div class="n">${mult(x?.[k])}</div>`).join("")}`;
+    ${cols.map(([k]) => `<div class="n">${cell(k, x?.[k])}</div>`).join("")}`;
   return `${head}
-    <div class="panel peers${cols.length > 2 ? " wide" : ""}">
+    <div class="panel peers${cols.length > 2 ? " wide" : cols.length < 2 ? " narrow" : ""}">
       <div class="peer-row peer-head"><span>Company</span>${cols.map(([, label]) => `<span>${esc(label)}</span>`).join("")}</div>
       <div class="peer-row self">${row(r.symbol, "This company", pm.company)}</div>
       ${list.map((p) => `<a class="peer-row" href="?t=${encodeURIComponent(p.symbol)}" data-sym="${esc(p.symbol)}">${row(p.symbol, p.name, p)}</a>`).join("")}
@@ -475,7 +512,8 @@ function render(r) {
     ${insiderSection(r)}
     ${newsSection(r)}
     <div class="notes">
-      ${f ? `<p>Financials from fiscal year ${f.fiscal_year}${f.fiscal_year_end ? ` (ended ${esc(date(f.fiscal_year_end, { month: "short", day: "numeric", year: "numeric" }))})` : ""}.${f.balance_as_of ? ` Balance sheet as of ${esc(date(f.balance_as_of, { month: "short", day: "numeric", year: "numeric" }))}.` : ""} Source: SEC filings.</p>` : ""}
+      ${f?.partial ? `<p>Quarterly revenue from the company's quarterly reports (Form 10-Q); the SEC's data holds no full fiscal year of its results yet. Source: SEC filings.</p>`
+        : f ? `<p>Financials from fiscal year ${f.fiscal_year}${f.fiscal_year_end ? ` (ended ${esc(date(f.fiscal_year_end, { month: "short", day: "numeric", year: "numeric" }))})` : ""}.${f.balance_as_of ? ` Balance sheet as of ${esc(date(f.balance_as_of, { month: "short", day: "numeric", year: "numeric" }))}.` : ""} Source: SEC filings.</p>` : ""}
       ${r.peer_group && !r.peer_basis ? `<p>Compared with ${r.peer_count} other US-listed companies in ${esc(r.peer_group)}.</p>` : ""}
       <p>Educational estimates only. Not investment advice.</p>
     </div>`;

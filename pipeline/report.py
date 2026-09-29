@@ -205,6 +205,8 @@ def reit_kind(m):
     wear on a building, and which reports no funds from operations (Weyerhaeuser)."""
     if not m or not m.get("reit") or m.get("reit_type") == "timber":
         return None
+    if m.get("revenue_basis") in LENDING_BASES:
+        return "mortgage"  # its revenue is net interest income (fundamentals.derive), so it lends
     share = m.get("depreciation_share")
     to_assets = m.get("depreciation_to_assets")
     lender = (to_assets is not None and to_assets < REIT_LANDLORD_DEPRECIATION
@@ -250,10 +252,98 @@ def _claims_sentence(m):
 
 def financial(u, m=None):
     """Whether a company is valued and scored as a financial one: Nasdaq's Finance sector, where banks, insurers and
-    lenders sit, and any mortgage REIT (reit_kind), but not a REIT that owns property, which Nasdaq lists under Finance
-    (Terreno Realty) as often as under Real Estate. A landlord's debt and cash are an ordinary company's."""
+    lenders sit, any mortgage REIT (reit_kind), and any company whose revenue is read the way a lender's or a business
+    development company's is (fundamentals.derive's revenue_basis), whatever sector Nasdaq files it under (Blue Owl
+    Technology Finance under Other, Capital Southwest under Consumer Discretionary), but not a REIT that owns property,
+    which Nasdaq lists under Finance (Terreno Realty) as often as under Real Estate. A landlord's debt and cash are an
+    ordinary company's."""
     kind = reit_kind(m)
-    return kind == "mortgage" or kind is None and is_financial(u)
+    return kind == "mortgage" or kind is None and (is_financial(u) or bool((m or {}).get("revenue_basis")))
+
+
+# fundamentals.derive's revenue_basis for a company that tags no revenue line and whose revenue is read from a lender's
+# income statement: net interest income plus noninterest income, or a REIT's net interest income alone.
+LENDING_BASES = ("bank", "net_interest")
+
+
+def is_bdc(m):
+    """Whether a company is a business development company: a fund listed as a company, that lends to and invests in
+    private companies, and whose revenue is its total investment income (fundamentals.derive's revenue_basis)."""
+    return bool(m) and m.get("revenue_basis") == "investment_income"
+
+
+def book_lender(m):
+    """Whether a company is valued on its book value as lenders are (_lender): a REIT that lends (reit_kind), other than
+    a landlord whose leases are booked as loans (VICI Properties, with a reit_type), or a business development company
+    (is_bdc)."""
+    return bool(m) and (reit_kind(m) == "mortgage" and not m.get("reit_type") or is_bdc(m))
+
+
+def common_book(m):
+    """A book-valued lender's (book_lender) book value left to its common shareholders, which its price to book is
+    measured on, as analysts quote book value per share: shareholders' equity less preferred stock (fundamentals.derive's
+    preferred_stock), which is owed to preferred shareholders first. Annaly's June 2026 equity of $16.93B includes $1.80B
+    of preferred stock, and Prospect Capital's $2.93B includes $1.57B. None where it can't be told (book_unread)."""
+    if book_unread(m):
+        return None
+    return m["equity"] - (m.get("preferred_stock") or 0)
+
+
+def book_unread(m):
+    """Why a book-valued lender's book value left to common shareholders can't be told, or None: "equity" where its
+    equity wasn't read, "preferred" where it pays preferred dividends (its own net income's gap to the common
+    shareholders', at least PREFERRED_GAP_MIN of it) but no preferred stock was read, which its equity then includes
+    unseen (Chimera Investment's 2025 dividends of $86.0M, beside no preferred stock tagged on its balance sheet)."""
+    if m.get("equity") is None:
+        return "equity"
+    gap = m.get("common_gap_reported")
+    gap = m.get("common_gap") or 0 if gap is None else gap
+    ni = m.get("net_income")
+    if not m.get("preferred_stock") and not m.get("ni_whole") and ni and gap >= max(5e5, PREFERRED_GAP_MIN * abs(ni)):
+        return "preferred"
+    return None
+
+
+# The least share of a lender's net income that the gap to its common shareholders' must take to say it has preferred
+# stock (book_unread): dividends on restricted shares, the other usual gap, take far less.
+PREFERRED_GAP_MIN = 0.05
+# Why a book-valued lender's price to book isn't measured (book_unread), for its notes.
+BOOK_UNREAD_WORDS = {
+    "equity": "its book value couldn't be read from its SEC filings",
+    "preferred": "it pays preferred dividends, but its SEC filings' machine-readable figures don't give how much "
+                 "preferred stock it has, so its book value left to common shareholders can't be told"}
+
+
+def lender_earnings(m):
+    """The yearly earnings a book-valued lender (book_lender) is valued on, left to its common shareholders: less
+    preferred dividends and any minority holders' share (earnings_gap), as a bank's are (fundamentals._bank_fields).
+    For a REIT that lends, its profit without one-time items (Annaly's 2025: $2.03B, of which $0.16B went to its
+    preferred shareholders); for a business development company, its net investment income (fundamentals' bdc_nii),
+    which is what these funds earn and pay dividends from, before the gains and losses on their loans and stakes that
+    swing their net income (New Mountain Finance's 2025: $136.4M, against $16.5M of net income). None for a BDC that
+    doesn't tag it."""
+    base = m.get("nii") if is_bdc(m) else m.get("adj_net_income")
+    return None if base is None else base - earnings_gap(m)
+
+
+def gap_words(m):
+    """What earnings_gap() takes off, in words: preferred dividends, and where net income is the whole business's
+    (ProfitLoss), the share of its other owners, such as an operating partnership's other unitholders."""
+    if not m.get("ni_whole") or is_bdc(m) and (m.get("preferred_dividends") or 0) > 0:
+        return "preferred dividends"
+    return "preferred dividends and its other owners' share"
+
+
+def earnings_gap(m):
+    """What a book-valued lender's earnings leave out as not the common shareholders' (lender_earnings): its tagged
+    preferred dividends for a business development company, whose net investment income comes before them (Prospect
+    Capital's $106.6M for its year to June 2026), else the gap between its net income and the net income left to common
+    shareholders as the company tags them (fundamentals.derive's common_gap_reported, else common_gap)."""
+    if is_bdc(m) and (m.get("preferred_dividends") or 0) > 0:
+        return m["preferred_dividends"]
+    if m.get("common_gap_reported") is not None:
+        return m["common_gap_reported"]
+    return m.get("common_gap") or 0
 
 
 def _lerp(x, pts):
@@ -558,6 +648,12 @@ _REIT_WORDS = {"property": "REITs that own property",
 # midpoints came a median 50% above the price, office REITs' 37% above and net lease and health care REITs' 11% and 10%
 # below, with it 3% above, 28% above, and 5% and 5% below, and 20 REITs rather than 25 hit the 50% limit.
 REIT_TYPE_GAP = 0.03
+# Business development companies (is_bdc), funds listed as companies that lend to and invest in private companies, are
+# compared only with each other (_pool), and valued as lenders are, on their peers' price to earnings, their earnings
+# being their net investment income (lender_earnings), and price to book (_lender), with no sales multiple: their book
+# value is what their loans and stakes are carried at, less what they owe, which is what these funds report and trade
+# against.
+BDC_WORDS = "business development companies"
 _TYPE_WORDS = {"office": "office REITs", "industrial": "industrial REITs", "retail": "retail REITs",
                "net_lease": "net lease REITs", "residential": "residential REITs", "health": "health care REITs",
                "lodging": "hotel REITs", "storage": "self storage REITs", "tech": "data center and tower REITs",
@@ -633,6 +729,30 @@ DEBT_DOUBT_BAR_NOTES = {
 }
 
 
+# What the revenue of a company that tags no revenue line is (fundamentals.derive's revenue_basis), for its notes.
+BASIS_WORDS = {"bank": "net interest income, which is interest earned less interest paid, plus other income",
+               "net_interest": "net interest income, which is interest earned less interest paid",
+               "investment_income": "total investment income, the interest, dividends and fees its loans and stakes earn"}
+
+
+# The health check's price to sales bar for a lender valued on its earnings alone (fair_value), which isn't measured.
+LENDER_SALES_NOTE = ("Not measured. Its revenue here is its net interest income plus fees, which isn't on the footing of "
+                     "the sales of most lenders it is compared with, since they count interest before what they pay on "
+                     "their borrowing.")
+
+
+def _doubt_bar_note(m):
+    """The health check's note for a sales-based measure left out because the sales figure is in doubt
+    (sales_doubtful): for a company whose revenue is read the way a lender's is, what that revenue is and why profit
+    can exceed it."""
+    basis = m.get("revenue_basis")
+    if not basis:
+        return DOUBT_BAR_NOTE
+    gains = "its investments" if basis == "investment_income" else "its securities and hedges"
+    return (f"Not measured. Its revenue here is its {BASIS_WORDS[basis]}, and last year's profit came out larger than "
+            f"that, from gains on {gains}, so measures on revenue would mislead.")
+
+
 def _debt_bar_note(m):
     """The health check's note for a debt measure left out because the debt could not be read (debt_known False)."""
     return DEBT_DOUBT_BAR_NOTES.get(m.get("debt_doubt"), DEBT_UNKNOWN_NOTE)
@@ -688,6 +808,11 @@ def peer_table(universe, metrics, sic=None):
               else whole - m["net_cash"] + other_claims(m))
         doubt = sales_doubtful(m)
         has_rev = bool(rev and rev > 0) and not doubt
+        # A lender valued on its book (a mortgage REIT, a business development company) is still matched on its
+        # revenue where its profit came out larger, from gains on its investments and hedges (a mortgage REIT whose
+        # revenue is net interest income), since it is compared only with others of its kind (_pool).
+        bdc = is_bdc(m)
+        match = has_rev or bool(rev and rev > 0) and (kind == "mortgage" or bdc)
         assets = m.get("total_assets")
         code = str(sic.get(u.get("cik")) or "")
         ffo = m.get("adj_ffo") if kind == "property" else None
@@ -696,6 +821,11 @@ def peer_table(universe, metrics, sic=None):
         # A bank's price to earnings is on its earnings per diluted share left to common shareholders (BANK_FEATURES)
         # where those shares are the ones its price is quoted on, else its market value over those earnings.
         bank_pe = (u["price"] / eps if eps else u["mcap"] / common if common and common > 0 else None) if bank else None
+        # A lender valued on its book value has its earnings and book value left to common shareholders (lender_earnings,
+        # common_book), a business development company's earnings being its net investment income.
+        if book_lender(m):
+            adj = lender_earnings(m)
+        book = common_book(m) if book_lender(m) else m.get("equity")
         table[sym] = {
             "name": u.get("name"),
             "cik": u.get("cik"),
@@ -712,10 +842,28 @@ def peer_table(universe, metrics, sic=None):
             # Its property type (reit_types, reit_type), which its peers are preferably drawn from, and its price to
             # book value, which values a REIT that lends.
             "ptype": m.get("reit_type") if kind else None,
-            "pb": u["mcap"] / m["equity"] if kind == "mortgage" and (m.get("equity") or 0) > 0 else None,
+            # A business development company, compared only with others (_pool) and valued on book value too (_lender).
+            "bdc": bdc,
+            # Revenue read from a lender's income statement or a BDC's investment income (fundamentals.derive), which
+            # stays out of the ranks others are matched on (below).
+            "basis": m.get("revenue_basis"),
+            "pb": u["mcap"] / book if (kind == "mortgage" or bdc) and (book or 0) > 0 else None,
+            # For a lender valued on its book value (book_lender), what its peer notes say of its figures: its book
+            # value unread (no equity figure), its earnings and book value net of preferred stock worth naming, and for
+            # a BDC whether it tags no net investment income, and so is valued on its book value alone where its profit
+            # left to common shareholders is positive (fair_value).
+            "book_unread": book_unread(m) if book_lender(m) else None,
+            "preferred": book_lender(m) and max(m.get("preferred_stock") or 0, earnings_gap(m)) >= 5e5,
+            "earn_untagged": bdc and m.get("nii") is None,
+            # A REIT that lends whose profit went to its preferred shareholders, leaving its common ones a loss.
+            "common_loss": book_lender(m) and not bdc and (m.get("adj_net_income") or 0) > 0 and (adj or 0) <= 0,
+            "book_only": bdc and m.get("nii") is None and (book or 0) > 0
+            and (m.get("adj_net_income") or 0) - earnings_gap(m) > 0,
             "group": _fin_group(code) if is_financial(u) else None,
             "sales_doubt": doubt,
-            "ps": whole / rev if has_rev else None,
+            # None for a company whose revenue is read the way a lender's is (revenue_basis), which is never valued on
+            # sales (fair_value), so neither does its price to sales set another company's.
+            "ps": whole / rev if has_rev and not m.get("revenue_basis") else None,
             "ev_sales": ev / rev if ev and ev > 0 and has_rev else None,
             "pe": u["mcap"] / ni if ni and ni > 0 else None,
             "adj_pe": bank_pe if bank else u["mcap"] / adj if adj and adj > 0 else None,
@@ -742,13 +890,13 @@ def peer_table(universe, metrics, sic=None):
             # A sales figure that can't be right leaves nothing to match on, so the company falls back to its
             # Nasdaq industry label and is never another company's peer.
             "features": {
-                "op_margin": m.get("op_margin") if has_rev else None,
-                "net_margin": m.get("adj_net_margin") if has_rev else None,
-                "fcf_margin": m["fcf"] / rev if has_rev and m.get("fcf") is not None else None,
-                "growth": m.get("revenue_growth") if has_rev else None,
-                "growth_3y": m.get("revenue_cagr") if has_rev else None,
-                "size": math.log(rev) if has_rev else None,
-                "turnover": rev / assets if has_rev and assets and assets > 0 else None,
+                "op_margin": m.get("op_margin") if match else None,
+                "net_margin": m.get("adj_net_margin") if match else None,
+                "fcf_margin": m["fcf"] / rev if match and m.get("fcf") is not None else None,
+                "growth": m.get("revenue_growth") if match else None,
+                "growth_3y": m.get("revenue_cagr") if match else None,
+                "size": math.log(rev) if match else None,
+                "turnover": rev / assets if match and assets and assets > 0 else None,
             },
         }
         if u.get("price") and _share_count_gap(u, m, u["price"]):
@@ -764,9 +912,13 @@ def peer_table(universe, metrics, sic=None):
     # measures (ranked among banks), are left out of the ranks other companies are matched on, so how a bank's figures
     # are read never moves another company's peers. That took out 115 banks whose fee income had read as their sales:
     # of the 2,281 other companies valued on September 2026 data, 22 changed verdict, and their midpoints missed their
-    # prices by a mean absolute log error of 0.443, against 0.444 with those banks in (median 0.405 both ways).
+    # prices by a mean absolute log error of 0.443, against 0.444 with those banks in (median 0.405 both ways). Companies
+    # whose revenue is read from a lender's income statement or a BDC's investment income (fundamentals.derive's
+    # revenue_basis) are left out of them too, so that reading their revenue moved no other company's ranks; their own
+    # figures are still ranked against the rest.
     for f in PEER_FEATURES:
-        vals = sorted(r["features"][f] for r in table.values() if r["features"][f] is not None and not r["bank"])
+        vals = sorted(r["features"][f] for r in table.values()
+                      if r["features"][f] is not None and not r["bank"] and not r["basis"])
         for r in table.values():
             v = r["features"][f]
             r.setdefault("rank", []).append(
@@ -781,34 +933,70 @@ def peer_table(universe, metrics, sic=None):
     return table
 
 
-def _index(table):
-    idx = getattr(table, "index", None)
-    if idx is None:
-        idx = {"sector": {}, "group": {}, "industry": {}, "reit": {},
-               # The whole market, for companies in Nasdaq's catch-all sectors. Financial companies are left out:
-               # their sales mean something else, and no value to sales is worked out for them.
-               "market": [s for s, r in table.items() if r["sector"] != FINANCIAL_SECTOR],
-               "bank": [s for s, r in table.items() if r.get("bank")]}
-        for s, r in table.items():
+def _pools(table, keep):
+    """The candidate pools (_pool) over the companies in `table` that `keep` lets in."""
+    rows = [(s, r) for s, r in table.items() if keep(r)]
+    idx = {"sector": {}, "group": {}, "industry": {}, "reit": {},
+           # The whole market, for companies in Nasdaq's catch-all sectors. Financial companies are left out: their
+           # sales mean something else, and no value to sales is worked out for them.
+           "market": [s for s, r in rows if r["sector"] != FINANCIAL_SECTOR and not r.get("basis")],
+           "bank": [s for s, r in rows if r.get("bank")],
+           "bdc": [s for s, r in rows if r.get("bdc")]}
+    for s, r in rows:
+        # A company whose revenue is read the way a lender's or a BDC's is (revenue_basis) is a candidate only among
+        # financial companies (its kind's pool, its SEC industry group, the Finance sector), whatever sector Nasdaq files
+        # it under: Capital Southwest, a BDC, is no peer for the clothing makers of its Nasdaq label.
+        if not r.get("basis") or r["sector"] == FINANCIAL_SECTOR:
             idx["sector"].setdefault(r["sector"], []).append(s)
             idx["industry"].setdefault(r["industry"], []).append(s)
-            if r.get("group"):
-                idx["group"].setdefault(r["group"], []).append(s)
-            if r.get("reit"):
-                idx["reit"].setdefault(r["reit"], []).append(s)
+        if r.get("group"):
+            idx["group"].setdefault(r["group"], []).append(s)
+        if r.get("reit"):
+            idx["reit"].setdefault(r["reit"], []).append(s)
+    return idx
+
+
+def _index(table):
+    """The candidate pools of a company whose revenue is read as its filings tag it (no revenue_basis), which leave out
+    every company whose revenue is read the way a lender's or a BDC's is. Their figures (net interest income, with or
+    without fees, or total investment income) aren't on the footing of other companies' sales, and those valued on
+    their book value have earnings and book value left to common shareholders (lender_earnings, common_book), so as
+    peers they would leave blanks in the sales columns and shift other companies' medians: on September 2026 data they
+    took peer places of 48 companies, among them American Express, whose price to sales estimate moved 40%, and VICI
+    Properties, whose verdict moved from fair to overvalued as mortgage REITs read this way replaced other lenders among
+    its peers. Their own pools (_index_for) include every other company."""
+    idx = getattr(table, "index", None)
+    if idx is None:
+        idx = _pools(table, lambda r: not r.get("basis"))
         if isinstance(table, PeerTable):
             table.index = idx
     return idx
 
 
+def _index_for(me, table):
+    """The candidate pools for company `me` (a peer_table row): _index() for most companies; for one whose revenue is
+    read the way a lender's is, every company but the business development companies, whose earnings are their net
+    investment income (lender_earnings); and for a BDC, every company."""
+    idx = _index(table)
+    key = "_bdc" if me.get("bdc") else "_lender" if me.get("basis") else None
+    if key is None:
+        return idx
+    if key not in idx:
+        idx[key] = _pools(table, (lambda r: True) if key == "_bdc" else (lambda r: not r.get("bdc")))
+    return idx[key]
+
+
 def _pool(me, idx):
     """(candidate symbols, how they were chosen) for one company. A REIT is compared with REITs of its kind
-    (reit_kind) when there are more than _MIN_REITS of them, and a bank with banks when there are more than _MIN_GROUP."""
+    (reit_kind) when there are more than _MIN_REITS of them, and a bank with banks and a business development company
+    with others (is_bdc) when there are more than _MIN_GROUP."""
     k = me.get("reit")
     if k and len(idx["reit"].get(k, ())) > _MIN_REITS:
         return idx["reit"][k], ("reit", k)
     if me.get("bank") and len(idx["bank"]) > _MIN_GROUP:
         return idx["bank"], ("bank", None)
+    if me.get("bdc") and len(idx["bdc"]) > _MIN_GROUP:
+        return idx["bdc"], ("bdc", None)
     g = me.get("group")
     if g and len(idx["group"].get(g, ())) > _MIN_GROUP:
         return idx["group"][g], ("group", g)
@@ -845,7 +1033,7 @@ def peers_for(sym, table, count=PEER_COUNT):
     me = table.get(sym)
     if not me:
         return [], None
-    idx = _index(table)
+    idx = _index_for(me, table)
     if me["features"]["size"] is None:
         return _label_peers(me, table, idx)
     pool, (kind, key) = _pool(me, idx)
@@ -867,7 +1055,7 @@ def peers_for(sym, table, count=PEER_COUNT):
                 d += (a - b) ** 2 if b is not None else _MISSING_GAP
                 n += 1
         dist = d / n if n else 1.0
-        if r["industry"] != me["industry"] and kind not in ("group", "reit", "bank"):
+        if r["industry"] != me["industry"] and kind not in ("group", "reit", "bank", "bdc"):
             dist += INDUSTRY_GAP
         if kind == "reit" and key == "property" and me.get("ptype") and r.get("ptype") != me["ptype"]:
             dist += REIT_TYPE_GAP
@@ -875,7 +1063,7 @@ def peers_for(sym, table, count=PEER_COUNT):
     scored.sort()
     group = (_group_name(key).capitalize() if kind == "group" else "All US stocks" if kind == "market"
              else _REIT_WORDS[key][0].upper() + _REIT_WORDS[key][1:] if kind == "reit" else "Banks" if kind == "bank"
-             else key)
+             else BDC_WORDS[0].upper() + BDC_WORDS[1:] if kind == "bdc" else key)
     return _one_per_company([s for _, s in scored], table, me["cik"])[:count], group
 
 
@@ -894,7 +1082,7 @@ def peer_basis(sym, table, peers):
     me = table.get(sym)
     if not me or not peers:
         return None
-    idx = _index(table)
+    idx = _index_for(me, table)
     if me["features"]["size"] is None:
         _, label = _label_peers(me, table, idx)
         why = ("Its sales figure in the SEC data looks incomplete, so it can't be matched on its numbers."
@@ -902,7 +1090,7 @@ def peer_basis(sym, table, peers):
         return f"Compared with the {len(peers)} other companies Nasdaq lists under {label}. {why}"
     _, (kind, key) = _pool(me, idx)
     who = (_group_name(key) if kind == "group" else "US-listed companies outside finance" if kind == "market"
-           else _REIT_WORDS[key] if kind == "reit" else "banks" if kind == "bank"
+           else _REIT_WORDS[key] if kind == "reit" else "banks" if kind == "bank" else BDC_WORDS if kind == "bdc"
            else _SECTOR_WORDS.get(key, f"{key.lower()} companies"))
     if kind == "bank":
         f = dict(zip(BANK_FEATURES, me["bank_rank"]))
@@ -910,13 +1098,14 @@ def peer_basis(sym, table, peers):
                                  ("costs per dollar of revenue", "efficiency"), ("size", "size")) if f[k] is not None]
     else:
         f = dict(zip(PEER_FEATURES, me["rank"]))
+        sales = "revenue" if me.get("basis") else "sales"  # a lender's revenue (fundamentals.derive's revenue_basis)
         traits = [t for t, keys in (("profit margins", ("op_margin", "net_margin")), ("cash flow", ("fcf_margin",)),
-                                    ("sales growth", ("growth", "growth_3y")), ("size", ("size",)),
-                                    ("sales per dollar of assets", ("turnover",))) if any(f[k] is not None for k in keys)]
+                                    (f"{sales} growth", ("growth", "growth_3y")), ("size", ("size",)),
+                                    (f"{sales} per dollar of assets", ("turnover",))) if any(f[k] is not None for k in keys)]
     listed = traits[0] if len(traits) == 1 else ", ".join(traits[:-1]) + " and " + traits[-1]
     earn = _earn_key(me)
     profitable = "" if me.get(earn) is None else "FFO-positive " if earn == PEER_FFO else "profitable "
-    prefer = (", with a preference for its own industry" if INDUSTRY_GAP and kind not in ("group", "reit", "bank") else
+    prefer = (", with a preference for its own industry" if INDUSTRY_GAP and kind not in ("group", "reit", "bank", "bdc") else
               f", with a preference for {_TYPE_WORDS[me['ptype']]}" if kind == "reit" and key == "property"
               and me.get("ptype") in _TYPE_WORDS
               else "")
@@ -934,6 +1123,12 @@ def peer_list(sym, table, peers, limit=PEER_COUNT):
         # A bank's peers show price to tangible book value ("ptbv") in place of a sales multiple.
         return [{"symbol": s, "name": table[s]["name"], "ptbv": table[s]["ptbv"], "pe": table[s]["adj_pe"]}
                 for s in peers[:limit]]
+    if me.get("basis"):
+        # A company whose revenue is read the way a lender's is: price to book and price to earnings, as
+        # _lender_peer_multiples shows them.
+        book = bool(me.get("pb") is not None or me.get("reit") == "mortgage" or me.get("bdc"))
+        return [{"symbol": s, "name": table[s]["name"], **({"pb": table[s].get("pb")} if book else {}),
+                 "pe": table[s].get(PEER_PE)} for s in peers[:limit]]
     key, earn = _sales_key(me), _earn_key(me)
     return [{"symbol": s, "name": table[s]["name"], "sales": table[s][key], "pe": table[s].get(earn),
              **({} if key == "ps" else {"ps": table[s]["ps"]})}
@@ -947,7 +1142,7 @@ def _sales_key(me):
 
 def _bank_peers(me, table):
     """Whether a company's peers were drawn from banks (_pool), which values it the way bank analysts do."""
-    return bool(me.get("bank")) and _pool(me, _index(table))[1][0] == "bank"
+    return bool(me.get("bank")) and _pool(me, _index_for(me, table))[1][0] == "bank"
 
 
 BANK_TBV_PARTS = "shareholders' equity less goodwill, other intangible assets and preferred stock"
@@ -998,6 +1193,8 @@ def peer_multiples(sym, table, peers, dropped=(), counted=None):
         return None
     if _bank_peers(me, table):
         return _bank_peer_multiples(me, [table[s] for s in peers])
+    if me.get("basis"):
+        return _lender_peer_multiples(me, [table[s] for s in peers], dropped)
     key, earn = _sales_key(me), _earn_key(me)
     fin = key == "ps"
     reit = earn == PEER_FFO
@@ -1030,14 +1227,21 @@ def peer_multiples(sym, table, peers, dropped=(), counted=None):
         note.append(f"The fair value uses the median of the {earn_words} column"
                     + (" and the same REITs' median price to book value, which the table doesn't show."
                        if me.get("reit") == "mortgage" and me.get("pb") and not me.get("ptype") else
+                       f" alone, not price to book, since {BOOK_UNREAD_WORDS[me['book_unread']]}."
+                       if me.get("reit") == "mortgage" and me.get("book_unread") else
                        # fair_value leaves value to sales out where the company's own debt could not be read.
                        f" alone, since {'this REIT' if reit else 'its'} debt could not be read"
                        + ("" if reit else " reliably") + " and value to sales counts debt."
                        if me.get("debt_unknown") and not fin else "."))
+        if me.get("reit") == "mortgage" and not me.get("ptype") and any(r.get("preferred") for r in rows + [me]):
+            # A lender valued on its book value (book_lender): lender_earnings, common_book.
+            note.append("Earnings here are what is left to common shareholders after any preferred dividends"
+                        + (", and book value is less any preferred stock" if me.get("pb") else "") + ".")
     else:
         note.append("These are the companies the price to sales bar in the health check compares it with. The fair "
                     "value doesn't use them, since the company "
-                    + ("had negative FFO." if reit else "lost money."))
+                    + ("had negative FFO." if reit else "earned nothing for its common shareholders after preferred "
+                                                       "dividends." if me.get("common_loss") else "lost money."))
     # A column the sentence above names whose result fair_value left out as a data error (METHOD_SANITY).
     cols = [c for name, c in (("Peer value to sales", "value to sales"), ("Peer price to sales", "price to sales"),
                               ("Peer price to earnings", "price to earnings"), ("Peer price to FFO", "price to FFO"))
@@ -1074,6 +1278,70 @@ def peer_multiples(sym, table, peers, dropped=(), counted=None):
         **({} if fin else {"ps_label": "Price to sales"}),
         "note": " ".join(note),
         "company": {"sales": me[key], "pe": me.get(earn), **({} if fin else {"ps": me["ps"]})},
+    }
+
+
+def _lender_peer_multiples(me, rows, dropped=()):
+    """peer_multiples() for a company whose revenue is read the way a lender's is (fundamentals.derive's
+    revenue_basis), which fair_value() values on price to earnings, and a REIT that lends or a business development
+    company also on price to book ("pb", pb_label), never on sales (so there is no sales column or sales_label)."""
+    book = bool(me.get("pb") is not None or me.get("reit") == "mortgage" or me.get("bdc"))
+    bdc = bool(me.get("bdc"))
+    profitable = me.get(PEER_PE) is not None
+    everyone = rows + [me]
+    note = []
+    if book:
+        note.append("Price to book compares the share price with book value: the loans and investments on the "
+                    "company's books less what it owes" + (", its net asset value" if bdc else "")
+                    + (", and less any preferred stock, which is owed to preferred shareholders first"
+                       if any(r.get("preferred") for r in everyone) else "") + ".")
+    if bdc:
+        note.append("Earnings are net investment income: the interest, dividends and fees these funds' loans and stakes "
+                    "earn, less their costs, before gains and losses on those investments"
+                    + (", and after any preferred dividends" if any(r.get("preferred") for r in everyone) else "") + ".")
+    else:
+        note.append("Earnings leave out last year's one-time items"
+                    + (" and any preferred dividends" if book and any(r.get("preferred") for r in everyone) else "")
+                    + ".")
+    uses_book = book and me.get("pb") is not None
+    if profitable:
+        note.append(f"The fair value uses the median of {'both columns' if uses_book else 'the price to earnings column'}."
+                    + ("" if book else " It isn't valued on sales, since its revenue, net interest income plus "
+                       "fees, isn't on the footing of the sales of the lenders it is compared with.")
+                    + (f" Its own price to book isn't used: {BOOK_UNREAD_WORDS[me['book_unread']]}."
+                       if book and me.get("book_unread") else
+                       " Its book value left to common shareholders is below zero, so price to book isn't used."
+                       if book and not uses_book else ""))
+        cols = [c for name, c in (("Peer price to book", "price to book"), ("Peer price to earnings",
+                                                                            "price to earnings")) if name in dropped]
+        if cols:
+            note.append(_dropped_sentence(cols))
+    elif me.get("book_only"):
+        note.append("The fair value uses the median of the price to book column alone, since the company's net "
+                    "investment income isn't among the machine-readable figures of its SEC filings.")
+        if "Peer price to book" in dropped:
+            note.append(_dropped_sentence(["price to book"]))
+    else:
+        note.append("The fair value doesn't use them, since "
+                    + ("its net investment income left to common shareholders was below zero last year." if bdc
+                       and not me.get("earn_untagged") else
+                       "its common shareholders earned nothing last year after preferred dividends."
+                       if me.get("common_loss") else "the company lost money last year."))
+    gaps = (["in price to book it means book value below zero or not read"]
+            if book and any(r.get("pb") is None for r in everyone) else [])
+    if any(r.get(PEER_PE) is None for r in everyone):
+        gaps.append("in price to earnings it means a loss"
+                    + (" or net investment income that isn't tagged" if any(r.get("earn_untagged") for r in everyone)
+                       else ""))
+    if gaps:
+        note.append("Where a cell says n/a, " + " and ".join(gaps) + ".")
+    return {
+        "median": {**({"pb": _median([r.get("pb") for r in rows])} if book else {}),
+                   "pe": _median([r.get(PEER_PE) for r in rows])},
+        **({"pb_label": "Price to book"} if book else {}),
+        "pe_label": "Price to earnings",
+        "note": " ".join(note),
+        "company": {**({"pb": me.get("pb")} if book else {}), "pe": me.get(PEER_PE)},
     }
 
 
@@ -1383,7 +1651,7 @@ def health(u, m, price, high52, peers, table, news_overall, insider):
 
     # A sales figure that can't be right would put every sales-based bar far off, so those are left out.
     doubt = sales_doubtful(m)
-    no_sales = lambda key, label: not_scored(key, label, DOUBT_BAR_NOTE)
+    no_sales = lambda key, label: not_scored(key, label, _doubt_bar_note(m))
     # A bank matched with banks gets the measures bank analysts use (_bank_bars).
     banked = _bank_bars(bar, m, me, peer_rows, table, bool(m.get("one_time"))) if _bank_peers(me, table) else None
 
@@ -1393,6 +1661,24 @@ def health(u, m, price, high52, peers, table, news_overall, insider):
     s = _pct_rank(ps, [r["ps"] for r in peer_rows], lower_is_better=True)
     if banked:
         v += banked["Valuation"]
+    elif m.get("revenue_basis"):
+        # A company whose revenue is read the way a lender's is is never valued on sales (fair_value): a REIT that
+        # lends and a business development company are ranked on price to book instead, as their fair value uses it.
+        if reit_kind(m) == "mortgage" or is_bdc(m):
+            pb = me.get("pb")
+            s = _pct_rank(pb, [r.get("pb") for r in peer_rows], lower_is_better=True)
+            pref = m.get("preferred_stock") or 0
+            v.append(bar("pb", "Price to book", "n/a" if pb is None else f"{pb:.2f}x", s,
+                         f"Not measured: {BOOK_UNREAD_WORDS[me['book_unread']]}." if me.get("book_unread") else
+                         "Its book value left to common shareholders is below zero." if pb is None
+                         and (common_book(m) or 0) <= 0 else
+                         "Not enough data to compare." if s is None else
+                         (f"Cheaper than {s}% of similar companies for each dollar of book value." if s >= 50 else
+                          f"Pricier than {100 - s}% of similar companies for each dollar of book value.")
+                         + (f" Book value here leaves out its {money(pref)} of preferred stock, which is owed to "
+                            "preferred shareholders first." if pref >= 5e5 and book_lender(m) else "")))
+        else:
+            v.append(not_scored("ps", "Price to sales", LENDER_SALES_NOTE))
     else:
         v.append(no_sales("ps", "Price to sales") if doubt else bar("ps", "Price to sales", multiple(ps), s,
                      "Not enough data to compare." if s is None else
@@ -1401,10 +1687,25 @@ def health(u, m, price, high52, peers, table, news_overall, insider):
     pe = me.get("adj_pe")
     adjusted = bool(m.get("one_time"))
     reit = reit_kind(m) == "property"
-    # A bank's earnings are its common shareholders' (fundamentals._bank_fields).
+    # A bank's earnings are its common shareholders' (fundamentals._bank_fields), and so are those of a lender valued on
+    # its book value, a BDC's being its net investment income (lender_earnings).
     earned = m.get("adj_net_income_common" if banked else "adj_net_income")
+    lent = book_lender(m) and not banked
+    gap = earnings_gap(m) if lent else 0
+    if lent:
+        earned = lender_earnings(m)
     if reit:
         v.append(_ffo_multiple_bar(bar, m, me, peer_rows))
+    elif lent and is_bdc(m) and earned is None:
+        v.append(not_scored("pe", "Price to earnings", "Not measured. Its net investment income, the earnings business "
+                                                        "development companies are valued on, isn't among the "
+                                                        "machine-readable figures of its SEC filings."))
+    elif lent and earned is not None and earned <= 0 and (is_bdc(m) or gap >= 5e5 and earned + gap > 0):
+        v.append(bar("pe", "Price to earnings", "Loss", 5,
+                     "Its net investment income left to common shareholders was below zero last year, so there are no "
+                     "earnings to value." if is_bdc(m) else
+                     f"After {gap_words(m)}, its common shareholders' earnings were below zero last year, so there "
+                     "are no earnings to value."))
     elif earned is not None and earned <= 0:
         v.append(bar("pe", "Price to earnings", "Loss", 5,
                      "Without last year's one-time items the company lost money, so there are no earnings to value."
@@ -1412,14 +1713,21 @@ def health(u, m, price, high52, peers, table, news_overall, insider):
     else:
         rivals = [r[PEER_PE] for r in peer_rows if r[PEER_PE] is not None]
         s = _pct_rank(pe, rivals, lower_is_better=True)
+        earn_word = "net investment income" if lent and is_bdc(m) else "profit"
         v.append(bar("pe", "Price to earnings", multiple(pe), s,
                      ("Not enough data to compare." if s is None else
                       f"You pay {_beat(s, 'less', 'more', f'{len(rivals)} similar banks')} for each dollar of profit."
                       if banked else
-                      f"You pay less per dollar of profit than for {s}% of peers." if s >= 50 else
-                      f"You pay more per dollar of profit than for {100 - s}% of peers.")
+                      f"You pay less per dollar of {earn_word} than for {s}% of peers." if s >= 50 else
+                      f"You pay more per dollar of {earn_word} than for {100 - s}% of peers.")
                      + ((" Uses earnings per share left to common shareholders"
                          + (", without last year's one-time items." if adjusted else ".")) if banked and pe is not None
+                        else (" Earnings here are net investment income, before gains and losses on its investments"
+                              + (", after preferred dividends." if gap >= 5e5 else ".")) if lent and is_bdc(m)
+                        and pe is not None
+                        else (f" Uses profit left to common shareholders after {gap_words(m)}"
+                              + (", without last year's one-time items." if adjusted else ".")) if gap >= 5e5
+                        and pe is not None
                         else " Uses profit without last year's one-time items." if adjusted and pe is not None else "")
                      + (BANK_SPIKE_NOTE if banked and pe is not None and _provision_spike(m) == "acquired" else "")))
     fy = me.get("fcf_yield")
@@ -1465,7 +1773,10 @@ def health(u, m, price, high52, peers, table, news_overall, insider):
     gr = m.get("revenue_growth")
     # A bank has revenue rather than sales: interest income less interest paid, plus fees, without one-time gains or
     # losses on investment securities (fundamentals.derive).
-    sales, what = ("Revenue", "Revenue (interest earned less interest paid, plus fees)") if banked else ("Sales", "Sales")
+    # A company whose revenue is read the way a lender's is (fundamentals.derive's revenue_basis) says which.
+    sales, what = (("Revenue", "Revenue (interest earned less interest paid, plus fees)") if banked else
+                   ("Revenue", f"Revenue ({BASIS_WORDS[m['revenue_basis']]})") if m.get("revenue_basis") else
+                   ("Sales", "Sales"))
     g.append(no_sales("growth", f"{sales} growth (1 year)") if doubt else bar("growth", f"{sales} growth (1 year)", pct(gr), None if gr is None else _lerp(gr, [(-0.2, 1), (-0.05, 25), (0, 40), (0.10, 70), (0.25, 100)]),
                  "Not enough history." if gr is None else f"{what} {'grew' if gr >= 0 else 'shrank'} {abs(gr) * 100:.1f}% in the last fiscal year."))
     n, up = m.get("revenue_years", 0), m.get("revenue_up_years", 0)
@@ -1937,10 +2248,14 @@ def _lender(m):
     the usual yardstick for a lender, joins their price to earnings: on September 2026 data, for the 11 profitable
     lenders, the midpoint of the two missed their prices by a median 0.150 on the log scale, against 0.165 for price to
     earnings alone, and it no longer called lenders trading below book value far too dear on one year's earnings
-    (Cherry Hill Mortgage at 0.45x book: overvalued by 45% on earnings, fair on the midpoint). Book equity includes any
-    preferred stock, which flatters it for lenders that issued some. For the two landlords price to book missed by 0.46
-    and 0.54, against 0.14 and 0.04 on earnings, so they keep earnings alone."""
-    return reit_kind(m) == "mortgage" and not m.get("reit_type") and (m.get("equity") or 0) > 0
+    (Cherry Hill Mortgage at 0.45x book: overvalued by 45% on earnings, fair on the midpoint). Book value and earnings
+    are the common shareholders' (common_book, lender_earnings): preferred stock and its dividends are owed first, and
+    counted as the common shareholders' they made lenders that issued much of it look far cheaper than they are (on
+    September 2026 data, Adamas Trust at 0.50x book and 5.2x earnings, against 0.79x and 7.9x for its common
+    shareholders). For the two landlords price to book missed by 0.46 and 0.54, against 0.14 and 0.04 on earnings, so
+    they keep earnings alone. A business development company (is_bdc) is valued the same way, against other BDCs
+    (BDC_WORDS), on its net investment income."""
+    return book_lender(m) and (common_book(m) or 0) > 0
 
 
 def _bank_eps(u, m):
@@ -2088,18 +2403,49 @@ def fair_value(u, m, price, peers, table):
     peer_rows = [table[s] for s in peers]
     bank = _bank_peers(table.get(u["symbol"]) or {}, table)
     rev, ni = m.get("revenue"), m.get("adj_ffo" if reit else "adj_net_income_common" if bank else "adj_net_income")
+    # A lender valued on its book value is valued on its common shareholders' earnings, a BDC's being its net investment
+    # income (lender_earnings). A BDC that doesn't tag that is valued on its book value alone, where its profit left to
+    # common shareholders is positive.
+    lent = book_lender(m)
+    if lent:
+        ni = lender_earnings(m)
+    untagged = lent and is_bdc(m) and ni is None
+    book_only = untagged and (m.get("adj_net_income") or 0) - earnings_gap(m) > 0
     profitable = ni is not None and ni > 0
     withheld = _bank_withheld(m, profitable) if bank else None
     if withheld:
         return {"methods": [], "verdict": None, "withheld": withheld}
+    if lent and is_bdc(m) and not profitable and not book_only and _lender(m):
+        # Why, which the report's general explanation doesn't say: a BDC is valued on its net investment income.
+        return {"methods": [], "verdict": None,
+                "withheld": "There is no fair value estimate. A business development company is valued on its net "
+                            "investment income (the interest, dividends and fees its loans and stakes earn, less its "
+                            "costs, before gains and losses on them) and its book value, and "
+                            + (f"its net investment income left to common shareholders came to {profit(ni)} last year"
+                               if ni is not None else "its profit left to common shareholders was below zero last year")
+                            + ", so it can't be valued on its earnings, and its book value isn't used alone without "
+                              "them."}
+    if lent and not is_bdc(m) and not profitable and ni is not None and (m.get("adj_net_income") or 0) > 0:
+        # Profitable, but not for its common shareholders once its preferred shareholders were paid.
+        return {"methods": [], "verdict": None,
+                "withheld": f"There is no fair value estimate. The company made {money(m['adj_net_income'])} last year"
+                            + (" without one-time items" if m.get("one_time") else "")
+                            + f", but after {money(earnings_gap(m))} of {gap_words(m)} its common shareholders' "
+                              f"earnings came to {profit(ni)}, so it can't be valued on its earnings, and its book value "
+                              "isn't used alone without them."}
     nc = m.get("net_cash") or 0
     methods = _bank_methods(u, m, peer_rows, shares) if bank and profitable else []
     doubt = sales_doubtful(m)
 
     # A sales multiple assumes the company can earn what its peers earn on each dollar of sales, which says
     # little about one that loses money, so that company is valued on its cash flow alone. Nor is it used when
-    # the sales figure itself can't be right.
-    if doubt or bank or reit and not REIT_SALES or reit_kind(m) == "mortgage" or m.get("debt_known") is False and not fin:
+    # the sales figure itself can't be right, nor for a company whose revenue is read the way a lender's is (net
+    # interest income, with fees, or a BDC's investment income: fundamentals.derive's revenue_basis), which isn't on
+    # the footing of the lenders' sales it would be compared with, most of which count interest before what they pay on
+    # their borrowing: on September 2026 data it put Farmer Mac at $56 a share against $173 on earnings and a price
+    # of $219, and Plumas Bancorp at $20 against $44 and a price of $62.
+    if doubt or bank or reit and not REIT_SALES or reit_kind(m) == "mortgage" or m.get("revenue_basis") \
+            or m.get("debt_known") is False and not fin:
         pass
     elif rev and rev > 0 and profitable and fin:
         med_ps = _median([r["ps"] for r in peer_rows])
@@ -2129,18 +2475,38 @@ def fair_value(u, m, price, peers, table):
                                 f"REITs report. Uses last year's FFO of {money(ni)}"
                                 + (f", without one-time items ({profit(plain)} with them)."
                                    if plain is not None and abs(plain - ni) > 0.01 * abs(ni) else ".")})
+    elif med_pe and profitable and not bank and lent and is_bdc(m):
+        gap = earnings_gap(m)
+        methods.append({"name": "Peer price to earnings", "value": med_pe * ni / shares,
+                        "note": f"Similar business development companies trade at {med_pe:.1f}x net investment income: "
+                                "the interest, dividends and fees their loans and stakes earn, less their costs, before "
+                                "gains and losses on those investments. Uses last year's net investment income of "
+                                f"{money(m['nii'])}" + (f", less {money(gap)} of preferred dividends" if gap >= 5e5 else "")
+                                + f", against {profit(m['net_income'])} of net income with those gains and losses."})
     elif med_pe and profitable and not bank:
+        gap = earnings_gap(m) if lent else 0
         methods.append({"name": "Peer price to earnings", "value": med_pe * ni / shares,
                         "note": f"Similar companies trade at {med_pe:.1f}x earnings."
-                                + (f" Uses last year's profit without one-time items: {money(ni)} instead of {profit(m['net_income'])}."
+                                + (f" Uses last year's profit left to common shareholders after {gap_words(m)}"
+                                   + (", without one-time items" if m.get("one_time") else "")
+                                   + f": {money(ni)}, against {profit(m['net_income'])} of net income." if gap >= 5e5 else
+                                   f" Uses last year's profit without one-time items: {money(ni)} instead of {profit(m['net_income'])}."
                                    if m.get("one_time") else "")})
-    if _lender(m) and profitable:
+    if _lender(m) and (profitable or book_only):
         med_pb = _median([r.get("pb") for r in peer_rows])
-        if med_pb:
-            methods.append({"name": "Peer price to book", "value": med_pb * m["equity"] / shares,
+        pref = m.get("preferred_stock") or 0
+        common = (f" Its book value here is what is left to common shareholders: its equity less {money(pref)} of "
+                  "preferred stock." if pref >= 5e5 else "")
+        if med_pb and is_bdc(m):
+            methods.append({"name": "Peer price to book", "value": med_pb * common_book(m) / shares,
+                            "note": f"Similar business development companies trade at {med_pb:.2f}x their book value "
+                                    "(their net asset value: the loans and stakes they hold as their books carry them, "
+                                    "less what they owe), the usual yardstick for these funds." + common})
+        elif med_pb:
+            methods.append({"name": "Peer price to book", "value": med_pb * common_book(m) / shares,
                             "note": f"Similar REITs that lend trade at {med_pb:.2f}x their book value (their loans and "
                                     "other assets as their books carry them, less what they owe), the usual yardstick "
-                                    "for a lender."})
+                                    "for a lender." + common})
 
     if reit:
         # FFO is what is left after interest, so the model values the shares directly, without taking off debt again.
@@ -2274,17 +2640,28 @@ def fair_value(u, m, price, peers, table):
     of = (f"the two methods that suit a {suits}" if pair or fin else
           "the two methods counted for it, similar companies' value to sales and the cash-flow model," if outside
           else "the three methods")
-    if len(vals) == 1 and not profitable:
+    if len(vals) == 1 and book_only:
+        confidence, note = "low", ("Its net investment income, the earnings business development companies are valued "
+                                   "on, isn't among the machine-readable figures of its SEC filings, so it is valued on "
+                                   "similar ones' price to book alone. Treat this range loosely.")
+    elif len(vals) == 1 and not profitable:
         confidence, note = "low", (("Without last year's one-time items the company lost money"
                                     if (m.get("net_income") or 0) > 0 else "The company lost money last year")
                                    + ", so only the cash-flow model applies. Treat this range loosely.")
     elif len(vals) == 1 and outside and methods[0]["name"] == "Peer price to earnings":
         confidence, note = "low", ("Only its peers' price to earnings could be used, so the fair value rests on it "
                                    "alone. Treat this range loosely.")
+    elif len(vals) == 1 and lent and book_unread(m) and profitable:
+        confidence, note = "low", (f"It is valued on its peers' price to earnings alone, since "
+                                   f"{BOOK_UNREAD_WORDS[book_unread(m)]}. Treat this range loosely.")
     elif len(vals) == 1 and reit_kind(m) == "mortgage":
         confidence, note = "low", (("A REIT whose leases are booked as loans is valued on its peers' price to earnings "
                                     "alone" if m.get("reit_type") else "Only its peers' price to earnings could be used")
                                    + ", since their price to sales says little about it, so treat this range loosely.")
+    elif len(vals) == 1 and m.get("revenue_basis") == "bank" and profitable:
+        confidence, note = "low", ("A lender whose revenue is its net interest income plus fees is valued on its peers' "
+                                   "price to earnings alone, since their sales aren't on the same footing as its revenue, "
+                                   "so treat this range loosely.")
     elif len(vals) == 1:
         confidence, note = "low", f"Only one of {of} could be used, so treat this range loosely."
     elif spread > 2:
@@ -2312,7 +2689,7 @@ def fair_value(u, m, price, peers, table):
                                         "rest on the same similar companies.")
     else:
         confidence, note = "moderate", f"Two of the three methods could be used, and they land {apart}."
-    if doubt and profitable:
+    if doubt and profitable and not m.get("revenue_basis"):  # a lender read this way is never valued on sales
         note = f"{DOUBT_NOTE} {note}"
     elif debt_doubt:
         note = f"{DEBT_DOUBT_VALUE_NOTE} {note}"
