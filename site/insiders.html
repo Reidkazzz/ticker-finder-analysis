@@ -31,9 +31,12 @@
         <button class="pill" type="button" data-tier="1" aria-pressed="false">Tier 1 only</button>
         <button class="pill" type="button" data-tier="123" aria-pressed="false">All purchases</button>
       </div>
-      <div class="pills" role="group" aria-label="Screener" data-fits>
+    </div>
+    <div class="toolbar-row fit-row" data-fit-only hidden>
+      <div class="pills pills-labelled" role="group" aria-labelledby="fit-label" data-fits>
+        <span class="pills-label" id="fit-label">Screener</span>
         <button class="pill" type="button" data-fit="any" aria-pressed="true">Any company</button>
-        <button class="pill" type="button" data-fit="pass" aria-pressed="false">Passes the screener</button>
+        <button class="pill" type="button" data-fit="pass" aria-pressed="false">Passes</button>
         <button class="pill" type="button" data-fit="near" aria-pressed="false">Passes or misses by one</button>
       </div>
     </div>
@@ -45,7 +48,9 @@
     <b style="color:var(--text);font-weight:500">Tier 2</b> means $1 million or more, or a single buyer growing their stake by 20% or more.
     A stake counts every share the buyer reports owning, in their own name or through trusts, retirement accounts and family, and "New position" means they owned none before.
     Only real purchases count. Option exercises, stock awards and sales are left out, because insiders sell for many reasons but buy for one.
-    Each company is also checked against the <a href="screener.html">screener's</a> rules: <b style="color:var(--text);font-weight:500">Passes the screener</b> means it is cheap on sales, low on debt, profitable and a US company, the same list the screener shows.</span>
+    <span data-fit-only hidden>Companies outside Finance with yearly figures are also checked against the <a href="screener.html">screener's rules</a>.
+    <b style="color:var(--text);font-weight:500">Passes the screener</b> means it is on the screener's list: a US company worth under $3 billion that clears every rule on price, debt, profit, cash flow and sales.
+    <b style="color:var(--text);font-weight:500">Misses one rule</b> names the only rule its figures miss. A rule that needs a figure its filings don't give is marked as not checked, not as missed.</span></span>
   </div>
 
   <div class="notice" data-pending hidden style="margin:-12px 0 28px"></div>

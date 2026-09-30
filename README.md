@@ -34,6 +34,7 @@ Flags, not rules: **Out of favor** (25%+ below the 52-week high) and **Undiscove
 - Shows who bought, their role, the dollar amount, the price paid, and how today's price compares.
 - **Tier 1:** $10M+ bought in the last 30 days. **Tier 2:** $1M+ total, or any buyer whose stake grew 20%+.
 - Sorted newest filing first. Each weekday's filings are analyzed that evening.
+- **Screener check:** each company with figures, outside Finance, is measured against the sector screener's rules: it passes (it is on the screener's list), misses one rule (named), misses several (each named), or misses none but has a rule that could not be checked. A rule is only called missed when the company's figures show it: a figure the filings don't give (free cash flow where capital spending isn't read, an earlier year of sales, debt that can't be read reliably) makes the rule "not checked" instead, with the reason. Where each company is incorporated and based is looked up with the SEC, as the screener does for its own list. A filter shows only companies that pass, or pass or miss by one.
 
 ### 3. Ticker report
 

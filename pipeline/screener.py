@@ -5,7 +5,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 
 from .net import NotFound, Throttled, sec_json
-from .report import one_time_note
+from .report import one_time_note, sales_doubtful
 
 CACHE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".cache", "registrations.json")
 
@@ -167,49 +167,132 @@ def _score(row):
     return sum(p for _, p, _ in parts), [{"label": l, "points": p, "max": mx} for l, p, mx in parts]
 
 
-# Each rule a company can fail, in plain English, for the insider page's screener check (fit).
+# The insider page's screener check (fit) states a rule a company misses as a fact, so a rule is only "missed" when its
+# figures show it. _checks counts a missing figure as a fail, which is right for keeping a company off the screener
+# but not for saying why: free cash flow left unread because the capital spending tag isn't read, a first year of
+# sales with none before it, or debt that could not be read reliably would read as "no free cash flow", "sales down
+# more than 5%" or "long-term debt half of equity or more". Those rules are "not checked" instead, and say why.
 FIT_MISSES = {
     "ps": "price to sales 2 or more",
     "mcap": "worth $3B or more",
-    "debt": "long-term debt over half of equity",
+    "debt": "long-term debt half of equity or more",
     "margin": "profit margin under 8%",
-    "equity": "negative equity",
     "fcf": "no free cash flow",
-    "profitable": "profitable in fewer than 2 of the last 3 years",
     "growth": "sales down more than 5%",
-    "us": "not incorporated and based in the US",
+    "us": "incorporated or based outside the US",
 }
+# Each rule's subject, for "... could not be checked".
+FIT_RULES = {
+    "ps": "its price to sales", "mcap": "its market value", "debt": "its debt", "margin": "its profit margin",
+    "equity": "its equity", "fcf": "its free cash flow", "profitable": "its profit record",
+    "growth": "its sales growth", "us": "where it is incorporated and based",
+}
+_SALES_DOUBT = "Its sales figure in the SEC data looks incomplete, since profit came out larger than sales."
 
 
-def fit(sym, u, m, result):
+def _fit_rules(u, m):
+    """The rules of _checks a company's figures miss, as [(key, plain-English miss)], and those that could not be
+    checked, as [(key, why)]. A miss of None is stated by another: negative equity fails the debt rule too, and a
+    year without sales fails the profit margin rule too."""
+    missed, unchecked = [], []
+    rev, equity = m.get("revenue"), m.get("equity")
+    doubt = sales_doubtful(m)
+    for key, ok, _ in _checks(u, m)[0]:
+        if ok:
+            continue
+        if key in ("ps", "mcap") and not u.get("mcap"):
+            unchecked.append((key, "It has no market value."))
+        elif key in ("ps", "margin", "growth") and doubt:
+            unchecked.append((key, _SALES_DOUBT))
+        elif key == "ps" and not (rev and rev > 0):
+            missed.append((key, "no sales in its latest year, which fails the profit margin rule too"))
+        elif key == "margin" and not (rev and rev > 0):
+            missed.append((key, None if any(k == "ps" for k, _ in missed) else "no sales in its latest year"))
+        elif key == "margin" and m.get("adj_net_margin") is None:
+            unchecked.append((key, "Its profit could not be read."))
+        elif key in ("debt", "equity") and equity is None:
+            unchecked.append((key, "Its shareholders' equity could not be read."))
+        elif key == "debt" and equity <= 0:
+            missed.append((key, None))
+        elif key == "equity":
+            missed.append((key, ("negative equity" if equity < 0 else "no equity") + ", which fails the debt rule too"))
+        elif key == "debt" and _debt_unread(m):
+            unchecked.append((key, DEBT_UNREAD))
+        elif key == "fcf" and m.get("fcf") is None:
+            unchecked.append((key, "Its free cash flow could not be read from its filings."))
+        elif key == "profitable" and m.get("years_checked", 0) < 2:
+            unchecked.append((key, ("Its filings give profit figures for only one year" if m.get("years_checked") == 1
+                                    else "Its filings give no yearly profit figures") + ", and the rule needs 2."))
+        elif key == "profitable":
+            missed.append((key, f"profitable in {m['profitable_years']} of the {m['years_checked']} years checked"))
+        elif key == "growth" and m.get("revenue_growth") is None:
+            unchecked.append((key, "It has no earlier year of sales to compare with."))
+        else:
+            missed.append((key, FIT_MISSES[key]))
+    return missed, unchecked
+
+
+def _fit_us(u, m, reg):
+    """Whether a company meets the US rule as run() applies it, from its listing's country, the SEC financial data's
+    address and its SEC registration (`reg`, a registrations() record or reason): "ok", "miss", or why it could not be
+    checked."""
+    if u.get("country") not in ("United States", ""):
+        return "miss"
+    places = (reg["incorporated"], reg["hq"]) if isinstance(reg, dict) else ()
+    if any(p and p not in US_STATES for p in places):
+        return "miss"
+    if not (m.get("loc") or "").startswith("US"):
+        return "The SEC's financial data does not give it a US address."
+    if isinstance(reg, str):
+        return UNVERIFIED_REASONS[reg]
+    if not places:
+        return _NOT_CHECKED + "its SEC company record was not looked up."
+    return "ok" if all(p in US_STATES for p in places) else UNVERIFIED_REASONS["blank"]
+
+
+def fit(sym, u, m, result, reg=None):
     """How a company measures against the screener's rules, for a page that lists it for another reason (insider
-    buying). `result` is run's payload. Returns {"status", "failed", "ps", "net_margin", "lt_de", "why"}, where status
-    is "pass" (it is on the screener), "near" (one rule missed), "fail", "unconfirmed" (it passed every rule the figures
-    can check but a rule could not be confirmed), "not_screened" (a financial company) or "no_data"."""
-    out = {"status": None, "failed": [], "misses": [], "ps": None, "net_margin": None, "lt_de": None, "why": None}
-    if any(r["symbol"] == sym for r in result["results"]):
-        out["status"] = "pass"
-    unv = next((x for x in result["unverified"] if x["symbol"] == sym), None)
-    if u.get("sector") in EXCLUDED_SECTORS or (m or {}).get("revenue_basis"):
-        return {**out, "status": "not_screened", "why": EXCLUDED_SECTORS.get(u.get("sector"))
-                or "Its revenue is read the way a lender's is, so it is not screened."}
+    buying). `result` is run's payload and `reg` the company's SEC registration (registrations()), for the US rule.
+
+    Returns {"status", "misses", "missed", "unchecked", "why", "ps", "net_margin", "lt_de"}. status is "pass" (on the
+    screener), "near" (its figures miss exactly one rule and every other rule was checked), "fail" (they miss more, or
+    one while another could not be checked), "unconfirmed" (they miss none, and the rules in unchecked could not be
+    checked), "not_screened" (a financial company, and why says which kind) or "no_data" (no yearly figures). misses
+    states each rule missed as a fact its figures show, missed counts the rules (a miss can state two), unchecked names
+    each rule that could not be checked and why says why, in sentences. ps and net_margin are left out when the sales
+    figure looks incomplete, as the company's report leaves them out."""
+    out = {"status": None, "misses": [], "missed": 0, "unchecked": [], "why": None,
+           "ps": None, "net_margin": None, "lt_de": None}
+    if u.get("sector") in EXCLUDED_SECTORS:
+        return {**out, "status": "not_screened", "why": "Finance sector"}
+    if (m or {}).get("revenue_basis"):
+        return {**out, "status": "not_screened", "why": "its revenue is a lender's"}
     if not m:
-        return {**out, "status": "no_data", "why": "No yearly financial figures to check."}
-    checks, ps = _checks(u, m)
-    out.update(ps=ps, net_margin=m.get("adj_net_margin"), lt_de=m.get("lt_debt_to_equity"))
-    if out["status"] == "pass":
-        return out
-    failed = [key for key, ok, _ in checks if not ok]
-    if u.get("country") not in ("United States", "") or not (m.get("loc") or "").startswith("US"):
-        failed.append("us")
-    if unv and not failed:
-        return {**out, "status": "unconfirmed", "why": unv["reason"]}
-    if unv and failed == ["debt"] and "debt" in unv["unconfirmed"]:
-        return {**out, "status": "unconfirmed", "why": unv["reason"]}
-    if not failed:
-        failed = ["us"]  # passed every rule the figures check, so run found it registered outside the US
-    return {**out, "status": "near" if len(failed) == 1 else "fail", "failed": failed,
-            "misses": [FIT_MISSES[k] for k in failed]}
+        return {**out, "status": "no_data"}
+    if not sales_doubtful(m):
+        out.update(ps=_checks(u, m)[1], net_margin=m.get("adj_net_margin"))
+    out["lt_de"] = m.get("lt_debt_to_equity")
+    if any(r["symbol"] == sym for r in result["results"]):
+        return {**out, "status": "pass"}
+    unv = next((x for x in result["unverified"] if x["symbol"] == sym), None)
+    if unv:
+        # run() lists a company as unverified only when it passed every other rule.
+        return {**out, "status": "unconfirmed", "unchecked": [FIT_RULES[k] for k in unv["unconfirmed"]],
+                "why": unv["reason"]}
+    missed, unchecked = _fit_rules(u, m)
+    us = _fit_us(u, m, reg)
+    if us == "miss":
+        missed.append(("us", FIT_MISSES["us"]))
+    elif us != "ok":
+        unchecked.append(("us", us))
+    if not missed and not unchecked:
+        # Not on the screener, yet nothing here says why: run() read a different registration (a lookup that failed
+        # there and not here), so the US rule is the one in doubt.
+        unchecked.append(("us", _NOT_CHECKED.rstrip(": ") + "."))
+    status = "unconfirmed" if not missed else "near" if len(missed) == 1 and not unchecked else "fail"
+    return {**out, "status": status, "misses": [t for _, t in missed if t], "missed": len(missed),
+            "unchecked": [FIT_RULES[k] for k, _ in unchecked],
+            "why": " ".join(dict.fromkeys(w for _, w in unchecked)) or None}
 
 
 def run(universe, metrics, prices, analyst_counter):

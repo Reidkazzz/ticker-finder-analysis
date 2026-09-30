@@ -4,6 +4,7 @@
     python -m pipeline.build --limit 150     # quick sample for local testing
 """
 import argparse
+import collections
 import datetime as dt
 import json
 import math
@@ -299,15 +300,23 @@ def main():
         cache = insiders.load_cache(cache_path)
     ins = insiders.build(cache, uni if not args.limit else universe_all_for_insiders(uni), args.insider_days, today)
     pending = insiders.pending_days(cache, args.insider_days, today)
-    # How each company with insider buying or a new 5%+ stake measures against the screener's rules, so the insider page
-    # can show which ones the screener would also pick (screener.fit).
-    for c in ins["companies"] + ins["stakes"]:
-        s = c.get("symbol")
-        c["fit"] = screener.fit(s, uni[s], metrics.get(s), scr) if s in uni else None
-    fits = [c["fit"]["status"] for c in ins["companies"] if c.get("fit")]
-    step(f"  screener check: {fits.count('pass')} of the companies with purchases pass, {fits.count('near')} miss by one rule")
     step(f"  {len(ins['companies'])} companies with purchases, {len(ins['stakes'])} new 5%+ stakes"
          + (f"; {len(pending)} day{'s' if len(pending) != 1 else ''} still to scan" if pending else ""))
+    # How each company with insider buying or a new 5%+ stake measures against the screener's rules, so the insider page
+    # can show which ones the screener would also pick (screener.fit). The US rule needs where each is incorporated and
+    # based, which run() looks up only for the companies that pass every other rule, so the others' SEC records are
+    # looked up here (kept between runs, so only companies new to the page need a request). Every entry gets the key,
+    # None for a company outside a --limit sample, so the page can tell data with the check from older data.
+    listed = [c for c in ins["companies"] + ins["stakes"] if c.get("symbol") in uni]
+    regs = screener.registrations([], reuse=sorted({uni[c["symbol"]]["cik"] for c in listed if metrics.get(c["symbol"])
+                                                    and uni[c["symbol"]]["sector"] not in screener.EXCLUDED_SECTORS}))
+    for c in ins["companies"] + ins["stakes"]:
+        s = c.get("symbol")
+        c["fit"] = screener.fit(s, uni[s], metrics.get(s), scr, regs.get(uni[s]["cik"])) if s in uni else None
+    fits = collections.Counter(c["fit"]["status"] for c in ins["companies"] if c["fit"])
+    step(f"  screener check of the {sum(fits.values())} companies with purchases in the universe: {fits['pass']} pass, "
+         f"{fits['near']} miss one rule, {fits['fail']} miss more, {fits['unconfirmed']} miss none but have a rule that "
+         f"could not be checked, {fits['not_screened']} not screened, {fits['no_data']} without yearly figures")
 
     heads = {}
     if not args.skip_news:
@@ -415,7 +424,7 @@ def main():
             # known yet.
             "coverage": coverage.get(s),
             "news": {"items": items, "overall": mood},
-            "insiders": ic,
+            "insiders": {k: v for k, v in ic.items() if k != "fit"} if ic else None,  # the report doesn't show fit
             "insider_window": args.insider_days,
             "screener": next((r for r in scr["results"] if r["symbol"] == s), None) is not None,
         }

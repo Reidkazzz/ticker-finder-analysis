@@ -72,6 +72,13 @@ tr.detail td { padding: 0; background: var(--surface-2); white-space: normal; te
 .buy-stats b { display: block; font-size: 16px; font-weight: 500; color: var(--text); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
 .buy-stats b.up { color: var(--up); }
 .buy-stats b.down { color: var(--down); }
+/* The screener check (insiders.js fitLine): tags wrap, since a missed rule can be longer than the card is wide. */
+.fit-row { justify-content: flex-end; }
+.pills-labelled { flex-wrap: wrap; align-items: center; overflow: visible; }
+.pills-label { font-size: 13.5px; color: var(--text-2); margin-right: 4px; }
+.tag.fit { white-space: normal; height: auto; min-height: 22px; padding: 3px 8px; line-height: 1.35; }
+.fit-note { color: var(--text-3); font-size: 13px; }
+.stake-row .fit-line { margin-top: 6px; }
 .buyers { display: grid; gap: 2px; align-content: start; }
 .buyer {
   display: grid; grid-template-columns: minmax(0, 1.4fr) 92px 92px 84px 20px; gap: 12px; align-items: center;
