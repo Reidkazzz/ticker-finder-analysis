@@ -167,6 +167,51 @@ def _score(row):
     return sum(p for _, p, _ in parts), [{"label": l, "points": p, "max": mx} for l, p, mx in parts]
 
 
+# Each rule a company can fail, in plain English, for the insider page's screener check (fit).
+FIT_MISSES = {
+    "ps": "price to sales 2 or more",
+    "mcap": "worth $3B or more",
+    "debt": "long-term debt over half of equity",
+    "margin": "profit margin under 8%",
+    "equity": "negative equity",
+    "fcf": "no free cash flow",
+    "profitable": "profitable in fewer than 2 of the last 3 years",
+    "growth": "sales down more than 5%",
+    "us": "not incorporated and based in the US",
+}
+
+
+def fit(sym, u, m, result):
+    """How a company measures against the screener's rules, for a page that lists it for another reason (insider
+    buying). `result` is run's payload. Returns {"status", "failed", "ps", "net_margin", "lt_de", "why"}, where status
+    is "pass" (it is on the screener), "near" (one rule missed), "fail", "unconfirmed" (it passed every rule the figures
+    can check but a rule could not be confirmed), "not_screened" (a financial company) or "no_data"."""
+    out = {"status": None, "failed": [], "misses": [], "ps": None, "net_margin": None, "lt_de": None, "why": None}
+    if any(r["symbol"] == sym for r in result["results"]):
+        out["status"] = "pass"
+    unv = next((x for x in result["unverified"] if x["symbol"] == sym), None)
+    if u.get("sector") in EXCLUDED_SECTORS or (m or {}).get("revenue_basis"):
+        return {**out, "status": "not_screened", "why": EXCLUDED_SECTORS.get(u.get("sector"))
+                or "Its revenue is read the way a lender's is, so it is not screened."}
+    if not m:
+        return {**out, "status": "no_data", "why": "No yearly financial figures to check."}
+    checks, ps = _checks(u, m)
+    out.update(ps=ps, net_margin=m.get("adj_net_margin"), lt_de=m.get("lt_debt_to_equity"))
+    if out["status"] == "pass":
+        return out
+    failed = [key for key, ok, _ in checks if not ok]
+    if u.get("country") not in ("United States", "") or not (m.get("loc") or "").startswith("US"):
+        failed.append("us")
+    if unv and not failed:
+        return {**out, "status": "unconfirmed", "why": unv["reason"]}
+    if unv and failed == ["debt"] and "debt" in unv["unconfirmed"]:
+        return {**out, "status": "unconfirmed", "why": unv["reason"]}
+    if not failed:
+        failed = ["us"]  # passed every rule the figures check, so run found it registered outside the US
+    return {**out, "status": "near" if len(failed) == 1 else "fail", "failed": failed,
+            "misses": [FIT_MISSES[k] for k in failed]}
+
+
 def run(universe, metrics, prices, analyst_counter):
     """universe/metrics/prices keyed by symbol. Returns the screener JSON payload."""
     candidates, debt_unread, checked_by_sector = [], [], {}

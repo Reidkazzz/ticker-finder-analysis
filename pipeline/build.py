@@ -299,6 +299,13 @@ def main():
         cache = insiders.load_cache(cache_path)
     ins = insiders.build(cache, uni if not args.limit else universe_all_for_insiders(uni), args.insider_days, today)
     pending = insiders.pending_days(cache, args.insider_days, today)
+    # How each company with insider buying or a new 5%+ stake measures against the screener's rules, so the insider page
+    # can show which ones the screener would also pick (screener.fit).
+    for c in ins["companies"] + ins["stakes"]:
+        s = c.get("symbol")
+        c["fit"] = screener.fit(s, uni[s], metrics.get(s), scr) if s in uni else None
+    fits = [c["fit"]["status"] for c in ins["companies"] if c.get("fit")]
+    step(f"  screener check: {fits.count('pass')} of the companies with purchases pass, {fits.count('near')} miss by one rule")
     step(f"  {len(ins['companies'])} companies with purchases, {len(ins['stakes'])} new 5%+ stakes"
          + (f"; {len(pending)} day{'s' if len(pending) != 1 else ''} still to scan" if pending else ""))
 
