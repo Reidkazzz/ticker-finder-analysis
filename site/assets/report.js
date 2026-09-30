@@ -493,6 +493,18 @@ function insiderSection(r) {
       </div>`).join("")}</div>`;
 }
 
+// Where revenue was read for a company whose revenue the SEC's data gives under no label the site reads: its own income
+// statements (fundamentals.revenue_source; older data has none).
+function revenueSource(f) {
+  const s = f.revenue_source;
+  const filed = s.filed ? ` filed ${esc(date(s.filed, { month: "short", day: "numeric", year: "numeric" }))}` : "";
+  const quarters = (f.quarters || []).some((q) => q.revenue != null) ? " Quarterly revenue comes from the same line of its quarterly reports." : "";
+  // The breakdown it is shown under, where there is one (APA's "Oil and gas"); a line shown for a company and its
+  // predecessor apart gives only one of them for the year.
+  const part = s.sections && s.sections.length === 1 ? ` (${esc(s.sections[0])})` : "";
+  return `Revenue is read from the company's own income statements: the "${esc(s.label)}" line${part} of its Form ${esc(s.form)}${filed} for fiscal year ${f.fiscal_year}.${quarters} The SEC's data doesn't give this company's revenue under the labels this site reads for other companies.`;
+}
+
 function render(r) {
   const f = r.fundamentals;
   document.title = `${r.symbol}: ${r.name} | Ticker Finder`;
@@ -512,8 +524,9 @@ function render(r) {
     ${insiderSection(r)}
     ${newsSection(r)}
     <div class="notes">
-      ${f?.partial ? `<p>Quarterly revenue from the company's quarterly reports (Form 10-Q); the SEC's data holds no full fiscal year of its results yet. Source: SEC filings.</p>`
+      ${f?.partial ? `<p>Quarterly revenue from the company's quarterly reports (Form 10-Q); the SEC's data holds no full fiscal year of its results${r.coverage?.kind === "revenue_since" ? " with sales" : ""} yet. Source: SEC filings.</p>`
         : f ? `<p>Financials from fiscal year ${f.fiscal_year}${f.fiscal_year_end ? ` (ended ${esc(date(f.fiscal_year_end, { month: "short", day: "numeric", year: "numeric" }))})` : ""}.${f.balance_as_of ? ` Balance sheet as of ${esc(date(f.balance_as_of, { month: "short", day: "numeric", year: "numeric" }))}.` : ""} Source: SEC filings.</p>` : ""}
+      ${f?.revenue_source ? `<p>${revenueSource(f)}</p>` : ""}
       ${r.peer_group && !r.peer_basis ? `<p>Compared with ${r.peer_count} other US-listed companies in ${esc(r.peer_group)}.</p>` : ""}
       <p>Educational estimates only. Not investment advice.</p>
     </div>`;

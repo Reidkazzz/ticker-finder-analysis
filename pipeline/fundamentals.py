@@ -244,7 +244,13 @@ RATIOS = {
 # lookup. Net income and revenue are left out: proxies tag them too (Quinstreet's 2026 proxy tagged a profit measure
 # for each of 2022 to 2026 as Revenues, $112.5M for 2026, against $1.29B of sales in its 10-K).
 STATEMENT_TAGS = {t for k in ("operating_income", "ocf", "pretax", "income_tax") for t in DURATION[k]}
-REVENUE_TAGS = set(DURATION["revenue"])
+# Revenue read from a company's own income statement (statements.py), for a listed company whose results the SEC's data
+# gives without revenue under any tag above (APA Corporation's "Total revenues", tagged only by product). Its figures
+# join the company's fiscal years, quarters and own-filing rows ("concept") under this name, after the frames are read,
+# and it is never fetched as a frame or looked up as a tag. Last, so a tagged figure wins.
+STATEMENT_REVENUE = "IncomeStatementRevenue"
+REVENUE_ORDER = DURATION["revenue"] + [STATEMENT_REVENUE]
+REVENUE_TAGS = set(REVENUE_ORDER)
 # Without these for the two newest years, every company's latest figures would silently change. A bank's revenue is
 # its net interest income plus its noninterest income.
 CRITICAL = {"revenue", "net_income", "ocf", "capex", "pretax", "income_tax", "bank_nii", "bank_noninterest_income"}
@@ -660,9 +666,10 @@ def _quarter_tags(c, nii_alone=False):
     the one each quarter would take first (DURATION), and a bank's net interest income and noninterest income tags where
     its quarters tag both, or with `nii_alone` (a REIT by its Nasdaq labels) the net interest income tag alone of a
     company that tags no revenue line in any year, whose revenue that is (derive's revenue_basis "net_interest")."""
-    tags = [next(t for t in DURATION["revenue"] if t in facts) for facts in (c.get("quarters") or {}).values()
+    tags = [next(t for t in REVENUE_ORDER if t in facts) for facts in (c.get("quarters") or {}).values()
             if REVENUE_TAGS & facts.keys()]
     tags += [s["revenue_tag"] for s in (c.get("annual") or {}).values() if s.get("revenue_tag")]
+    tags = [t for t in tags if t != STATEMENT_REVENUE]  # its rows come from the statements read, not a tag lookup
     alone = nii_alone and not tags
     for facts in (c.get("quarters") or {}).values():
         nii = next((t for t in DURATION["bank_nii"] + DURATION["bank_nii_alt"] if t in facts), None)
@@ -3026,7 +3033,7 @@ def _quarter_series(f, series, bank=False, gross=True):
             # from customer contracts, a smaller figure first in DURATION, beside it.
             y = fiscal_year({"start": a, "end": b})[0]
             above = any(facts[t]["val"] > 0 for t in REVENUE_TAGS & facts.keys())
-            tag = next((t for t in DURATION["revenue"] if t in facts and (facts[t]["val"] or not above)
+            tag = next((t for t in REVENUE_ORDER if t in facts and (facts[t]["val"] or not above)
                         and (y is None or agree(t, y["tag"], y))), None)
             rev = facts[tag]["val"] if tag else None
             accns, tags = {facts[tag].get("accn")} if tag else set(), [tag]
@@ -3649,7 +3656,7 @@ def pending(f):
     out = []
     if spans:
         newest = raw[tuple(x.isoformat() for x in spans[-1])]
-        tag = next(t for t in DURATION["revenue"] if t in newest)
+        tag = next(t for t in REVENUE_ORDER if t in newest)
         rows = {t: rs for t, rs in concept.items() if t == tag}
         footing = _footings(rows) if rows else {}
         periods = []
