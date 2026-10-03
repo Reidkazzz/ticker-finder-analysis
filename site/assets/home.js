@@ -42,6 +42,12 @@ async function screener() {
   const host = document.querySelector("[data-top-screen]");
   try {
     const s = await load("screener.json");
+    // The profit margin rule the data was built with (screener.RULES), as the screener page states it.
+    const margin = s.rules?.min_net_margin;
+    if (margin != null) {
+      const n = Math.round(margin * 10000) / 100;
+      document.querySelectorAll("[data-margin-cents]").forEach((el) => { el.textContent = `${n} cent${n === 1 ? "" : "s"}`; });
+    }
     document.querySelector("[data-screen-count]").textContent = `${s.results.length} passed every check`;
     if (!s.results.length) {
       host.innerHTML = `<p class="muted" style="font-size:14px">No company passes every check today. The rules are strict on purpose.</p>`;

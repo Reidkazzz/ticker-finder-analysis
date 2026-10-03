@@ -287,10 +287,8 @@ def main():
         step(f"  {s}: market value set from {filed / 1e6:,.0f}M shares (its SEC filings, after the stock split since) "
              f"rather than the {listed / 1e6:,.0f}M the listing's market value implied")
 
-    step("Running the sector screener")
-    scr = screener.run(uni, metrics, prices, market.AnalystCounter())
-    step(f"  {len(scr['results'])} companies passed")
-
+    # The insider scan runs before the screener, which flags and scores the companies whose insiders bought (Tier 1 or
+    # 2) and whose price is under what they paid.
     step(f"Scanning EDGAR for insider buying (last {args.insider_days} days)")
     cache_path = os.path.join(CACHE, "insiders.json")
     try:
@@ -302,6 +300,17 @@ def main():
     pending = insiders.pending_days(cache, args.insider_days, today)
     step(f"  {len(ins['companies'])} companies with purchases, {len(ins['stakes'])} new 5%+ stakes"
          + (f"; {len(pending)} day{'s' if len(pending) != 1 else ''} still to scan" if pending else ""))
+
+    step("Running the sector screener")
+    bought = {c["symbol"]: {"tier": c["tier"], "avg_price": c["avg_price"], "total_value": c["total_value"]}
+              for c in ins["companies"] if c.get("symbol") in uni}
+    scr = screener.run(uni, metrics, prices, market.AnalystCounter(), insiders=bought)
+    flagged = collections.Counter(f for r in scr["results"] for f in r["flags"])
+    step(f"  {len(scr['results'])} companies passed; flags: "
+         + (", ".join(f"{n} {f}" for f, n in sorted(flagged.items())) or "none"))
+    step(f"  {sum(1 for x in scr['industries'] if x['out_of_favor'])} of {len(scr['industries'])} industries out of "
+         f"favor; watch lists: {len(scr['net_cash_list'])} under 1x cash, {len(scr['financials_list'])} banks and "
+         f"insurers under book value, {len(scr['giants'])} overpriced giants")
     # How each company with insider buying or a new 5%+ stake measures against the screener's rules, so the insider page
     # can show which ones the screener would also pick (screener.fit). The US rule needs where each is incorporated and
     # based, which run() looks up only for the companies that pass every other rule, so the others' SEC records are

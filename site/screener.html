@@ -30,12 +30,21 @@
         <select class="select" data-sort>
           <option value="score">Best score</option>
           <option value="ps">Cheapest vs. sales</option>
+          <option value="pb" data-needs-pb>Cheapest vs. book value</option>
           <option value="net_margin">Highest profit margin</option>
           <option value="fcf_yield">Most cash generated</option>
           <option value="drawdown">Furthest below high</option>
           <option value="mcap">Smallest company</option>
         </select>
       </label>
+    </div>
+    <div class="toolbar-row fit-row" data-insider-only hidden>
+      <div class="pills pills-labelled" role="group" aria-labelledby="insider-label" data-insider-filter>
+        <span class="pills-label" id="insider-label">Insider buying</span>
+        <button class="pill" type="button" data-insider="any" aria-pressed="true">Any company</button>
+        <button class="pill" type="button" data-insider="buying" aria-pressed="false">Insiders buying</button>
+        <button class="pill" type="button" data-insider="below" aria-pressed="false">Below insiders' price</button>
+      </div>
     </div>
   </div>
 
@@ -52,17 +61,88 @@
         <li><i class="ph ph-check"></i><div><b>Price to sales under 2</b><span>You pay less than $2 for each $1 of yearly sales.</span></div></li>
         <li><i class="ph ph-check"></i><div><b>Market value under $3 billion</b><span>Smaller companies get less attention, so mispricings last longer. Under $2 billion earns extra points.</span></div></li>
         <li><i class="ph ph-check"></i><div><b>Long-term debt under half of equity</b><span>Top marks go to companies with more cash than debt, and the best case is no debt at all. A company whose debt can't be read reliably from its filings can't pass this check. If the debt that could be read is already over the limit, it fails. Otherwise, if it passes all the other checks, a note under the results names it.</span></div></li>
-        <li><i class="ph ph-check"></i><div><b>Net profit margin of 8% or more</b><span>At least 8 cents of profit on every sales dollar, not counting one-time items. One-time gains, such as selling a business, are taken out, one-time charges, such as a write-down or a loss on paying off debt early, are added back, and an unusual tax bill is replaced by a normal one. Gains, charges and tax credits that come most years count as part of the business.</span></div></li>
+        <li><i class="ph ph-check"></i><div><b>Net profit margin of <span data-margin-pct>3%</span> or more</b><span>At least <span data-margin-cents>3 cents</span> of profit on every sales dollar, not counting one-time items. <span data-thin-margin>That lets in thin-margin businesses such as retailers and distributors, while higher margins still earn more points. </span>One-time gains, such as selling a business, are taken out, one-time charges, such as a write-down or a loss on paying off debt early, are added back, and an unusual tax bill is replaced by a normal one. Gains, charges and tax credits that come most years count as part of the business.</span></div></li>
         <li><i class="ph ph-check"></i><div><b>Based and incorporated in the US</b><span>Rules out foreign listings (ADRs) and companies registered offshore, such as in the Cayman Islands.</span></div></li>
         <li><i class="ph ph-check"></i><div><b>Positive equity and free cash flow</b><span>It owns more than it owes, and it brings in more cash than it spends.</span></div></li>
         <li><i class="ph ph-check"></i><div><b>Profitable in 2 of the last 3 years</b><span>One good year can be luck. Two out of three is a pattern. One-time items don't count here either.</span></div></li>
         <li><i class="ph ph-check"></i><div><b>Sales not shrinking more than 5%</b><span>Keeps out value traps: stocks that look cheap because the business is dying.</span></div></li>
-        <li class="bonus"><i class="ph ph-flag"></i><div><b>Out of favor</b><span>A flag, not a rule: the price is 25% or more below its 52-week high.</span></div></li>
-        <li class="bonus"><i class="ph ph-flag"></i><div><b>Undiscovered</b><span>A flag, not a rule: two or fewer Wall Street analysts publish estimates on it.</span></div></li>
+      </ul>
+      <h3 class="rule-head">Flags</h3>
+      <p class="faint rule-note">Flags point out something worth knowing. None of them keeps a company off the list.</p>
+      <ul class="rule-list">
+        <li class="bonus"><i class="ph ph-flag"></i><div><b>Out of favor</b><span>The price is 25% or more below its 52-week high.</span></div></li>
+        <li class="bonus" data-new-flag><i class="ph ph-flag"></i><div><b>Industry out of favor</b><span>Its whole industry has slumped: the typical (median) company in it trades 25% or more below its 52-week high. The industries are listed under the results.</span></div></li>
+        <li class="bonus"><i class="ph ph-flag"></i><div><b>Undiscovered</b><span>Two or fewer Wall Street analysts publish estimates on it.</span></div></li>
+        <li class="bonus" data-new-flag><i class="ph ph-flag"></i><div><b>Under book value</b><span>The whole company is worth less on the market than its book value: shareholders' equity less preferred stock, what shareholders would keep if everything were sold at the value on its balance sheet and every debt paid.</span></div></li>
+        <li class="bonus" data-new-flag><i class="ph ph-flag"></i><div><b>Insiders buying</b><span>In the last <span data-window>30</span> days, its executives, directors or big owners bought its stock on the open market with their own money: $1 million or more, or a single buyer growing their stake by 20% or more (Tier 1 or 2 on the <a href="insiders.html">insider buying</a> page).</span></div></li>
+        <li class="bonus" data-new-flag><i class="ph ph-flag"></i><div><b>Below insiders' price</b><span>Insiders are buying, and today's price is under the average price they paid. You can buy for less than they did.</span></div></li>
+        <li class="bonus" data-new-flag><i class="ph ph-flag"></i><div><b>Above upper band, wait for a pullback</b><span>The price has risen unusually fast: it is above the average of its last 20 weekly closing prices plus two standard deviations of them (the upper Bollinger band). Many traders take that as a sign to wait for the price to pull back rather than buy after the run-up.</span></div></li>
       </ul>
       <p class="faint" style="font-size:13px;margin-top:16px">Figures come from each company's latest fiscal year and latest balance sheet filed with the SEC. Prices are from the last close.</p>
     </div>
   </details>
+
+  <details class="disclose" style="margin-top:12px" data-score-help>
+    <summary><i class="ph ph-chart-bar" aria-hidden="true" style="margin:0;color:var(--text-2);transform:none"></i>How the score adds up<i class="ph ph-caret-down" aria-hidden="true"></i></summary>
+    <div class="body">
+      <p class="faint rule-note">Every company on the list already passed all eight checks. The score, out of 100, ranks them. Select a company to see its points.</p>
+      <ul class="rule-list">
+        <li><i class="ph ph-plus"></i><div><b>Cheap vs. sales, up to 15</b><span>Full points at a price to sales of 0, falling evenly to none at the limit of 2.</span></div></li>
+        <li><i class="ph ph-plus"></i><div><b>Debt, up to 20</b><span>20 for no debt at all, 14 for more cash than debt, and up to 8 for low debt, falling to none at the limit.</span></div></li>
+        <li><i class="ph ph-plus"></i><div><b>Profit margin, up to 15</b><span>Full points at a margin of 30% or more, without one-time items.</span></div></li>
+        <li><i class="ph ph-plus"></i><div><b>Cash generation, up to 10</b><span>Full points when a year's free cash flow is 15% or more of the market value.</span></div></li>
+        <li><i class="ph ph-plus"></i><div><b>Sales growth, up to 10</b><span>Full points for sales up 20% or more on the year before.</span></div></li>
+        <li><i class="ph ph-plus"></i><div><b>Under book value, up to 10</b><span>Full points when the market value is under book value, falling evenly to none at twice book value.</span></div></li>
+        <li><i class="ph ph-plus"></i><div><b>Under $2 billion, 5</b><span>For the smallest companies on the list.</span></div></li>
+        <li><i class="ph ph-plus"></i><div><b>Out of favor, up to 5</b><span>Full points at 50% or more below the 52-week high.</span></div></li>
+        <li><i class="ph ph-plus"></i><div><b>Few analysts, up to 5</b><span>5 when no analyst covers it, 3 for one or two.</span></div></li>
+        <li><i class="ph ph-plus"></i><div><b>Insiders buying, 5</b><span>For Tier 1 or 2 insider buying.</span></div></li>
+      </ul>
+    </div>
+  </details>
+
+  <section data-section="industries" id="industries" hidden>
+    <div class="section-title"><h2>Industries out of favor</h2></div>
+    <p class="section-lede">An industry is out of favor when its typical (median) company trades 25% or more below its 52-week high: the whole industry has slumped, not just one company in it. Beside each is the median price to sales of its companies against the whole market's, so you can see whether the slump left the industry cheap. Only industries with at least 5 companies that have a year of weekly prices are measured, each company counted once. A company listed for less than a year is left out, since its 52-week high is just its high since listing.</p>
+    <div data-body></div>
+  </section>
+
+  <section data-section="net_cash" id="net-cash" hidden>
+    <div class="section-title"><h2>Under 1x cash</h2></div>
+    <p class="section-lede">Companies worth less on the market than their net cash: the cash and short-term investments in their accounts, minus all their debt and any preferred stock or outside stakes in their subsidiaries. Other bills, such as payables and leases, are not subtracted, so check those in the filings too. There is usually a reason a stock trades this low: most of these companies spend more than they bring in, so each shows its cash runway, how many years its cash would last at the latest year's spending. This list is separate from the ranked list above and doesn't change its scores.</p>
+    <details class="disclose list-rules">
+      <summary><i class="ph ph-list-checks" aria-hidden="true" style="margin:0;color:var(--text-2);transform:none"></i>What a company needs to be listed<i class="ph ph-caret-down" aria-hidden="true"></i></summary>
+      <div class="body"><ul class="rule-list">
+        <li><i class="ph ph-check"></i><div><b>Market value under its net cash</b><span>Net cash is cash and short-term investments minus all debt, preferred stock and outside stakes in its subsidiaries, from the latest balance sheet filed with the SEC. Long-term investments don't count: they can take years to turn into cash.</span></div></li>
+        <li><i class="ph ph-check"></i><div><b>All of its debt could be read, and it owns more than it owes</b><span>Net cash needs all of the company's debt, so a company whose debt can't be read reliably from its filings is left out, and so is one whose shareholders' equity is zero or less.</span></div></li>
+        <li><i class="ph ph-check"></i><div><b>Based and incorporated in the US</b><span>The same test as the ranked list, confirmed with the SEC.</span></div></li>
+        <li><i class="ph ph-check"></i><div><b>Not a financial company</b><span>A bank's or lender's cash is mostly its customers' money.</span></div></li>
+        <li class="bonus"><i class="ph ph-info"></i><div><b>Profit is not required</b><span>Cash runway is cash and short-term investments divided by the latest fiscal year's cash burn (negative free cash flow). A company that brought in more cash than it spent isn't burning cash, so it has no runway to show, and none is shown when its latest fiscal year of figures is over a year older than its balance sheet.</span></div></li>
+      </ul></div>
+    </details>
+    <div data-body></div>
+  </section>
+
+  <section data-section="financials" id="financials" hidden>
+    <div class="section-title"><h2>Banks and insurers under book value</h2></div>
+    <p class="section-lede">Banks, insurers and other financial companies are kept out of the ranked list, because their cash and debt are mostly their customers' money. Investors judge them by a different yardstick: the price against book value, what shareholders would keep if everything were sold at the value on the balance sheet and every debt paid. These are the profitable ones priced under that value.</p>
+    <details class="disclose list-rules">
+      <summary><i class="ph ph-list-checks" aria-hidden="true" style="margin:0;color:var(--text-2);transform:none"></i>What a company needs to be listed<i class="ph ph-caret-down" aria-hidden="true"></i></summary>
+      <div class="body"><ul class="rule-list">
+        <li><i class="ph ph-check"></i><div><b>Banks: under tangible book value</b><span>Book value less preferred stock, goodwill and other intangible assets (mostly premiums paid for past acquisitions), the way bank analysts measure it. Profit and return on equity are the common shareholders'.</span></div></li>
+        <li><i class="ph ph-check"></i><div><b>Insurers and others: under book value</b><span>Shareholders' equity less preferred stock.</span></div></li>
+        <li><i class="ph ph-check"></i><div><b>Profitable last year</b><span>A profit left to common shareholders (after preferred dividends) and a positive return on equity, not counting one-time items, in a fiscal year that is current. A stock under book value while losing money may be cheap for a reason.</span></div></li>
+        <li><i class="ph ph-check"></i><div><b>A US company, not a REIT, fund or land developer</b><span>Based and incorporated in the US, confirmed with the SEC. Real estate investment trusts, business development companies (funds that lend to private companies) and the land developers Nasdaq also files under Finance are left out.</span></div></li>
+      </ul></div>
+    </details>
+    <div data-body></div>
+  </section>
+
+  <section data-section="giants" id="giants" hidden>
+    <div class="section-title"><h2>Overpriced giants</h2></div>
+    <p class="section-lede">The kind of stock to avoid, the opposite of what the screener looks for: companies worth more than $90 billion priced at more than 10 times their sales over the last 12 months (or their latest fiscal year, where quarterly figures aren't available). At that price, the stock only pays off if the company keeps growing fast for many years. Companies whose sales figure looks incomplete, lenders, and REITs (whose sales are rent, which every REIT is priced at many times) are left out.</p>
+    <div data-body></div>
+  </section>
 </main>
 <footer class="foot" data-foot></footer>
 <script type="module" src="assets/screener.js"></script>
