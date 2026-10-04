@@ -21,11 +21,61 @@ A company passes only if it clears every check:
 | Price to sales | under 2 |
 | Market value | under $3B (bonus points under $2B) |
 | Debt | long-term debt / equity under 0.5. Best: no debt. Next best: more cash than debt |
-| Net profit margin | 8% or more |
+| Net profit margin | 3% or more, without one-time items (8% until September 2026) |
 | Location | headquartered **and** incorporated in a US state (rules out ADRs and offshore shells) |
 | Viability | equity above zero, free cash flow above zero, profitable in 2 of the last 3 years, sales not down more than 5% |
 
-Flags, not rules: **Out of favor** (25%+ below the 52-week high) and **Undiscovered** (two or fewer analysts). Passing companies are ranked by a 0 to 100 score, and every point is itemized on the page.
+Flags, not rules (none keeps a company off the list):
+
+| Flag | Meaning |
+|---|---|
+| Out of favor | 25%+ below its 52-week high |
+| Industry out of favor | the median company in its Nasdaq industry is 25%+ below its 52-week high (industries with at least 5 companies that have a year of weekly prices, each counted once) |
+| Undiscovered | two or fewer analysts publish estimates |
+| Under book value | market value under book value (shareholders' equity less preferred stock) |
+| Insiders buying | Tier 1 or 2 open-market insider buying in the insider page's window (30 days) |
+| Below insiders' price | Tier 1 or 2 insider buying, and the price is under the average price those insiders paid |
+| Above upper band, wait for a pullback | the price is above the upper Bollinger band: the average of the last 20 weekly closes plus two standard deviations of them |
+
+Passing companies are ranked by a 0 to 100 score, and every point is itemized on the page. The weights are `SCORE_WEIGHTS` in `pipeline/screener.py`:
+
+| Part | Points |
+|---|---|
+| Cheap vs. sales | up to 15: full at a price to sales of 0, falling evenly to none at 2 |
+| Debt | 20 for no debt, 14 for more cash than debt, up to 8 for low debt (none at the limit) |
+| Profit margin | up to 15: full at 30% or more |
+| Cash generation | up to 10: full when free cash flow is 15% or more of market value |
+| Sales growth | up to 10: full at 20% or more |
+| Under book value | up to 10: full under 1x book value, falling evenly to none at 2x |
+| Under $2B | 5 |
+| Out of favor | up to 5: full at 50% or more below the 52-week high |
+| Few analysts | 5 for none, 3 for one or two |
+| Insiders buying | 5 for Tier 1 or 2 insider buying |
+
+Beside the ranked list, the page shows the industries out of favor, each with its median price to sales against the whole market's, and three watch lists that don't change the ranked list or its scores:
+
+- **Under 1x cash:** US companies outside finance whose market value is below their net cash: cash and short-term investments less all debt, preferred stock and minority holders' stakes in subsidiaries, from the latest balance sheet. Other bills (payables, leases) are not subtracted, and the page says so. Long-term investments don't count, and a company whose debt can't be read reliably, or whose shareholders' equity is zero or less, is left out. Profit isn't required, so each shows its free cash flow and its cash runway: cash and short-term investments over the latest fiscal year's cash burn (negative free cash flow), shown only when that fiscal year ended within 15 months of the balance sheet.
+- **Banks and insurers under book value:** profitable US financial companies (not REITs, business development companies, or the land developers Nasdaq files under Finance) priced under book value. A bank is measured on tangible book value (equity less preferred stock, goodwill and other intangible assets), with the profit and return on equity left to common shareholders; any other on book value (equity less preferred stock), with its profit left to common shareholders (after preferred dividends) and return on that book. Profit and return on equity must both be positive, without one-time items, in a fiscal year that ended within 15 months of the balance sheet.
+- **Overpriced giants:** companies worth over $90B priced at more than 10 times their sales over the last 12 months, or their latest fiscal year where quarterly figures aren't available (not lenders, REITs, whose sales are rent, nor companies whose sales figure looks incomplete), shown as the kind of stock to avoid.
+
+### How the screener has done
+
+The screener was rerun as it would have run on the last Friday of September 2022, 2023, 2024 and 2025, on the SEC filings made before each date and that week's prices, through the pipeline's own code (`backtest/`). Each passing company's total return over the next 52 weeks was compared with the average listed stock's. "Before" is the screener before the September 2026 update, with the 8% margin rule; "after" is this one.
+
+| | Before | After |
+|---|---|---|
+| Companies passing (2022, 2023, 2024, 2025) | 57, 40, 26, 18 | 137, 99, 76, 77 |
+| Their next year against the average stock, mean of all four years | +7.4 points (95% interval -0.1 to +14.9), median +2.3 | +9.2 (+4.5 to +14.4), median +2.6 |
+| How well the score ranks the passers' returns (rank correlation) | -0.023 | -0.038 |
+
+What each change did:
+
+- **The 3% margin rule** let in 248 more company-years, which did about as well as the companies that passed before: +10.2 points against +7.4, a gap of +3.1 (-6.9 to +12.7). The list is nearly three times as long and no worse, but no better either.
+- **The score** did not rank next year's returns in any version: a correlation near zero before the update and after it. The new weights with price to book ranked them slightly better than the old weights on the same companies (+0.039, interval +0.008 to +0.072), within the noise of four years; the insider points changed almost nothing (+0.002), since only 9 company-years had Tier 1 or 2 insider buying.
+- **Flags.** Passers under book value did worse than the other passers, by 12.2 points (-23.7 to -1.7) over 68 company-years, so the 10 points the score gives them are not borne out by these four years. Passers with insider buying (9) or trading below the insiders' price (6), and those above the upper band (10), are too few to judge. Across all 538 listings with Tier 1 or 2 insider buying, passing or not, the next year averaged +3.1 points (-2.7 to +8.9), median -5.9. Passers in out-of-favor industries did 5.9 points worse than the rest (-16.9 to +5.5).
+- **Watch lists.** Banks and insurers under book value did well: +13.0 points (+8.7 to +17.7), median +14.3, with 73% beating the median stock, banks and others alike. Companies under 1x cash did badly: -13.8 points (-22.7 to -4.3), median -36.7, only 31% beating the median stock; 226 of the 326 company-years were health care companies, and 235 were burning cash. The overpriced giants did not lag: +10.7 points (-0.6 to +22.5), median +0.1, carried by Nvidia in 2022 and 2023.
+
+The test has limits: four years only; today's listings, so companies delisted or bankrupt since are missing, which flatters every list; today's sector and industry labels and SEC registrations; no analyst counts on any date. `backtest/README.md` has the method, every table and how to rerun it.
 
 ### 2. Insider buying
 
@@ -34,6 +84,7 @@ Flags, not rules: **Out of favor** (25%+ below the 52-week high) and **Undiscove
 - Shows who bought, their role, the dollar amount, the price paid, and how today's price compares.
 - **Tier 1:** $10M+ bought in the last 30 days. **Tier 2:** $1M+ total, or any buyer whose stake grew 20%+.
 - Sorted newest filing first. Each weekday's filings are analyzed that evening.
+- **Screener check:** each company with figures, outside Finance, is measured against the sector screener's rules: it passes (it is on the screener's list), misses one rule (named), misses several (each named), or misses none but has a rule that could not be checked. A rule is only called missed when the company's figures show it: a figure the filings don't give (free cash flow where capital spending isn't read, an earlier year of sales, debt that can't be read reliably) makes the rule "not checked" instead, with the reason. Where each company is incorporated and based is looked up with the SEC, as the screener does for its own list. A filter shows only companies that pass, or pass or miss by one.
 
 ### 3. Ticker report
 
@@ -99,6 +150,17 @@ python -m http.server 8123 --directory site
 
 Then open http://localhost:8123.
 
+The screener backtest (see "How the screener has done") downloads its own data once (about 1.5 GB, and about 3 GB in `.cache/backtest/` with the indexes it builds), then reruns any version of the screener on the four past dates, from a commit or from this checkout:
+
+```bash
+python -m backtest.data all
+python -m backtest.screener run --code 719a878 --label before
+python -m backtest.screener run --code . --label mine
+python -m backtest.screener compare before mine
+```
+
+`backtest/README.md` has every command, the method and its limits.
+
 ## Project layout
 
 ```
@@ -113,6 +175,7 @@ pipeline/            Python, standard library only
   report.py          tool 3: health scores and fair value
   filers.py          why a listing has no figures, from its SEC filing record
   reit_types.py      REIT property types by SEC company number, for picking REIT peers
+backtest/            the screener as it would have run on past dates (point in time), and how it did since
 site/                static site served by GitHub Pages
   index.html         cover page
   screener.html, insiders.html, report.html

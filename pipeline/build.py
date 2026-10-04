@@ -4,6 +4,7 @@
     python -m pipeline.build --limit 150     # quick sample for local testing
 """
 import argparse
+import collections
 import datetime as dt
 import json
 import math
@@ -328,10 +329,8 @@ def main():
         step(f"  {s}: market value set from {filed / 1e6:,.0f}M shares (its SEC filings, after the stock split since) "
              f"rather than the {listed / 1e6:,.0f}M the listing's market value implied")
 
-    step("Running the sector screener")
-    scr = screener.run(uni, metrics, prices, market.AnalystCounter())
-    step(f"  {len(scr['results'])} companies passed")
-
+    # The insider scan runs before the screener, which flags and scores the companies whose insiders bought (Tier 1 or
+    # 2) and whose price is under what they paid.
     step(f"Scanning EDGAR for insider buying (last {args.insider_days} days)")
     cache_path = os.path.join(CACHE, "insiders.json")
     try:
@@ -343,6 +342,32 @@ def main():
     pending = insiders.pending_days(cache, args.insider_days, today)
     step(f"  {len(ins['companies'])} companies with purchases, {len(ins['stakes'])} new 5%+ stakes"
          + (f"; {len(pending)} day{'s' if len(pending) != 1 else ''} still to scan" if pending else ""))
+
+    step("Running the sector screener")
+    bought = {c["symbol"]: {"tier": c["tier"], "avg_price": c["avg_price"], "total_value": c["total_value"]}
+              for c in ins["companies"] if c.get("symbol") in uni}
+    scr = screener.run(uni, metrics, prices, market.AnalystCounter(), insiders=bought)
+    flagged = collections.Counter(f for r in scr["results"] for f in r["flags"])
+    step(f"  {len(scr['results'])} companies passed; flags: "
+         + (", ".join(f"{n} {f}" for f, n in sorted(flagged.items())) or "none"))
+    step(f"  {sum(1 for x in scr['industries'] if x['out_of_favor'])} of {len(scr['industries'])} industries out of "
+         f"favor; watch lists: {len(scr['net_cash_list'])} under 1x cash, {len(scr['financials_list'])} banks and "
+         f"insurers under book value, {len(scr['giants'])} overpriced giants")
+    # How each company with insider buying or a new 5%+ stake measures against the screener's rules, so the insider page
+    # can show which ones the screener would also pick (screener.fit). The US rule needs where each is incorporated and
+    # based, which run() looks up only for the companies that pass every other rule, so the others' SEC records are
+    # looked up here (kept between runs, so only companies new to the page need a request). Every entry gets the key,
+    # None for a company outside a --limit sample, so the page can tell data with the check from older data.
+    listed = [c for c in ins["companies"] + ins["stakes"] if c.get("symbol") in uni]
+    regs = screener.registrations([], reuse=sorted({uni[c["symbol"]]["cik"] for c in listed if metrics.get(c["symbol"])
+                                                    and uni[c["symbol"]]["sector"] not in screener.EXCLUDED_SECTORS}))
+    for c in ins["companies"] + ins["stakes"]:
+        s = c.get("symbol")
+        c["fit"] = screener.fit(s, uni[s], metrics.get(s), scr, regs.get(uni[s]["cik"])) if s in uni else None
+    fits = collections.Counter(c["fit"]["status"] for c in ins["companies"] if c["fit"])
+    step(f"  screener check of the {sum(fits.values())} companies with purchases in the universe: {fits['pass']} pass, "
+         f"{fits['near']} miss one rule, {fits['fail']} miss more, {fits['unconfirmed']} miss none but have a rule that "
+         f"could not be checked, {fits['not_screened']} not screened, {fits['no_data']} without yearly figures")
 
     heads = {}
     if not args.skip_news:
@@ -454,7 +479,7 @@ def main():
             # known yet.
             "coverage": coverage.get(s),
             "news": {"items": items, "overall": mood},
-            "insiders": ic,
+            "insiders": {k: v for k, v in ic.items() if k != "fit"} if ic else None,  # the report doesn't show fit
             "insider_window": args.insider_days,
             "screener": next((r for r in scr["results"] if r["symbol"] == s), None) is not None,
         }

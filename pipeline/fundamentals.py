@@ -1895,6 +1895,9 @@ def _balance_sheet(by_quarter, quarters, bank_failed=frozenset(), lease_failed=f
                # For REITs: equity with minority holders' share (_ffo), total liabilities and the debt tags _reit_debt()
                # reads besides those _debt() does.
                equity_total=_val(facts.get(INSTANT["equity"][1])), liabilities=_val(facts.get("Liabilities")),
+               # The equity above is that total, minority holders' stakes included, where the company tags no
+               # StockholdersEquity of its own (derive's equity_includes_minority).
+               equity_from_total=INSTANT["equity"][0] not in facts and INSTANT["equity"][1] in facts,
                reit_debt={t: facts[t]["val"] for t in INSTANT["reit_debt"] + ["SecuredDebt", "LineOfCredit"] if t in facts})
     # The most cash held at any recent quarter end, since interest earned last year came from the cash held then.
     out["peak_cash"] = max((_val(_first(f, INSTANT["cash"])) or 0) + (_val(_first(f, INSTANT["st_investments"])) or 0)
@@ -3532,6 +3535,15 @@ def derive(f, tax_rate=OWN_RATE, bank=False, check_debt=True, gross=True, lender
         "debt_doubt": debt_doubt,
         "cash": cash,
         "net_cash": cash - total_debt,
+        # Cash and short-term investments alone, without the long-term securities `cash` counts: the money on hand
+        # within a year, which the screener's "Under 1x cash" list weighs against the company's debt and market value.
+        # None where the balance sheet tags neither.
+        "cash_and_st_investments": None if L.get("cash") is None and L.get("st_investments") is None
+        else (L.get("cash") or 0) + (L.get("st_investments") or 0),
+        # Whether `equity` includes minority holders' stakes in subsidiaries: a company that tags only that total (no
+        # StockholdersEquity of its own) is read from it, as UWM Holdings, whose founder's units in its operating company
+        # were $851M of its $985M at June 2026. The screener's book value then takes them out (screener._book).
+        "equity_includes_minority": bool(L.get("equity_from_total")) and (L.get("minority_interest") or 0) > 0,
         # Claims on the business besides debt, which come off the value of the whole business before it is split among
         # the common shares (report.other_claims): minority holders' stakes in subsidiaries, and preferred stock (at its
         # liquidation preference where the carrying amount is only nominal, as for banks; fundamentals._bank_parts).
