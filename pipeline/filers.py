@@ -3,9 +3,11 @@
 Each listing the pipeline can't score gets a plain-English reason on its report (coverage) instead of a guess: a company
 that has filed quarterly reports but no yearly one yet (or a first yearly one without machine-readable figures), a
 company whose yearly reports are under international accounting rules or in another currency, a fund, or a company
-whose yearly reports give no revenue this site can read. The kind of filer comes from its SEC company record (one
-request, kept in .cache/filers.json), and for a foreign filer or one with no figures in dollars in the SEC's data from
-which accounting rules and currency its figures are tagged in (one or two small requests).
+whose yearly reports give no revenue this site can read, even on the income statement of its latest one where that was
+read (statements.py, which also tells apart a company whose income statement has no revenue line at all). The kind of
+filer comes from its SEC company record (one request, kept in .cache/filers.json), and for a foreign filer or one with
+no figures in dollars in the SEC's data from which accounting rules and currency its figures are tagged in (one or two
+small requests).
 """
 import datetime as dt
 import json
@@ -145,18 +147,25 @@ def _latest(profile, forms):
     return max((profile["forms"][f][1] for f in forms if f in profile.get("forms", {})), default="")
 
 
-def kind(profile, company=None):
+def kind(profile, company=None, statement=None):
     """Why a listing without full figures has none, from its filer profile and its fundamentals record (`company`,
-    None where the SEC's data has nothing of it), or None where that can't be told (no profile yet):
+    None where the SEC's data has nothing of it), or None where that can't be told (no profile yet). `statement` is what
+    the income statement of its latest yearly report gave (statements.read's "latest", with "status" set to "unmatched"
+    where it had a revenue line whose years don't fit the company's results), for a company whose revenue is not read
+    otherwise: one showing no revenue or sales line at all makes it "no_revenue" (a loss) or "no_revenue_line" (a profit,
+    from other income such as interest, investment income or gains), and one in another currency "currency". The kinds:
     "blank_check" (a SPAC, by its industry code), "fund" (an investment company's reports, newer than any 10-K, 10-Q,
     20-F or 40-F it filed),
     "foreign" (its newest yearly report is a 20-F or 40-F whose figures the SEC's data doesn't hold in dollars under US
     rules), "currency" (a 10-K under US rules whose figures are in another currency), "no_annual" (10-Qs but no yearly report), "annual_untagged" (10-Qs, and a yearly
     report filed without machine-readable figures, as a company's first after it lists may be), "new" (none of these, as
     for a company that listed weeks ago), "revenue_unread" (yearly reports whose newest results show a profit, or whose
-    quarters show revenue, so the revenue its years must have is under labels not read), "no_revenue" (yearly reports
-    without a revenue figure read, no profit and no quarter with revenue), "annual_missing" (yearly reports filed with machine-readable figures, of which the SEC's data holds no full
-    year), or "unread" (yearly reports whose figures could not be read for another reason)."""
+    quarters show revenue, so the revenue its years must have is under labels not read, even on the income statement
+    where that was read), "no_revenue" (yearly reports without a revenue figure read, no profit and no quarter with
+    revenue, or no revenue line on the income statement), "no_revenue_line" (a profit, and no revenue line on the
+    income statement), "revenue_since" (no revenue line on the income statement, but quarters since with sales and none before),
+    "annual_missing" (yearly reports filed with machine-readable figures, of which the SEC's data
+    holds no full year), or "unread" (yearly reports whose figures could not be read for another reason)."""
     if not profile:
         return None
     forms = profile.get("forms") or {}
@@ -180,16 +189,34 @@ def kind(profile, company=None):
         return "annual_untagged"
     if years and all(s.get("revenue") is None for _, s in years):
         # A profit needs revenue, and so do quarters that show it (Proficient Auto Logistics' $109M in its latest quarter,
-        # beside yearly revenue tagged only under its own labels).
+        # beside yearly revenue tagged only under its own labels), unless the income statement shows none: a blank-check
+        # company's profit from the interest on its trust (FRNM's), a business development company's investment income.
+        status = (statement or {}).get("status")
+        if status == "none":
+            # Quarters with sales after the yearly report's last year only: a business that merged into a listed shell
+            # since (Teamshares, into the blank-check company whose 10-K for 2025 that is), or began selling (Oklo).
+            # Quarters with sales within its years mean a revenue line the statement's reading missed (a line named
+            # in a way taken for something else, such as commission revenue), whose revenue is unread.
+            end = max(statement.get("years") or [years[-1][1].get("end") or ""])
+            if _quarter_revenue(company, after=""):
+                return "revenue_unread" if _quarter_revenue(company, after="", until=end) else "revenue_since"
+            return "no_revenue_line" if years[-1][1]["net_income"] > 0 else "no_revenue"
+        if status == "currency" and statement.get("currency"):
+            return "currency"
         return "revenue_unread" if years[-1][1]["net_income"] > 0 or _quarter_revenue(company) else "no_revenue"
     if not years and profile.get("annual_xbrl"):
         return "annual_missing"
     return "unread"
 
 
-def _quarter_revenue(company):
-    """Whether any quarter in a fundamentals record gives revenue under a tag the site reads (fundamentals.REVENUE_TAGS)."""
-    return any(fundamentals.REVENUE_TAGS & facts.keys() for facts in ((company or {}).get("quarters") or {}).values())
+def _quarter_revenue(company, after=None, until="9999"):
+    """Whether any quarter in a fundamentals record gives revenue under a tag the site reads (fundamentals.REVENUE_TAGS),
+    or with `after` (a date, "" for any) revenue above nothing in a quarter ending after it and no later than `until`."""
+    quarters = ((company or {}).get("quarters") or {}).items()
+    if after is None:
+        return any(fundamentals.REVENUE_TAGS & facts.keys() for _, facts in quarters)
+    return any(after < end <= until and any(facts[t]["val"] > 0 for t in fundamentals.REVENUE_TAGS & facts.keys())
+               for (_, end), facts in quarters)
 
 
 def _results(company):
@@ -200,7 +227,7 @@ def _results(company):
 # Kinds whose page shows the quarters the company's reports give (build.py's pending_doc): a listing whose SEC data holds
 # quarters but no full fiscal year. Where a yearly report's revenue label isn't read, or a company's figures are in
 # another currency or unread for another reason, a quarter here and there would sit oddly beside that reason.
-QUARTER_KINDS = ("no_annual", "annual_untagged", "annual_missing")
+QUARTER_KINDS = ("no_annual", "annual_untagged", "annual_missing", "revenue_since")
 
 
 def shows_quarters(k, company):
@@ -215,9 +242,10 @@ def stale(profile, company):
     return bool(profile) and not _latest(profile, ANNUAL + FOREIGN) and bool(_results(company))
 
 
-def note(name, k, profile, company=None, quarters=False):
+def note(name, k, profile, company=None, quarters=False, statement=None):
     """The report's plain-English reason for a listing of kind `k` (kind) having no scores or fair value, or None.
-    `quarters`: the page shows quarters from its reports (build.py's pending_doc)."""
+    `quarters`: the page shows quarters from its reports (build.py's pending_doc). `statement`: what its latest yearly
+    report's income statement gave, as for kind."""
     # The listing's name as a sentence can carry it: runs of spaces closed up, and a parenthesis Nasdaq's listing cut off
     # left out ("Banco Macro S.A.  ADR (representing Ten Class B").
     name = " ".join((name or "").split())
@@ -238,7 +266,9 @@ def note(name, k, profile, company=None, quarters=False):
                 "no full fiscal year of its results and this site can't score or value it."
                 + until.replace("Until then", "Meanwhile"))
     if k == "currency":
-        money = CURRENCIES.get(profile["rules"]["currency"], profile["rules"]["currency"])
+        code = ((profile.get("rules") or {}).get("currency") if (profile.get("rules") or {}).get("currency") not in
+                (None, "USD") else None) or (statement or {}).get("currency")
+        money = CURRENCIES.get(code, code)
         return (f"{name} files its yearly reports with the SEC (Form 10-K) under US accounting rules, but in {money}. "
                 "This site reads only figures reported in US dollars, and converting them would take exchange rates its "
                 "filings don't give, so it can't score or value this company yet.")
@@ -285,13 +315,48 @@ def note(name, k, profile, company=None, quarters=False):
         return (f"{name} has not filed a quarterly or yearly report with the SEC recently, so there are no financial "
                 "figures from the SEC to read. It may have listed only weeks ago, or report to another regulator, as some "
                 "banks do.")
+    status = (statement or {}).get("status")
+    # The yearly report whose income statement was read, as a reader would find it.
+    report = f"its latest yearly report (Form {statement.get('form') or '10-K'})" if statement else ""
     if k == "revenue_unread":
         y, s = _results(company)[-1]
-        return (f"{name} files yearly reports under US accounting rules and reported "
-                f"{'a profit' if s['net_income'] > 0 else 'a loss'} for {y}, but its revenue in those reports is under "
-                "labels this site doesn't read (often ones of the company's own), so it has no full year of sales here "
-                "and can't be scored or valued.")
+        head = (f"{name} files yearly reports under US accounting rules and reported "
+                f"{'a profit' if s['net_income'] > 0 else 'a loss'} for {y}, but ")
+        tail = ", so it has no full year of sales here and can't be scored or valued."
+        if status == "ambiguous":
+            return (head + f"the income statement in {report} gives its revenue only in parts (by business or product) or "
+                    "beside other income, with no line for the whole that this site can take" + tail)
+        if status == "unmatched":
+            return (head + f"the revenue on the income statement in {report} could not be matched to the yearly "
+                    "results in the SEC's data" + tail)
+        if status == "unscored":
+            return (f"{name} files yearly reports under US accounting rules and reported "
+                    f"{'a profit' if s['net_income'] > 0 else 'a loss'} for {y}. Its revenue is read from the income "
+                    f"statement in {report}, but too few of its other figures are in the SEC's data to score or value "
+                    "it.")
+        return (head + "its revenue in those reports is under labels this site doesn't read (often ones of the company's "
+                "own)" + tail)
+    if k == "revenue_since":
+        # The fiscal year of the report read, which the SEC's data may not hold results for (Omeros' newest there is
+        # 2022, beside its 10-K for 2025).
+        y, s = _results(company)[-1]
+        end = max((statement or {}).get("years") or [""])
+        y = y if not end or s.get("end") == end else end[:4]
+        return (f"{name}'s latest yearly report (Form {(statement or {}).get('form') or '10-K'} for {y}) shows no revenue "
+                "on its income statement, but its quarterly reports since then show sales, as when a business merges into "
+                "a listed shell company or starts selling. The health check and fair value need a full fiscal year of "
+                "results with sales, so they will appear after its next yearly report." + until)
+    if k == "no_revenue_line":
+        y, s = _results(company)[-1]
+        return (f"{name} files yearly reports under US accounting rules and reported a profit for {y}, but the income "
+                f"statement in {report or 'its latest yearly report'} shows no line this site reads as revenue or sales, "
+                "so the profit likely came from other income, such as interest, investment income or gains. Without a sales figure it can't be "
+                "scored or valued.")
     if k == "no_revenue":
+        if status == "none":
+            return (f"{name} files yearly reports under US accounting rules, but the income statement in {report} shows "
+                    "no line this site reads as revenue or sales. It may have no sales yet. Without a sales figure it can't be scored or "
+                    "valued.")
         return (f"{name} files yearly reports under US accounting rules, but none of them gives a revenue figure under "
                 "the labels this site reads. It may have no sales yet, or label its revenue in a way of its own. Without "
                 "a sales figure it can't be scored or valued.")
@@ -305,6 +370,8 @@ def note(name, k, profile, company=None, quarters=False):
 
 
 # Kinds whose missing figures are expected (a listing too new, or whose first yearly report has no machine-readable
-# figures, a foreign filer, a company reporting in another currency, a fund, a SPAC, a company without revenue), which
-# the run's log lists apart from those that deserve a look (build.py's warning).
-EXPECTED = ("no_annual", "annual_untagged", "new", "foreign", "currency", "fund", "blank_check", "no_revenue")
+# figures, a foreign filer, a company reporting in another currency, a fund, a SPAC, a company without revenue and
+# without a profit), which the run's log lists apart from those that deserve a look (build.py's warning). A profit with no
+# revenue line on the income statement ("no_revenue_line") deserves one in a large company.
+EXPECTED = ("no_annual", "annual_untagged", "new", "foreign", "currency", "fund", "blank_check", "no_revenue",
+            "revenue_since")

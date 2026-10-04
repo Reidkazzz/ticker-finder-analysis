@@ -847,6 +847,9 @@ def peer_table(universe, metrics, sic=None):
             # Revenue read from a lender's income statement or a BDC's investment income (fundamentals.derive), which
             # stays out of the ranks others are matched on (below).
             "basis": m.get("revenue_basis"),
+            # Revenue read from the company's own income statements (fundamentals.derive's revenue_source, build.py),
+            # which stays out of those ranks too.
+            "stated": bool(m.get("revenue_source")),
             "pb": u["mcap"] / book if (kind == "mortgage" or bdc) and (book or 0) > 0 else None,
             # For a lender valued on its book value (book_lender), what its peer notes say of its figures: its book
             # value unread (no equity figure), its earnings and book value net of preferred stock worth naming, and for
@@ -915,10 +918,12 @@ def peer_table(universe, metrics, sic=None):
     # prices by a mean absolute log error of 0.443, against 0.444 with those banks in (median 0.405 both ways). Companies
     # whose revenue is read from a lender's income statement or a BDC's investment income (fundamentals.derive's
     # revenue_basis) are left out of them too, so that reading their revenue moved no other company's ranks; their own
-    # figures are still ranked against the rest.
+    # figures are still ranked against the rest. So are those whose revenue is read from their own income statements
+    # (statements.py): the seven such companies on September 2026 data, APA among them, otherwise nudged the ranks of
+    # every other company, reordering near ties among the peers of 269 companies that none of the seven joined.
     for f in PEER_FEATURES:
         vals = sorted(r["features"][f] for r in table.values()
-                      if r["features"][f] is not None and not r["bank"] and not r["basis"])
+                      if r["features"][f] is not None and not r["bank"] and not r["basis"] and not r["stated"])
         for r in table.values():
             v = r["features"][f]
             r.setdefault("rank", []).append(

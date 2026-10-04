@@ -13,7 +13,7 @@ import random
 import shutil
 import time
 
-from . import filers, fundamentals, insiders, market, net, news, report, screener, universe
+from . import filers, fundamentals, insiders, market, net, news, report, screener, statements, universe
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "site", "data")
@@ -150,11 +150,25 @@ GAP_WORDS = {"no_annual": "no yearly report filed yet",
              "currency": "yearly reports in another currency", "fund": "funds",
              "blank_check": "blank-check companies (SPACs)",
              "no_revenue": "no revenue figure and no profit",
+             "no_revenue_line": "a profit but no revenue line on the income statement",
+             "revenue_since": "no revenue in the latest yearly report, sales in the quarters since",
              "revenue_unread": "yearly revenue under labels not read",
              "annual_missing": "the SEC's data holds no full year from its yearly reports",
              "unread": "yearly reports whose figures could not be read"}
 LENDER_WORDS = {"bank": "net interest income plus noninterest income", "net_interest": "a REIT's net interest income",
                 "investment_income": "a business development company's total investment income"}
+# Why the income statement of a company whose revenue is under labels not read gave no revenue either (statements.py),
+# which the warning adds.
+STATEMENT_WORDS = {"ambiguous": "its income statement gives revenue only in parts or beside other income",
+                   "unmatched": "its income statement's years don't match its results in the SEC's data",
+                   "layout": "its income statement is laid out in a way not read",
+                   "undated": "its income statement's periods could not be dated",
+                   "no_statement": "no income statement found in its yearly report",
+                   "currency": "its income statement is in another currency",
+                   "unscored": "revenue read from its income statement, but too few of its other figures to score",
+                   "none": "its income statement shows no line read as revenue, though its quarters show sales",
+                   "no_annual": "no yearly report with machine-readable figures to read its income statement from",
+                   None: "its income statement not read yet"}
 
 
 def split_market_values(uni, metrics, prices):
@@ -208,23 +222,10 @@ def main():
     for sym, u in uni.items():
         c = fund["companies"].get(u["cik"])
         if c:
-            # The debt check is for companies outside finance: a broker's or insurer's interest is paid on customer
-            # balances and funding, not on debt the reader missed. Nor does gross profit mean anything for them. A
-            # financial company that tags no revenue line has a lender's revenue (fundamentals.derive's revenue_basis).
-            d = fundamentals.derive(c, report.normal_tax_rate(u, c, sic.get(u["cik"])),
-                                    bank=report.is_bank(u, sic.get(u["cik"])), check_debt=not report.is_financial(u),
-                                    gross=not report.is_financial(u), lender=report.is_financial(u))
-            blank = str(sic.get(u["cik"]) or "") == filers.BLANK_CHECK
-            if d and blank and d.get("revenue_basis") == "investment_income":
-                d = None  # a SPAC's trust interest is no business's revenue (filers.kind says what it is)
-            stale = (today - dt.timedelta(days=BASIS_STALE_DAYS)).isoformat()
-            if d and d.get("revenue_basis") and (d.get("fiscal_year_end") or "") < stale:
-                d = None  # too old to score or value (filers.kind says why, where it can)
+            d = company_metrics(u, c, sic, today)
             if d:
-                if d.get("reit"):
-                    d["reit_type"] = report.REIT_TYPES.get(u["cik"])  # its property type, where reit_types knows it
                 metrics[sym] = d
-            elif not blank:
+            elif str(sic.get(u["cik"]) or "") != filers.BLANK_CHECK:
                 # Without a fiscal year to score, the quarters its reports give (a listing with no 10-K yet).
                 p = fundamentals.pending(c)
                 if p:
@@ -240,16 +241,48 @@ def main():
     # Why each listing without figures has none (filers.kind), for its report, and the largest US ones in the log.
     missing = {u["cik"]: u.get("mcap") or 0 for s, u in uni.items() if s not in metrics}
     profiles = filers.profiles(missing, today, fund["companies"])
+    # A company with results whose revenue is under labels not read has it read from its own income statements
+    # (statements.py), where one line there is plainly all of its revenue: APA Corporation tags its "Total revenues" only
+    # by product. The others' reasons then say what their income statements showed.
+    unread = {u["cik"]: u.get("mcap") or 0 for s, u in uni.items() if s not in metrics
+              and filers.kind(profiles.get(u["cik"]), fund["companies"].get(u["cik"])) == "revenue_unread"}
+    try:
+        got = statements.read(unread, fund["companies"], today) if unread else {}
+    except Exception as e:  # never lose the run's other figures because one source misbehaved
+        step(f"  Income statements not read this run: {e!r}")
+        got = {}
+    stated, shown = [], {}
+    for s, u in uni.items():
+        g = got.get(u["cik"])
+        if s in metrics or u["cik"] not in unread or not g:
+            continue
+        c = statements.apply(fund["companies"][u["cik"]], g)
+        d = c and company_metrics(u, c, sic, today)
+        if d:
+            d["revenue_source"] = statements.source(g, d["fiscal_year_end"])
+            metrics[s] = d
+            partial.pop(s, None)
+            stated.append(s)
+        elif g["latest"]:
+            # A revenue line whose years didn't fit the company's results, or that did but left it unscored.
+            ok = g["latest"]["status"] == "ok"
+            shown[u["cik"]] = dict(g["latest"], status="unscored" if c else "unmatched") if ok else g["latest"]
+    if unread:
+        stated.sort(key=lambda s: -(uni[s].get("mcap") or 0))
+        named = f": {', '.join(stated[:12])}{' and others' if len(stated) > 12 else ''}" if stated else ""
+        step(f"  revenue read from the income statements of {len(stated)} of {len(unread)} listings whose yearly revenue "
+             f"is under labels not read{named}")
     coverage = {}
     for s, u in uni.items():
         if s not in metrics:
             c = fund["companies"].get(u["cik"])
-            k = filers.kind(profiles.get(u["cik"]), c)
+            k = filers.kind(profiles.get(u["cik"]), c, shown.get(u["cik"]))
             if s in partial and not filers.shows_quarters(k, c):
                 del partial[s]  # its quarters would sit oddly beside why it has no figures (a revenue label not read)
             if k:
                 coverage[s] = {"kind": k, "note": filers.note(u["name"], k, profiles[u["cik"]], c,
-                                                             quarters=bool((partial.get(s) or {}).get("quarters")))}
+                                                             quarters=bool((partial.get(s) or {}).get("quarters")),
+                                                             statement=shown.get(u["cik"]))}
     step(f"  quarters shown for {len(partial)} listings without a full fiscal year of figures")
     gaps = sorted(((u["mcap"], s) for s, u in uni.items() if s not in metrics and (u.get("mcap") or 0) >= WARN_MCAP
                    and u.get("country") == "United States"), reverse=True)
@@ -262,10 +295,19 @@ def main():
         step(f"  No financial figures, as expected, for US listings worth ${WARN_MCAP / 1e9:.0f}B or more: "
              + "; ".join(f"{GAP_WORDS[k]}: {', '.join(known[k])}" for k in filers.EXPECTED if k in known))
     unexpected = [s for _, s in gaps if (coverage.get(s) or {}).get("kind") not in filers.EXPECTED]
+
+    def gap(s):
+        k = (coverage.get(s) or {}).get("kind")
+        why = GAP_WORDS.get(k, "filer not looked up yet")
+        if k == "revenue_unread":
+            g = got.get(uni[s]["cik"])
+            status = "no_annual" if g and not g["latest"] else (shown.get(uni[s]["cik"]) or {}).get("status")
+            why += "; " + STATEMENT_WORDS.get(status, STATEMENT_WORDS[None])
+        return f"{s} (CIK {uni[s]['cik']}, {why})"
+
     if unexpected:
         step(f"  WARNING: no financial figures for {len(unexpected)} US listings worth ${WARN_MCAP / 1e9:.0f}B or more: "
-             + ", ".join(f"{s} (CIK {uni[s]['cik']}, {GAP_WORDS.get((coverage.get(s) or {}).get('kind'), 'filer not looked up yet')})"
-                         for s in unexpected))
+             + ", ".join(gap(s) for s in unexpected))
 
     symbols = sorted(uni)
     if args.limit:
@@ -417,10 +459,14 @@ def main():
                              # (revenue_basis: "bank", "net_interest" or "investment_income", fundamentals.derive; null
                              # for every other company), whose profit can exceed that revenue by its investment gains
                              # while its quarters are sound. quarters_stale: the newest quarter ended more than
-                             # STALE_QUARTER_DAYS before the market date.
+                             # STALE_QUARTER_DAYS before the market date. revenue_source: where the fiscal year's
+                             # revenue was read, for a company whose revenue the SEC's data gives under no label read
+                             # (statements.source: the income statement line's label, XBRL element and the breakdowns
+                             # it is shown under, by label and as XBRL axis and member, the statement's title, and the
+                             # filing's form, date filed and accession number); null for every other company.
                              **{k: m.get(k) for k in ("gross_profit", "gross_margin", "gross_basis", "ttm_revenue",
                                                       "ttm_prior_revenue", "ttm_gross_profit", "ttm_gross_margin",
-                                                      "ttm_end", "quarters", "revenue_basis")},
+                                                      "ttm_end", "quarters", "revenue_basis", "revenue_source")},
                              "sales_doubt": report.sales_doubtful(m) and not m.get("revenue_basis"),
                              "quarters_stale": bool(m.get("quarters")) and m["quarters"][-1]["end"]
                              < (today - dt.timedelta(days=STALE_QUARTER_DAYS)).isoformat(),
@@ -468,6 +514,25 @@ def main():
     step("Done")
 
 
+def company_metrics(u, c, sic, today):
+    """A listing's figures (fundamentals.derive) from its company's fundamentals record, or None where it has none to
+    score or value."""
+    # The debt check is for companies outside finance: a broker's or insurer's interest is paid on customer balances and
+    # funding, not on debt the reader missed. Nor does gross profit mean anything for them. A financial company that
+    # tags no revenue line has a lender's revenue (fundamentals.derive's revenue_basis).
+    d = fundamentals.derive(c, report.normal_tax_rate(u, c, sic.get(u["cik"])), bank=report.is_bank(u, sic.get(u["cik"])),
+                            check_debt=not report.is_financial(u), gross=not report.is_financial(u),
+                            lender=report.is_financial(u))
+    if d and str(sic.get(u["cik"]) or "") == filers.BLANK_CHECK and d.get("revenue_basis") == "investment_income":
+        return None  # a SPAC's trust interest is no business's revenue (filers.kind says what it is)
+    stale = (today - dt.timedelta(days=BASIS_STALE_DAYS)).isoformat()
+    if d and d.get("revenue_basis") and (d.get("fiscal_year_end") or "") < stale:
+        return None  # too old to score or value (filers.kind says why, where it can)
+    if d and d.get("reit"):
+        d["reit_type"] = report.REIT_TYPES.get(u["cik"])  # its property type, where reit_types knows it
+    return d
+
+
 def pending_doc(p, today):
     """A report's fundamentals for a company with quarters but no fiscal year to score (fundamentals.pending), or None:
     "partial": true, its quarters and latest balance sheet date, and the keys a scored company's fundamentals carry,
@@ -478,7 +543,7 @@ def pending_doc(p, today):
                              "pretax_income", "income_tax", "normal_tax_rate", "tax_basis", "fcf", "cash", "total_debt",
                              "shares_out", "debt_doubt", "gross_profit", "gross_margin", "gross_basis", "ttm_revenue",
                              "ttm_prior_revenue", "ttm_gross_profit", "ttm_gross_margin", "ttm_end", "revenue_basis",
-                             "one_time_note")),
+                             "revenue_source", "one_time_note")),
             "partial": True, "history": [], "balance_as_of": p.get("balance_as_of"), "quarters": p["quarters"],
             "sales_doubt": False,
             "quarters_stale": bool(p["quarters"]) and p["quarters"][-1]["end"]
