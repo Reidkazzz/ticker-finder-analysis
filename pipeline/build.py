@@ -245,7 +245,8 @@ def main():
     # (statements.py), where one line there is plainly all of its revenue: APA Corporation tags its "Total revenues" only
     # by product. The others' reasons then say what their income statements showed.
     unread = {u["cik"]: u.get("mcap") or 0 for s, u in uni.items() if s not in metrics
-              and filers.kind(profiles.get(u["cik"]), fund["companies"].get(u["cik"])) == "revenue_unread"}
+              and filers.statement_worth_reading(filers.kind(profiles.get(u["cik"]), fund["companies"].get(u["cik"])),
+                                                 fund["companies"].get(u["cik"]))}
     try:
         got = statements.read(unread, fund["companies"], today) if unread else {}
     except Exception as e:  # never lose the run's other figures because one source misbehaved
@@ -520,9 +521,13 @@ def company_metrics(u, c, sic, today):
     # The debt check is for companies outside finance: a broker's or insurer's interest is paid on customer balances and
     # funding, not on debt the reader missed. Nor does gross profit mean anything for them. A financial company that
     # tags no revenue line has a lender's revenue (fundamentals.derive's revenue_basis).
+    # The shares its market value counts, which tell whether a net income read for the whole business should be its
+    # listed shares' alone (fundamentals._owners_net_income).
+    listed = u["mcap"] / u["price"] if u.get("mcap") and u.get("price") else None
     d = fundamentals.derive(c, report.normal_tax_rate(u, c, sic.get(u["cik"])), bank=report.is_bank(u, sic.get(u["cik"])),
                             check_debt=not report.is_financial(u), gross=not report.is_financial(u),
-                            lender=report.is_financial(u))
+                            lender=report.is_financial(u), listed_shares=listed,
+                            finance_arm=u["cik"] in fundamentals.FINANCE_ARMS)
     if d and str(sic.get(u["cik"]) or "") == filers.BLANK_CHECK and d.get("revenue_basis") == "investment_income":
         return None  # a SPAC's trust interest is no business's revenue (filers.kind says what it is)
     stale = (today - dt.timedelta(days=BASIS_STALE_DAYS)).isoformat()

@@ -65,7 +65,7 @@ function facts(r) {
   out.push(["ph-receipt", `Sold ${money(r.revenue)} in fiscal ${r.fiscal_year} and kept ${pct(r.net_margin, 0)} of it as profit${r.one_time_note ? ", not counting one-time items" : ""}.`]);
   if (r.one_time_note) out.push(["ph-info", r.one_time_note]);
   if (r.revenue_growth != null) out.push(["ph-trend-up", `Sales ${r.revenue_growth >= 0 ? "grew" : "slipped"} ${pct(Math.abs(r.revenue_growth))} from the year before.`]);
-  out.push(["ph-coins", r.debt_status === "none" ? `Has no debt. Cash on hand: ${money(r.net_cash)}.`
+  out.push(["ph-coins", r.debt_status === "none" ? (r.net_cash == null ? "Has no debt." : `Has no debt. Cash on hand: ${money(r.net_cash)}.`)
     : r.net_cash > 0 ? `Holds ${money(r.net_cash)} more cash than all of its debt.`
     : `Long-term debt is ${times(r.lt_de)} its equity, under the 0.5 limit.`]);
   if (r.fcf_yield != null) out.push(["ph-hand-coins", `Generated ${money(r.fcf)} of free cash, ${pct(r.fcf_yield)} of its market value.`]);

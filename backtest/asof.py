@@ -63,7 +63,8 @@ METRIC_MODULES = {"fundamentals", "report", "filers", "build", "reit_types", "ne
 # runs build.py's statements on them (asof.py). Part of the metrics' cache key with the files above.
 HARNESS_FILES = ("facts.py", "asof.py")
 # What the metrics read of a listing (load_fundamentals takes its market value only to order lookups, every one of which
-# is made): everything but its price and market value.
+# is made): everything but its price and market value, save the share count the two imply, which tells whether a net
+# income read for a whole group is the listed shares' (build.company_metrics, fundamentals._owners_net_income).
 LISTING_PRICE_FIELDS = ("price", "mcap", "mcap_basis")
 INSIDER_FILES = ("insiders.py",)
 # The backtest's own code the insider purchases are worked out through (the data sets turned back into Form 4s).
@@ -141,7 +142,7 @@ def metrics_key(root, sets, uni):
     """The metrics' cache key: the variant's METRIC_FILES and --set overrides of METRIC_MODULES, the harness's own
     HARNESS_FILES, the locations the frames give (loc.json), the SIC codes kept for the listings' companies (the shared
     sic.json, codes only: its lookup dates change without changing a code) and the listings as the metrics read them
-    (all but LISTING_PRICE_FIELDS)."""
+    (all but LISTING_PRICE_FIELDS, with the share count they imply)."""
     from .data import LOC
     extra = []
     for n in HARNESS_FILES:
@@ -156,7 +157,9 @@ def metrics_key(root, sets, uni):
         sic = {}
     ciks = sorted({str(u["cik"]) for u in uni.values()})
     extra.append(("sic", json.dumps({c: sic[c].get("sic") for c in ciks if c in sic}, sort_keys=True).encode()))
-    listings = {s: {k: v for k, v in u.items() if k not in LISTING_PRICE_FIELDS} for s, u in uni.items()}
+    listings = {s: {**{k: v for k, v in u.items() if k not in LISTING_PRICE_FIELDS},
+                    "listed_shares": round(u["mcap"] / u["price"]) if u.get("mcap") and u.get("price") else None}
+                for s, u in uni.items()}
     extra.append(("listings", json.dumps(listings, sort_keys=True, default=str).encode()))
     return code_hash(root, METRIC_FILES, sets, METRIC_MODULES, extra)
 
