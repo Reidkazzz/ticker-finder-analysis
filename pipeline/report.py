@@ -221,8 +221,23 @@ def reit_kind(m):
 def _whole(m):
     """The listed shares' part of a REIT that owns property, where holders of its operating partnership's units own the
     rest (fundamentals._owners): its sales, debt and cash are the whole business's, its market value only theirs
-    (Strawberry Fields' Class A shares: 23%; Simon Property's: 88%). 1 for any other company."""
-    return (m.get("owners_share") or 1.0) if reit_kind(m) == "property" else 1.0
+    (Strawberry Fields' Class A shares: 23%; Simon Property's: 88%). Likewise for another company whose net income was
+    taken as its listed shares' alone because its market value counts only them (fundamentals.derive's listed_share:
+    Interactive Brokers' Class A shares, about 23%). 1 for any other company."""
+    if reit_kind(m) == "property":
+        return m.get("owners_share") or 1.0
+    return m.get("listed_share") or 1.0
+
+
+def _minority_sentence(own):
+    """" Its shares' part of the business is taken as 23%, ...", for a company outside REITs whose listed shares own
+    part of the business (_whole), or "". That part is their share of its profit (fundamentals._owners), which is
+    what the figure is, rather than a count of units: CF Industries' partner in its nitrogen business, which took 19%
+    of its 2025 profit, owns a stake in that business rather than in CF itself."""
+    if own >= 0.995:
+        return ""
+    return (f" Its shares' part of the business is taken as {own * 100:.0f}%, their share of its profit, the rest going "
+            "to minority holders.")
 
 
 def other_claims(m):
@@ -721,11 +736,34 @@ DOUBT_BAR_NOTE = ("Not measured. The sales figure in the company's SEC data look
 # and its health check the debt measures.
 DEBT_DOUBT_VALUE_NOTE = ("Its debt could not be read reliably from its filings, so methods that depend on debt are left "
                          "out.")
+
+
+# A company whose latest balance sheet tags no cash, though recent ones held some (fundamentals.derive's cash_known):
+# its net cash bar and the methods that add its net cash are left out.
+CASH_UNKNOWN_NOTE = ("Not measured. Its latest balance sheet's data shows no cash, though earlier ones did, so its cash "
+                     "could not be read reliably from its filings.")
+CASH_UNKNOWN_VALUE_NOTE = ("Its cash could not be read reliably from its latest balance sheet's data, so methods that "
+                           "depend on its cash and debt are left out.")
+
+
+def _debt_value_note(m):
+    """DEBT_DOUBT_VALUE_NOTE, or for a company most of whose debt is its finance arm's (fundamentals.FINANCE_ARMS), which
+    was read but is left out on purpose, why."""
+    if m.get("cash_known") is False and m.get("debt_known") is not False:
+        return CASH_UNKNOWN_VALUE_NOTE
+    if m.get("debt_doubt") == "finance_arm":
+        return ("Most of its debt is its finance arm's, which lends to its customers and dealers, so methods that subtract "
+                "debt are left out.")
+    return DEBT_DOUBT_VALUE_NOTE
 DEBT_DOUBT_BAR_NOTES = {
     "interest": ("Not measured. Its debt could not be read reliably from its filings: the debt found is far too small "
                  "for the interest it paid last year."),
     "liabilities": ("Not measured. Its debt could not be read reliably from its filings: the debt found is a small part "
                     "of what it owes beyond the next year."),
+    "untagged": ("Not measured. Its debt could not be read reliably from its filings: its latest balance sheet's data "
+                 "shows no debt, though earlier ones did."),
+    "finance_arm": ("Not measured. Most of its debt is its finance arm's, which lends to its customers and dealers, so "
+                    "it can't be weighed as the debt of the business itself."),
 }
 
 
@@ -908,8 +946,13 @@ def peer_table(universe, metrics, sic=None):
                               ptbv=None, shares_gap=True)
         if m.get("debt_known") is False:
             # A REIT whose debt could not be read (fundamentals._reit_debt), or another company whose debt read looks
-            # far too small (fundamentals._debt_check).
+            # far too small (fundamentals._debt_check), or is mostly a finance arm's ("finance_arm"), which the notes
+            # name apart (_left_out_why).
             table[sym]["debt_unknown"] = True
+            table[sym]["debt_why"] = m.get("debt_doubt")
+        if m.get("cash_known") is False:
+            # Its latest balance sheet tags no cash (fundamentals.derive's cash_known), so it has no value to sales.
+            table[sym]["cash_unknown"] = True
     # Each figure becomes a percentile rank across all companies, so margins, growth and size weigh the same
     # and a few extreme values can't dominate the distance. Banks, which are matched among themselves on their own
     # measures (ranked among banks), are left out of the ranks other companies are matched on, so how a bank's figures
@@ -1207,8 +1250,10 @@ def peer_multiples(sym, table, peers, dropped=(), counted=None):
     rows = [table[s] for s in peers]
     note = []
     if not fin:
-        note.append(("Price to sales, which the health check ranks, counts the whole business, the part its "
-                     "operating partnership's other unitholders own included, and not its debt and cash."
+        note.append(("Price to sales, which the health check ranks, counts the whole business, the part "
+                     + ("its operating partnership's other unitholders own" if me.get("reit")
+                        else "its minority holders own")
+                     + " included, and not its debt and cash."
                      if me.get("owned", 1.0) < 0.995 else
                      "Price to sales, which the health check ranks, looks at the share price alone.")
                     + " Value to sales, which the fair value uses, also counts each company's debt and cash.")
@@ -1225,7 +1270,8 @@ def peer_multiples(sym, table, peers, dropped=(), counted=None):
     if counted is not None and profitable and not fin and not reit:
         # A company outside finance with a fair value: the columns it uses, as fair_value() counted them.
         note += _outside_note(counted, dropped, me)
-    elif profitable and (REIT_SALES or not reit) and me.get("reit") != "mortgage" and not me.get("debt_unknown"):
+    elif profitable and (REIT_SALES or not reit) and me.get("reit") != "mortgage" and not me.get("debt_unknown") \
+            and not me.get("cash_unknown"):
         note.append("The fair value uses the median of the " + ("price to sales" if fin else "value to sales")
                     + f" and {earn_words} columns.")
     elif profitable:
@@ -1234,10 +1280,9 @@ def peer_multiples(sym, table, peers, dropped=(), counted=None):
                        if me.get("reit") == "mortgage" and me.get("pb") and not me.get("ptype") else
                        f" alone, not price to book, since {BOOK_UNREAD_WORDS[me['book_unread']]}."
                        if me.get("reit") == "mortgage" and me.get("book_unread") else
-                       # fair_value leaves value to sales out where the company's own debt could not be read.
-                       f" alone, since {'this REIT' if reit else 'its'} debt could not be read"
-                       + ("" if reit else " reliably") + " and value to sales counts debt."
-                       if me.get("debt_unknown") and not fin else "."))
+                       # fair_value leaves value to sales out where the company's own debt or cash could not be read.
+                       f" alone, since {_left_out_why(me, reit)}."
+                       if (me.get("debt_unknown") or me.get("cash_unknown")) and not fin else "."))
         if me.get("reit") == "mortgage" and not me.get("ptype") and any(r.get("preferred") for r in rows + [me]):
             # A lender valued on its book value (book_lender): lender_earnings, common_book.
             note.append("Earnings here are what is left to common shareholders after any preferred dividends"
@@ -1260,8 +1305,13 @@ def peer_multiples(sym, table, peers, dropped=(), counted=None):
     if not fin:
         why = [text for text, hit in (
             ("the company holds more cash than its market value",
-             any(r["ev_sales"] is None and not (r.get("debt_unknown") or r.get("fin")) for r in everyone)),
-            ("its debt could not be read", any(r.get("debt_unknown") for r in everyone)),
+             any(r["ev_sales"] is None and not (r.get("debt_unknown") or r.get("cash_unknown") or r.get("fin"))
+                 for r in everyone)),
+            ("its debt could not be read",
+             any(r.get("debt_unknown") and r.get("debt_why") != "finance_arm" for r in everyone)),
+            ("most of its debt is a finance arm's", any(r.get("debt_why") == "finance_arm" for r in everyone)),
+            ("its cash could not be read",
+             any(r.get("cash_unknown") and not r.get("debt_unknown") for r in everyone)),
             ("it is valued like a lender rather than on sales", any(r.get("fin") for r in everyone))) if hit]
         if why:
             gaps.append("in value to sales it means " + (why[0] if len(why) == 1 else
@@ -1357,6 +1407,17 @@ def _dropped_sentence(cols):
             f"describe this one, so {'they are' if len(cols) > 1 else 'it is'} left out of the fair value.")
 
 
+def _left_out_why(me, reit=False):
+    """Why value to sales was left out of a company's fair value (its peer_table row `me`), as a clause: its debt
+    unread, mostly a finance arm's (fundamentals.FINANCE_ARMS), or its cash unread."""
+    if me.get("debt_why") == "finance_arm":
+        return "most of its debt is its finance arm's and value to sales counts debt"
+    if me.get("debt_unknown"):
+        return f"{'this REIT' if reit else 'its'} debt could not be read" + ("" if reit else " reliably") \
+            + " and value to sales counts debt"
+    return "its cash could not be read reliably and value to sales counts cash and debt"
+
+
 def _outside_note(counted, dropped, me):
     """The peer table's sentences on which of its columns the fair value of a profitable company outside finance uses:
     `counted` names the methods fair_value() counted, `dropped` those it left out as data errors. Price to earnings
@@ -1366,8 +1427,8 @@ def _outside_note(counted, dropped, me):
         cols = " and ".join(c for c, used in (("value to sales", vs), ("price to earnings", pe)) if used)
         out = [f"The fair value uses the median of the {cols} column{'s' if vs and pe else ''}"
                + (", the only estimate that could be used" if pe and not vs and len(counted) == 1 else "")
-               + (", since its debt could not be read reliably and value to sales counts debt"
-                  if pe and not vs and me.get("debt_unknown") else "") + "."]
+               + (f", since {_left_out_why(me)}"
+                  if pe and not vs and (me.get("debt_unknown") or me.get("cash_unknown")) else "") + "."]
     else:
         out = ["The fair value doesn't use this table's multiples."]
     if not pe and "Peer price to earnings" not in dropped and me.get(PEER_PE) is not None:
@@ -1812,6 +1873,8 @@ def health(u, m, price, high52, peers, table, news_overall, insider):
         b.append(not_scored("net_cash", "Net cash vs. price"))
     elif m.get("debt_known") is False:
         b.append(not_scored("net_cash", "Net cash vs. price", _debt_bar_note(m)))
+    elif m.get("cash_known") is False:
+        b.append(not_scored("net_cash", "Net cash vs. price", CASH_UNKNOWN_NOTE))
     elif shares_off:
         b.append(not_scored("net_cash", "Net cash vs. price", SHARES_BAR_NOTE))
     else:
@@ -2032,8 +2095,8 @@ def _cash_flow_model(u, m, shares, price):
     if listed is None:
         return None, None
     # Nor where the newest year's free cash flow can't be read at all (a 10-K that tags its operating cash flow or its
-    # capital spending under no tag CAPEX lists, as Valero's and AppLovin's for 2025 do), rather than running the model
-    # on the years before. On September 2026 data that took the model away from 19 companies the live site had
+    # capital spending under no tag fundamentals.CAPEX or CAPEX_MORE lists, as Valero's and AppLovin's for 2025 do),
+    # rather than running the model on the years before. On September 2026 data that took the model away from 19 companies the live site had
     # valued with it on older years. In the backtest it made no measurable difference (a rank correlation 0.000 lower averaged over the four
     # dates, 3 to 5 verdicts changed on each).
     if not listed or listed[-1]["year"] != m.get("fiscal_year"):
@@ -2187,9 +2250,13 @@ def _cash_flow_model(u, m, shares, price):
                f"{top * 100:.0f}% for companies {_size_words(CF_RATES[0][0])} ({basis}) and rises a point for each "
                f"step down in size, since smaller companies are riskier, to {bottom * 100:.0f}% for those "
                f"{_size_words(0)}."))
+    # The cash flow is the whole business's, of which the listed shares own their part (_whole), as in the value to
+    # sales; their minority holders' stake then isn't among the claims (other_claims).
+    own = 1.0 if reit_kind(m) == "property" else _whole(m)
     net = ((f"Its net cash of {money(nc)} is added." if nc > 0 else
-            f"Its net debt of {money(nc)} is subtracted." if nc < 0 else "") + _claims_sentence(m)).strip()
-    return {"name": "Cash-flow model", "value": (business + nc - claims) / shares,
+            f"Its net debt of {money(nc)} is subtracted." if nc < 0 else "") + _claims_sentence(m)
+           + _minority_sentence(own)).strip()
+    return {"name": "Cash-flow model", "value": (business + nc - claims) * own / shares,
             "note": " ".join(x for x in (start, grows, rate, net) if x),
             "model": {"cash_flow": base, "margin": margin, "growth": g, "discount_rate": r,
                       "terminal_growth": CF_TERMINAL, "net_cash": nc,
@@ -2450,13 +2517,16 @@ def fair_value(u, m, price, peers, table):
     # their borrowing: on September 2026 data it put Farmer Mac at $56 a share against $173 on earnings and a price
     # of $219, and Plumas Bancorp at $20 against $44 and a price of $62.
     if doubt or bank or reit and not REIT_SALES or reit_kind(m) == "mortgage" or m.get("revenue_basis") \
-            or m.get("debt_known") is False and not fin:
+            or (m.get("debt_known") is False or m.get("cash_known") is False) and not fin:
         pass
     elif rev and rev > 0 and profitable and fin:
         med_ps = _median([r["ps"] for r in peer_rows])
         if med_ps:
-            methods.append({"name": "Peer price to sales", "value": med_ps * rev / shares,
-                            "note": f"Similar companies trade at {med_ps:.1f}x sales."})
+            # The peers' price to sales values the whole business behind the sales, of which the listed shares own
+            # their part (_whole).
+            own = _whole(m)
+            methods.append({"name": "Peer price to sales", "value": med_ps * rev * own / shares,
+                            "note": f"Similar companies trade at {med_ps:.1f}x sales." + _minority_sentence(own)})
     elif rev and rev > 0 and profitable:
         # Enterprise value, so a peer's debt is not priced in as if it were sales. This company's own net
         # debt is then subtracted (or net cash added) to get back to what the shares are worth.
@@ -2471,7 +2541,8 @@ def fair_value(u, m, price, peers, table):
                                        f" This company's net debt of {money(nc)} is subtracted." if nc < 0 else "")
                                     + _claims_sentence(m)
                                     + (f" Its shares own {own * 100:.0f}% of the business, the rest belonging to holders "
-                                       "of its operating partnership's units." if own < 0.995 else "")})
+                                       "of its operating partnership's units." if reit and own < 0.995
+                                       else _minority_sentence(own))})
     med_pe = _median([r.get(PEER_FFO if reit else PEER_PE) for r in peer_rows])
     if med_pe and profitable and reit:
         plain = m.get("ffo")
@@ -2524,7 +2595,8 @@ def fair_value(u, m, price, peers, table):
                             "note": f"Average FFO of ${base / 1e6:,.0f}M growing {g * 100:.0f}% a year for 5 years, then "
                                     "2.5%, discounted at 10%. FFO is counted after interest, so debt is not subtracted."})
     left_out = None
-    debt_doubt = m.get("debt_known") is False and not fin and not reit
+    # Its debt or its cash unread (fundamentals.derive's debt_known and cash_known), which the model's net debt needs.
+    debt_doubt = (m.get("debt_known") is False or m.get("cash_known") is False) and not fin and not reit
     if not reit and not fin and not debt_doubt:
         # The model subtracts the debt, so it is left out where the debt could not be read (DEBT_DOUBT_VALUE_NOTE).
         model, left_out = _cash_flow_model(u, m, shares, price)
@@ -2548,10 +2620,10 @@ def fair_value(u, m, price, peers, table):
         if not methods:
             return {"methods": [], "verdict": None, "dropped": [x["name"] for x in wild],
                     "withheld": f"There is no fair value estimate. {sanity}"
-                                + (f" {DEBT_DOUBT_VALUE_NOTE}" if debt_doubt else "")}
+                                + (f" {_debt_value_note(m)}" if debt_doubt else "")}
     if not methods and debt_doubt:
         return {"methods": [], "verdict": None,
-                "withheld": f"There is no fair value estimate. {DEBT_DOUBT_VALUE_NOTE[:-1]}, and "
+                "withheld": f"There is no fair value estimate. {_debt_value_note(m)[:-1]}, and "
                             + ("the company lost money last year, not counting one-time items, so it can't be valued "
                                "on its earnings either." if not profitable else
                                "no price to earnings of similar companies was available to value it on instead.")}
@@ -2697,7 +2769,10 @@ def fair_value(u, m, price, peers, table):
     if doubt and profitable and not m.get("revenue_basis"):  # a lender read this way is never valued on sales
         note = f"{DOUBT_NOTE} {note}"
     elif debt_doubt:
-        note = f"{DEBT_DOUBT_VALUE_NOTE} {note}"
+        note = f"{_debt_value_note(m)} {note}"
+    elif m.get("cash_known") is False and not fin:
+        # A REIT whose cash is unread, whose value to sales is then left out (debt_doubt covers others).
+        note = f"{CASH_UNKNOWN_VALUE_NOTE} {note}"
     elif m.get("debt_known") is False and profitable and not fin:
         note = f"{DEBT_VALUE_NOTE} {note}"
     if sanity:

@@ -220,7 +220,7 @@ def _score(row):
     share["ps"] = max(0.0, (RULES["max_ps"] - row["ps"]) / RULES["max_ps"])
     if row["total_debt"] <= 0:
         label["debt"], share["debt"] = "No debt at all", 1.0
-    elif row["net_cash"] > 0:
+    elif (row["net_cash"] or 0) > 0:
         label["debt"], share["debt"] = "More cash than debt", NET_CASH_SHARE
     else:
         label["debt"], share["debt"] = "Low debt", max(0.0, 1 - row["lt_de"] / RULES["max_lt_de"]) * LOW_DEBT_SHARE
@@ -747,7 +747,8 @@ def run(universe, metrics, prices, analyst_counter, insiders=None):
             # average price paid per share (None where the filings give no price). None without such buying.
             "insiders": {k: bought.get(k) for k in ("tier", "total_value", "avg_price")} if bought else None,
         }
-        row["debt_status"] = "none" if row["total_debt"] <= 0 else "net_cash" if row["net_cash"] > 0 else "low"
+        # Net cash is None where the latest balance sheet tags no cash (fundamentals.derive's cash_known).
+        row["debt_status"] = "none" if row["total_debt"] <= 0 else "net_cash" if (row["net_cash"] or 0) > 0 else "low"
         row["flags"] = []
         if drawdown is not None and drawdown >= RULES["out_of_favor_drawdown"]:
             row["flags"].append("out_of_favor")

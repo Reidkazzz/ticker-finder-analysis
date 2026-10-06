@@ -24,6 +24,27 @@ CAPEX = [
     "PaymentsToAcquireOtherPropertyPlantAndEquipment",
 ]
 DEPRECIATION = ["DepreciationDepletionAndAmortization", "DepreciationAndAmortization", "Depreciation"]
+# More capex tags, read only where a year has none of CAPEX (_capex): Verizon's $17.0B of 2025 capital spending is
+# tagged only as payments for other productive assets, Dominion Energy's and Corning's likewise, Ralph Lauren's and
+# Snap-on's as capital improvements or machinery and equipment. PaymentsForProceedsFromProductiveAssets is net of what
+# assets sold brought in, so it counts only above zero (Coherus' 2025: -$470M, from selling a business). Not the tags for
+# aircraft or equipment bought to lease to others (PaymentsForFlightEquipment, PaymentsToAcquireEquipmentOnLease), a
+# lessor's stock in trade rather than what it spends to keep its business running (AerCap's $3.65B of aircraft bought
+# in 2025, Custom Truck One Source's $457M of rental equipment), though a lessor that tags its fleet as machinery and
+# equipment still has it read (Global Ship Lease's vessels, EquipmentShare's rental fleet). With them, the
+# depreciation some companies tag only inside their cost of sales, which tells that a company without a capex line read
+# must still have capex (_annual). Their own frames (capex_more), outside CRITICAL: one that fails leaves these tags
+# unread, as before they were added.
+CAPEX_MORE = [
+    "PaymentsToAcquireOtherProductiveAssets",
+    "PaymentsForCapitalImprovements",
+    "PaymentsToAcquireMachineryAndEquipment",
+    "PaymentsForProceedsFromProductiveAssets",
+]
+DEPRECIATION_MORE = ["CostOfGoodsAndServicesSoldDepreciationAndAmortization"]
+# A capex figure from CAPEX_MORE under this share of the year's depreciation is a piece of the capex rather than all of
+# it (_capex): the year's free cash flow is left unread (_annual).
+CAPEX_PIECE = 0.25
 PRETAX = ["IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest",
           "IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments"]
 # Write-downs other than goodwill, combined by _impairments(). Companies tag the same charge in different ways
@@ -99,17 +120,24 @@ INVESTMENT_INCOME = "GrossInvestmentIncomeOperating"
 # Marks a fiscal year whose revenue may not be read from it, as the company's newer years tag revenue otherwise
 # (load_fundamentals, _revenue_tags).
 NOT_BDC = "investment_income_not_revenue"
-# Each metric lists the XBRL tags companies use for it, in order of preference.
+# Each metric lists the XBRL tags companies use for it, in order of preference. A year's revenue can still come from a
+# later revenue tag, where the filing it came from shows that tag's figure to be the revenue (_revenue).
 DURATION = {
     "revenue": [
         "Revenues",
         "RevenueFromContractWithCustomerExcludingAssessedTax",
         "RevenueFromContractWithCustomerIncludingAssessedTax",
         "SalesRevenueNet",
+        # Total revenue net of interest expense, as lenders and brokers report it (REVENUE_TOTALS).
         "RevenuesNetOfInterestExpense",
         # Utilities that tag their total sales only this way (Xcel Energy's 2025: $14.67B, DTE Energy's $15.81B, MGE
-        # Energy's $744M, each as their 10-K shows), which left them without a sales figure.
+        # Energy's $744M, each as their 10-K shows), which left them without a sales figure. Others tag it beside
+        # their revenue from customer contracts, which leaves part of it out (REVENUE_TOTALS).
         "RegulatedAndUnregulatedOperatingRevenue",
+        # Utilities that tag their sales only as regulated revenue, which left their newer years without a sales figure:
+        # ONE Gas tags its revenue so for every year since 2022, when its "Revenues" ($2.58B) last stood beside it at the
+        # same figure. Late in the list, so it counts only where no other total is tagged.
+        "RegulatedOperatingRevenue",
         # A business development company's total investment income: the interest, dividends and fees it earns on the
         # loans and stakes it holds, the revenue these funds report (Ares Capital's 2025: $3.05B, as its 10-K shows).
         # BDCs tag no other revenue line, so without it they had no figures at all. Insurers tag it too, for what their
@@ -122,6 +150,7 @@ DURATION = {
     "operating_income": ["OperatingIncomeLoss"],
     "ocf": ["NetCashProvidedByUsedInOperatingActivities", "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations"],
     "capex": CAPEX + DEPRECIATION,
+    "capex_more": CAPEX_MORE + DEPRECIATION_MORE,
     # For the cash-flow model (report._cash_flow_model), which values the business before its debt and then subtracts
     # the debt. Cash paid for interest, which operating cash flow is counted after, so the model adds it back after tax
     # (1,924 of the 2,168 companies with debt and free cash flow figures tagged it for their latest year on September
@@ -351,13 +380,27 @@ DEPRECIATION_MIN = 0.06
 DEPRECIATION_LEFT_OUT = (0.75, 1.4)
 # A gross profit line and a cost of revenue line that add up to another revenue tag's figure, more than FOOTING_GAP
 # from the revenue figure used, show that the revenue is on another footing than the gross profit (_off_footing):
-# NetApp's "Revenues" for its quarter to July 31, 2026 ($1.82B) is its hybrid cloud business alone, while its gross
-# profit and cost of revenue ($1.42B and $0.61B) add up to its revenue from customer contracts ($2.03B); Molson Coors'
-# revenue for its quarter to June 30, 2026 ($3.60B) is before the excise taxes its gross profit and cost of sales leave
-# out ($1.06B and $2.03B, adding up to $3.10B). A margin on such a revenue figure would be off, so none is shown. Where
-# the two lines add up to no revenue figure at all, the cost line is only part of the direct cost and the company's own
-# gross profit line stands.
+# NetApp's "Revenues" for its fiscal year to April 24, 2026 ($6.24B) is its hybrid cloud business alone, while its gross
+# profit and cost of revenue ($4.90B and $2.03B) add up to its revenue from customer contracts ($6.93B); Molson Coors'
+# revenue from customer contracts for 2025 ($13.04B) is before the excise taxes its gross profit and cost of sales leave
+# out ($4.27B and $6.87B, adding up to its net sales of $11.14B). Where one filing gives all of these figures, the
+# revenue is the one the two lines add up to (_revenue). Otherwise a margin on the revenue figure would be off, so none
+# is shown: Synopsys' fiscal 2022 revenue as first filed ($5.08B) stands beside the gross profit and cost of revenue its
+# 10-K of December 2024 gave for that year ($3.72B and $0.90B, adding up to $4.62B, without the business it sold in
+# 2024). Where the two lines add up to no revenue figure at all, the cost line is only part of the direct cost and the
+# company's own gross profit line stands.
 FOOTING_GAP = 0.03
+# Revenue from customer contracts leaves out what a lender earns on its loans and what a utility earns under its
+# regulators' programs, so a total that also counts these, where the same filing gives one for the same dates, is the
+# revenue instead (_revenue): American Express's 2025 10-K gives $72.23B of revenue net of interest expense beside
+# $41.30B from customer contracts, SoFi's $3.61B beside $0.62B, NextEra Energy's $27.41B of operating revenue beside
+# $25.8B. A total can come in below (NextEra's 2022: $20.96B, beside $23.0B from customer contracts), but none of these
+# came to less than TOTAL_SHARE of it, while companies that tag their revenue otherwise use these tags for small lines
+# (Portland General Electric's $88M for 2025, beside $3.58B of revenue), so a figure under that share is never taken for
+# a total. Nor is any where the filing's gross profit and cost of revenue add up to the revenue from customer contracts,
+# since that shows the company's own margin to be worked out on it.
+REVENUE_TOTALS = ["RevenuesNetOfInterestExpense", "RegulatedAndUnregulatedOperatingRevenue"]
+TOTAL_SHARE = 0.5
 
 # Quarterly figures (derive's quarters): revenue under the same tags as the annual figure, a bank's net interest and
 # noninterest income (its revenue, as _bank_year counts it), and the gross profit tags. One frame per tag and calendar
@@ -423,16 +466,45 @@ DEBT_FAMILIES = [  # (whole amount, noncurrent part, current part)
     (["LoansPayable"], [], []),
     ([], ["OtherLongTermDebtNoncurrent"], []),
 ]
+# More kinds of debt, under tags some companies use alone: Chewy's August 2026 balance sheet tags its $873M of secured
+# debt and $591M of senior notes only so (SecuredLongTermDebt, SeniorLongTermNotes), Integra LifeSciences' $1.78B of
+# secured debt, Rocket Companies' $27.4B of secured and unsecured financing, CNH Industrial's $26.0B and Dick's
+# Sporting Goods' $1.91B likewise. They make a reading of their own (_debt), never added to DEBT_FAMILIES' kinds:
+# companies that tag both often give the same debt under each (Biogen's $800M term loan due within a year, tagged as
+# secured debt and inside its $8.09B of notes payable; Federal Realty's mortgages, as secured debt and inside its notes
+# payable; MercadoLibre's credit lines, inside its loans payable).
+DEBT_MORE = [
+    (["ConvertibleDebt"], [], []),
+    ([], ["SeniorLongTermNotes"], []),
+    ([], ["SecuredLongTermDebt"], ["SecuredDebtCurrent"]),
+    (["UnsecuredDebt"], ["UnsecuredLongTermDebt"], ["UnsecuredDebtCurrent"]),
+    ([], ["LongTermLoansPayable"], ["LoansPayableCurrent"]),
+    (["OtherBorrowings"], [], []),
+]
+# Totals of all a company's debt that some companies tag instead of any line read above, read for every company as
+# another reading of the whole (_debt): notes and loans payable (KB Home's $1.97B at May 2026, Howard Hughes' $5.46B) and
+# debt with finance leases (Hertz's $18.2B, Aflac's $8.73B, Old Republic's $2.28B). They count only where the debt read
+# otherwise is under DEBT_TOTAL_SHARE of them, and never above total liabilities. Not the carrying amount of all its
+# debt instruments (DebtInstrumentCarryingAmount), a footnote's total that can count facilities beside the balance sheet
+# (Prudential's $36.0B at June 2026, against $20.6B of debt on it).
+DEBT_WHOLE = ["NotesAndLoansPayable", "DebtAndCapitalLeaseObligations"]
+DEBT_TOTAL_SHARE = 0.75
+# The least share of its total liabilities the debt a company's recent balance sheets showed must come to for a latest
+# one that tags none to leave its debt unknown (derive's "untagged").
+UNTAGGED_DEBT_MIN = 0.1
 DEBT_TOTALS = ["DebtLongtermAndShorttermCombinedAmount", "LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities"]
 DEBT = [
     "LongTermDebtNoncurrent", "LongTermDebtAndCapitalLeaseObligations", "LongTermNotesAndLoans", "LongTermDebt",
     "LongTermDebtCurrent", "LongTermDebtAndCapitalLeaseObligationsCurrent",
     "DebtCurrent", "ShortTermBorrowings", "CommercialPaper",
-    *DEBT_TOTALS, *(t for family in DEBT_FAMILIES for part in family for t in part),
+    *DEBT_TOTALS, *(t for family in DEBT_FAMILIES + DEBT_MORE for part in family for t in part), *DEBT_WHOLE,
 ]
 INSTANT = {
     "equity": ["StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"],
-    "cash": ["CashAndCashEquivalentsAtCarryingValue", "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents", "Cash"],
+    # Last, cash with restricted cash and that of businesses held for sale, which some companies tag as their only cash
+    # figure (Trane Technologies' $1.32B at June 2026, Interparfums' $169.7M, Atlas Energy Solutions' $168.2M).
+    "cash": ["CashAndCashEquivalentsAtCarryingValue", "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents", "Cash",
+             "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalentsIncludingDisposalGroupAndDiscontinuedOperations"],
     "st_investments": ["ShortTermInvestments", "MarketableSecuritiesCurrent", "AvailableForSaleSecuritiesDebtSecuritiesCurrent"],
     "current_assets": ["AssetsCurrent"],
     "current_liabilities": ["LiabilitiesCurrent"],
@@ -444,8 +516,8 @@ INSTANT = {
     # many REITs use instead of those in DEBT (Highwoods Properties' $3.7B of mortgages and notes, Kilroy Realty's $4.0B
     # of unsecured debt). A failed request leaves them blank.
     "liabilities": ["Liabilities"],
-    "reit_debt": ["DebtInstrumentCarryingAmount", "NotesAndLoansPayable", "NotesPayableToBank", "UnsecuredDebt",
-                  "DebtAndCapitalLeaseObligations"],
+    # The totals among them (DEBT_WHOLE) and unsecured debt are read with DEBT, for every company.
+    "reit_debt": ["DebtInstrumentCarryingAmount", "NotesPayableToBank"],
     # Only for the debt check (_debt_check). A failed request leaves its liabilities test unmade for that quarter.
     "lease_nc": ["OperatingLeaseLiabilityNoncurrent"],
     # Marketable securities held for over a year, which count with cash (derive): Apple's $84.1B at June 2026, Regeneron's
@@ -491,16 +563,19 @@ def _years(today):
     return list(range(last - 4, last + 1))
 
 
-def _quarters(today, n=5):
-    q = (today.month - 1) // 3  # the current quarter is still open
-    y = today.year
+def _quarters(today, n=6):
+    """The instant frames to read, newest first: the current calendar quarter, still open, and the five before it. The
+    open quarter's frame already holds the balance sheets of companies whose quarter ended in its first months and
+    the cover pages filed in it: Oracle's of August 2026, with equity of $66.8B against $42.5B in May, Adobe's, Kroger's.
+    The five closed ones keep the oldest, whose debt and cash set the recent peaks (_balance_sheet)."""
+    q, y = (today.month - 1) // 3, today.year
     out = []
     for _ in range(n):
+        out.append(f"CY{y}Q{q + 1}I")
         q -= 1
         if q < 0:
             q, y = 3, y - 1
-        out.append(f"CY{y}Q{q + 1}I")
-    return out  # newest first
+    return out
 
 
 def _duration_quarters(today, n=QUARTER_FRAMES):
@@ -976,7 +1051,9 @@ def load_fundamentals(today=None, listed=None, reits=frozenset()):
     failed = {(j[1], j[2]) for j, f in zip(jobs, frames) if f is None}
     bad_quarters = {p for m, p in failed if p in quarters and m not in OPTIONAL_INSTANT}
     critical = sorted(f"{m} CY{p}" for m, p in failed if m in CRITICAL and p in years[-2:])
-    if critical or len(bad_quarters) == len(quarters):
+    # The open quarter (_quarters' first) holds only the companies that have filed in it so far, so a run whose closed
+    # quarters all failed stops even when it came through; one where only it failed skips it.
+    if critical or bad_quarters >= set(quarters[1:]):
         raise RuntimeError("SEC financial statements unavailable after retries: "
                            + (", ".join(critical) or "every recent balance sheet"))
     if failed:
@@ -1029,7 +1106,9 @@ def load_fundamentals(today=None, listed=None, reits=frozenset()):
     companies = {}
     for cik, c in info.items():
         facts = annual.get(cik, {})
-        has_capex = any(_capex(fy) is not None for fy in facts.values())
+        # Whether any year tags capex read with CAPEX_MORE, and without it (_annual's fcf_base).
+        has_capex = (any(_capex(fy) is not None for fy in facts.values()),
+                     any(_capex(fy, more=False) is not None for fy in facts.values()))
         def year(y, extra=frozenset()):
             return _annual(facts.get(y, {}), has_capex, ("capex", y) in failed, reported.get((cik, y), False),
                            unknown | extra | {m for m, p in tax_unknown if p == y}
@@ -1088,6 +1167,13 @@ def load_fundamentals(today=None, listed=None, reits=frozenset()):
 # first 10-Q (August 3, 2026) is its only filing with figures. Once the new registrant files an annual report of its
 # own, its years take over (_successor), so an entry can stay until then.
 SUCCESSORS = {2115436: 34088}
+# Companies outside finance most of whose debt is a finance arm's, lending to their own customers and dealers, which
+# the value to sales and the cash-flow model would subtract as if it funded the business it values: CNH Industrial's
+# June 2026 balance sheet shows $26.0B of debt, $22.0B of it its financial services arm's, beside $22.5B of loans and
+# leases that arm holds. Its debt is left unknown (derive's "finance_arm"), as the debt check already leaves General
+# Motors', Caterpillar's, Ford's, Deere's and PACCAR's, whose finance arms' debt it finds too large for the debt read.
+# {CIK: name}.
+FINANCE_ARMS = {1567094: "CNH Industrial"}
 
 
 def _successor(new, old):
@@ -1185,16 +1271,55 @@ def _gross_profit(facts, rev, unknown=frozenset(), capex_failed=False):
             "gross_accn": other(cost)}
 
 
-def _off_footing(facts, rev, gp, same=lambda d: d is not None):
-    """Whether a period's gross profit line `gp` and a cost of revenue line in `facts` add up to another revenue tag's
-    figure, more than FOOTING_GAP from its revenue `rev`, and so to no figure within 1% of it (see FOOTING_GAP). `same`
-    tells which facts are for the period."""
+def _footing_tags(facts, rev, gp, same=lambda d: d is not None):
+    """The revenue tags (DURATION, in its order) whose figures in `facts` a period's gross profit line `gp` and a cost of
+    revenue line add up to, within half a percent, where each is more than FOOTING_GAP from its revenue `rev` and the
+    two lines add up to no figure within 1% of `rev` (see FOOTING_GAP). `same` tells which facts are for the period."""
     totals = [gp + facts[t]["val"] for t in GROSS["cost_of_revenue"] if same(facts.get(t))]
     if not totals or any(abs(x - rev) <= 0.01 * abs(rev) for x in totals):
-        return False
-    others = [facts[t]["val"] for t in DURATION["revenue"]
-              if same(facts.get(t)) and abs(facts[t]["val"] - rev) > FOOTING_GAP * abs(rev)]
-    return any(abs(x - o) <= 0.005 * abs(o) for x in totals for o in others)
+        return []
+    return [t for t in DURATION["revenue"] if same(facts.get(t)) and abs(facts[t]["val"] - rev) > FOOTING_GAP * abs(rev)
+            and any(abs(x - facts[t]["val"]) <= 0.005 * abs(facts[t]["val"]) for x in totals)]
+
+
+def _off_footing(facts, rev, gp, same=lambda d: d is not None):
+    """Whether a period's gross profit line `gp` and a cost of revenue line in `facts` add up to another revenue tag's
+    figure, more than FOOTING_GAP from its revenue `rev`, and so to no figure within 1% of it (_footing_tags)."""
+    return bool(_footing_tags(facts, rev, gp, same))
+
+
+def _revenue(facts, tags):
+    """The fact one fiscal year's revenue is read from: the first of `tags` (_revenue_tags) the year has, unless the
+    filing it came from gives the same dates another figure, under another of those tags save a BDC's total investment
+    income (INVESTMENT_INCOME), that its own lines show to be the company's revenue. Only figures from that one filing
+    are set against it, since a later 10-K can restate a year under one tag and leave another as first filed (FOOTING_GAP).
+    The first rule that applies settles it:
+    - a figure of 0 gives way to the first figure above 0: Flowserve's 10-K for 2025 tags its "Revenues" as 0 for each of
+      2023 to 2025, beside $4.73B of revenue from customer contracts for 2025, which its gross profit ($1.58B) and cost of
+      sales ($3.15B) add up to;
+    - a figure the gross profit line and a cost of revenue line don't add up to gives way to the first they do
+      (_footing_tags): NetApp's and Molson Coors' (FOOTING_GAP), Lands' End's "Revenues" for 2025 ($1.16B), where its
+      gross profit and cost of sales add up to its $1.34B of revenue from customer contracts;
+    - revenue from customer contracts (or SalesRevenueNet) above 0 gives way to a total revenue figure (REVENUE_TOTALS)
+      of at least TOTAL_SHARE of it, unless the filing's gross profit and a cost of revenue line add up to the first
+      figure, which shows that one to be the revenue the company's own margin is worked out on."""
+    first = next((t for t in tags if t in facts), None)
+    rev = facts.get(first)
+    if rev is None or not rev.get("accn"):
+        return rev
+    mine = lambda d: d is not None and d.get("accn") == rev["accn"] \
+        and (d.get("start"), d.get("end")) == (rev.get("start"), rev.get("end"))
+    others = [t for t in tags if t not in (first, INVESTMENT_INCOME) and mine(facts.get(t))]
+    if rev["val"] == 0:
+        return next((facts[t] for t in others if facts[t]["val"] > 0), rev)
+    gp = facts.get("GrossProfit")
+    footing = _footing_tags(facts, rev["val"], gp["val"], mine) if others and mine(gp) else []
+    tag = next((t for t in footing if t in others), None)
+    confirmed = mine(gp) and any(abs(gp["val"] + facts[t]["val"] - rev["val"]) <= 0.01 * abs(rev["val"])
+                                 for t in GROSS["cost_of_revenue"] if mine(facts.get(t)))
+    if tag is None and rev["val"] > 0 and not confirmed and first != "Revenues" and first not in REVENUE_TOTALS:
+        tag = next((t for t in REVENUE_TOTALS if t in others and facts[t]["val"] >= TOTAL_SHARE * rev["val"]), None)
+    return facts[tag] if tag else rev
 
 
 def _revenue_tags(facts, unknown=frozenset()):
@@ -1209,20 +1334,24 @@ def _revenue_tags(facts, unknown=frozenset()):
 
 def _annual(facts, has_capex, capex_failed, report, unknown=frozenset()):
     tags = _revenue_tags(facts, unknown)
-    rev = _first(facts, tags)
+    rev = _revenue(facts, tags)
     ocf = _val(_first(facts, DURATION["ocf"]))
-    capex = _capex(facts)
-    dep = _val(_first(facts, DEPRECIATION))
-    if ocf is None or capex_failed:
-        fcf = None
-    elif capex is not None:
-        fcf = ocf - capex
-    elif has_capex or (dep and dep > 0.01 * abs(_val(rev) or 0)):
-        # It reports capex in other years, or depreciation says it owns assets it must replace, so its capex
-        # is under a tag this doesn't read. Operating cash flow alone would overstate free cash flow.
-        fcf = None
-    else:
-        fcf = ocf
+    def free_cash_flow(more):
+        capex = _capex(facts, more)
+        dep = _val(_first(facts, DEPRECIATION + (DEPRECIATION_MORE if more else [])))
+        if ocf is None or capex_failed:
+            return None
+        if capex is not None:
+            return ocf - capex
+        if (has_capex[0 if more else 1] or (dep and dep > 0.01 * abs(_val(rev) or 0))
+                or more and any((_val(facts.get(t)) or 0) > 0 for t in CAPEX_MORE)):
+            # It reports capex in other years, or depreciation says it owns assets it must replace, so its capex
+            # is under a tag this doesn't read, or it tags only a piece of it (CAPEX_PIECE). Operating cash flow alone
+            # would overstate free cash flow.
+            return None
+        return ocf
+
+    fcf = free_cash_flow(True)
     ni = _net_income(facts, report)
     # From the net income tags a company without revenue tags uses, or a bank's net interest income (Truist tags
     # neither revenue nor NetIncomeLoss).
@@ -1232,12 +1361,16 @@ def _annual(facts, has_capex, capex_failed, report, unknown=frozenset()):
         "net_income": ni,
         "operating_income": _val(facts.get("OperatingIncomeLoss")),
         "fcf": fcf,
+        # Free cash flow without CAPEX_MORE, which financial companies and REITs keep (derive): a broker's or an
+        # insurer's operating cash flow moves with its trading book and its policyholders' money, and a REIT's capex
+        # under these tags is often only its spending on improvements beside the buildings it buys.
+        "fcf_base": free_cash_flow(False),
         "diluted_shares": _val(facts.get("WeightedAverageNumberOfDilutedSharesOutstanding")),
         "end": period.get("end"),
         # The fiscal year's first day and the tag its revenue came from, which its quarters are matched on
         # (_quarter_series), and its gross profit (_gross_profit; None where it can't be read soundly).
         "start": period.get("start"),
-        "revenue_tag": next((t for t in tags if t in facts), None),
+        "revenue_tag": next((t for t in tags if rev is not None and facts.get(t) is rev), None),
         # Every revenue tag's figure for the same dates, which tells tags that agree apart (_quarter_series).
         "revenue_tags": {t: facts[t]["val"] for t in tags if t in facts and rev
                          and (facts[t].get("start"), facts[t]["end"]) == (rev.get("start"), rev["end"])},
@@ -1536,7 +1669,7 @@ def _goodwill_tax_rate(facts, gw):
     return None
 
 
-def _capex(facts):
+def _capex(facts, more=True):
     """Capital spending. Oil and gas producers report drilling spend on their own lines, next to ordinary
     property purchases. PaymentsToAcquireProductiveAssets is broader and already includes it."""
     v = lambda t: _val(facts.get(t))
@@ -1551,7 +1684,14 @@ def _capex(facts):
     # property purchases, which some companies tag as their only capex line (CAPEX). The larger counts, as they can be
     # one line tagged twice.
     rest = [x for x in (v(CAPEX[4]), v(CAPEX[5])) if x is not None]
-    return max(rest) if rest else None
+    if rest or not more:
+        return max(rest) if rest else None
+    # Then the other capex tags (CAPEX_MORE), the larger counting, unless it is only a piece of the capex (CAPEX_PIECE).
+    more = [x for x in (v(t) for t in CAPEX_MORE) if x is not None and x > 0]
+    if more:
+        dep = _val(_first(facts, DEPRECIATION + DEPRECIATION_MORE))
+        return None if dep and max(more) < CAPEX_PIECE * dep else max(more)
+    return None
 
 
 NEEDS_REPORT = object()
@@ -1584,7 +1724,7 @@ def _net_income(facts, report=False):
     # not as a sign that net income came from the annual report, since a quarterly report can supply both (Colony
     # Bankcorp's first quarter of 2026, tagged as the year 2025).
     bank = _bank_like(facts) and _first(facts, DURATION["bank_nii"] + DURATION["bank_nii_alt"])
-    rev = _first(facts, DURATION["revenue"])
+    rev = _revenue(facts, DURATION["revenue"])
     x, r = ni["val"], _val(rev) or _val(bank)
     if rev and ni["accn"] == rev["accn"]:
         return None if rev["val"] > 50e6 and abs(x) < 1e-4 * rev["val"] else x
@@ -1886,6 +2026,14 @@ def _balance_sheet(by_quarter, quarters, bank_failed=frozenset(), lease_failed=f
     facts = by_quarter[q]
     total, lt, reported = _debt({t: d["val"] for t, d in facts.items()})
     out = {m: _val(_first(facts, INSTANT[m])) for m in ("equity", "cash", "st_investments", "current_assets", "current_liabilities")}
+    # A cash tag at 0 gives way to a later one above it: MAIA Biotechnology's June 2026 balance sheet tags its cash
+    # and equivalents as 0 beside $27.6M of cash (Cash), and Cardio Diagnostics', Volato Group's and Indonesia Energy's
+    # likewise.
+    out["cash"] = next((x for x in (_val(facts.get(t)) for t in INSTANT["cash"]) if x), out["cash"])
+    # Whether a quarter end before the latest tagged cash above 0, which tells cash left untagged from none held
+    # (derive's cash_known).
+    out["cash_before"] = any((_val(_first(by_quarter[p], INSTANT["cash"])) or 0) > 0 for p in quarters
+                             if p in by_quarter and quarters.index(p) > quarters.index(q))
     out.update(as_of=_first(facts, ANCHORS).get("end"), total_debt=total, lt_debt=lt, debt_reported=reported,
                total_assets=_val(facts.get("Assets")),
                # Long-term marketable securities, which derive() counts with cash, and minority holders' stakes in
@@ -1898,7 +2046,8 @@ def _balance_sheet(by_quarter, quarters, bank_failed=frozenset(), lease_failed=f
                # The equity above is that total, minority holders' stakes included, where the company tags no
                # StockholdersEquity of its own (derive's equity_includes_minority).
                equity_from_total=INSTANT["equity"][0] not in facts and INSTANT["equity"][1] in facts,
-               reit_debt={t: facts[t]["val"] for t in INSTANT["reit_debt"] + ["SecuredDebt", "LineOfCredit"] if t in facts})
+               reit_debt={t: facts[t]["val"] for t in INSTANT["reit_debt"] + DEBT_WHOLE + ["SecuredDebt", "UnsecuredDebt", "LineOfCredit"]
+                         if t in facts})
     # The most cash held at any recent quarter end, since interest earned last year came from the cash held then.
     out["peak_cash"] = max((_val(_first(f, INSTANT["cash"])) or 0) + (_val(_first(f, INSTANT["st_investments"])) or 0)
                            + max(_val(_first(f, INSTANT["lt_securities"])) or 0, 0) for f in by_quarter.values())
@@ -1911,6 +2060,16 @@ def _balance_sheet(by_quarter, quarters, bank_failed=frozenset(), lease_failed=f
             for f in by_quarter.values()]
     cap = _val(facts.get(INSTANT["liabilities"][0])) or _val(facts.get(INSTANT["total_assets"][0]))
     out["peak_debt"] = max([d for d, c in peak if not (c or cap) or d <= (c or cap)] or [0])
+    # The total liabilities at the quarter end with the most debt read, which tell debt repaid since (its liabilities
+    # fall with it) from debt left untagged (derive's "untagged").
+    liab = [(d, _val(f.get(INSTANT["liabilities"][0]))) for (d, _), f in zip(peak, by_quarter.values())]
+    out["peak_liabilities"] = max(((d, c) for d, c in liab if c and d <= c), default=(0, None))[1]
+    # The debt read at the newest earlier quarter end that tagged any, which tells debt repaid (a later balance sheet
+    # tagging it as 0: Kratos' $169.8M of June 2025, 0 at September and December) from debt left untagged since.
+    prior = next((_debt({t: d["val"] for t, d in by_quarter[p].items()}) for p in quarters
+                  if p != q and p in by_quarter and quarters.index(p) > quarters.index(q)
+                  and _debt({t: d["val"] for t, d in by_quarter[p].items()})[2]), None)
+    out["prior_debt"] = prior[0] if prior else None
     out["lease_nc"] = None if q in lease_failed else _val(facts.get(INSTANT["lease_nc"][0])) or 0
     # For banks (_bank_parts): the lines behind tangible book value at each recent quarter end, by date, so that the
     # latest gives the price to tangible book value and returns are measured against the balance sheet at the end of the
@@ -1923,10 +2082,33 @@ def _balance_sheet(by_quarter, quarters, bank_failed=frozenset(), lease_failed=f
     return out
 
 
+def _kinds(v, families):
+    """[(amount, current part)] of each kind of debt in `families` that one quarter's tag values `v` give, largest
+    first: a kind's whole amount or its noncurrent and current parts added, whichever is more. Near-equal figures are
+    the same debt tagged twice, and one figure matching all the others combined is their total (notes payable made up
+    of senior notes and loans)."""
+    g = lambda tags: next((v[t] for t in tags if t in v), None)
+    kinds = []
+    for whole, nc, c in families:
+        w, n, cu = g(whole), g(nc), g(c)
+        if w is not None or n is not None or cu is not None:
+            amount = max(w or 0, (n or 0) + (cu or 0))
+            kinds.append((amount, min(cu or 0, amount)))
+    kept = []
+    for amount, current in sorted(kinds, reverse=True):
+        if not any(abs(amount - k[0]) <= 0.03 * k[0] for k in kept):
+            kept.append((amount, current))
+    if len(kept) > 2 and abs(sum(a for a, _ in kept[1:]) - kept[0][0]) <= 0.03 * kept[0][0]:
+        kept = kept[:1]
+    return kept
+
+
 def _debt(v):
     """(total debt, long-term part, whether any debt figure was reported) from one quarter's tag values."""
-    if not any(t in v for t in DEBT):
+    if not any(t in v for t in DEBT + DEBT_WHOLE):
         return 0, 0, False
+    # The quarter's total liabilities (or else its assets), which no reading of its debt can exceed.
+    cap = v.get("Liabilities") or v.get("Assets")
     g = lambda tags: next((v[t] for t in tags if t in v), None)
 
     # Broad tags. DebtCurrent already includes current maturities and short-term borrowings, and
@@ -1949,21 +2131,24 @@ def _debt(v):
             lt = 0
     options = [((lt or 0) + (cur or 0), lt or 0)]
 
-    # Instrument tags: one figure per kind of debt. Near-equal figures are the same debt tagged twice.
-    kinds = []
-    for whole, nc, c in DEBT_FAMILIES:
-        w, n, cu = g(whole), g(nc), g(c)
-        if w is not None or n is not None or cu is not None:
-            amount = max(w or 0, (n or 0) + (cu or 0))
-            kinds.append((amount, min(cu or 0, amount)))
-    kept = []
-    for amount, current in sorted(kinds, reverse=True):
-        if not any(abs(amount - k[0]) <= 0.03 * k[0] for k in kept):
-            kept.append((amount, current))
-    # One figure matching all the others combined is their total (notes payable made up of senior notes and loans).
-    if len(kept) > 2 and abs(sum(a for a, _ in kept[1:]) - kept[0][0]) <= 0.03 * kept[0][0]:
-        kept = kept[:1]
+    # Instrument tags: one figure per kind of debt (_kinds), the kinds of DEBT_FAMILIES and those of DEBT_MORE making
+    # two readings, never added together. The second is read only within total liabilities: a kind above them is no
+    # debt of the balance sheet's (NewHold's $50M of "other borrowings" at June 2026, beside $36.1M of liabilities), and
+    # kinds adding up to more count some debt twice, so only the largest that fit count.
+    kept = _kinds(v, DEBT_FAMILIES)
     options.append((sum(a for a, _ in kept), sum(a - c for a, c in kept)))
+    # A noncurrent total with no current debt line beside it, where the debt due within a year is tagged only under the
+    # instrument lines: Oracle's August 2026 balance sheet gives $117.7B of noncurrent notes and loans and its $7.6B of
+    # notes due within a year only as notes payable, current. The two can't overlap, so they add up.
+    current_parts = sum(c for _, c in kept)
+    if cur is None and lt is not None and "LongTermDebt" not in v and current_parts \
+            and (not cap or lt + current_parts <= cap):
+        options.append((lt + current_parts, lt))
+    more = [k for k in _kinds(v, DEBT_MORE) if not cap or k[0] <= cap]
+    while more and cap and sum(a for a, _ in more) > cap:
+        more = more[:-1]
+    if more:
+        options.append((sum(a for a, _ in more), sum(a - c for a, c in more)))
 
     # Reported totals sometimes leave out short-term borrowings or leases, so they act as a floor.
     t = max((v[x] for x in DEBT_TOTALS if x in v), default=None)
@@ -1971,6 +2156,12 @@ def _debt(v):
         current = cur if cur is not None else sum(c for _, c in kept)
         options.append((t, max(t - current, 0)))
     total, long_term = max(options, key=lambda o: o[0])
+    # A total of all its debt tagged instead (DEBT_WHOLE), where the debt read is far below it; its long-term part is
+    # what the current debt read leaves of it.
+    whole = max([v[x] for x in DEBT_WHOLE if x in v and v[x] > 0 and (not cap or v[x] <= cap)] or [0])
+    if whole and total < DEBT_TOTAL_SHARE * whole:
+        current = cur if cur is not None else sum(c for _, c in kept)
+        total, long_term = whole, max(whole - current, 0)
     return total, long_term, True
 
 
@@ -2079,7 +2270,7 @@ def _reit_year(s):
         if s.get("pretax") is None:
             eq = s.get("equity_method") or 0
             s.update(pretax=s["net_income"] + tax - eq - (s.get("discontinued") or 0) + (s.get("minority") or 0),
-                     pretax_has_equity_method=False)
+                     pretax_has_equity_method=False, pretax_derived=True)
         s["income_tax"] = tax
     return s
 
@@ -2171,7 +2362,9 @@ def _owners(series, has, reit=False):
             if x in implied or mi and gap is not None and abs(gap - (s.get("preferred") or 0) - mi) <= 0.02 * abs(mi) + 1e5:
                 series[x] = dict(s, net_income=s["net_income"] - mi, minority=mi)
                 tracks = tracks or not _minor(mi, s)
-    shares = {x: _owners_share(series[x]) for x in has}
+    # Outside REITs, a net income that is the whole business's, the minority holders' share included (ni_whole: TWFG's,
+    # whose market value counts its other holders' shares too, _owners_net_income), moves by all of an item.
+    shares = {x: 1.0 if not reit and series[x].get("ni_whole") else _owners_share(series[x]) for x in has}
     usual_share = statistics.median([v for v in shares.values() if v is not None and v != 1.0] or [1.0])
     whole = tracks or _minority_whole(series, has) or reit and _minority_alike(series, has)
 
@@ -2194,12 +2387,17 @@ def _minority_alike(series, years):
 
 def _reconciles(s):
     """Whether the income statement lines add up to reported net income. Otherwise one of them is misread and any
-    adjustment built on them would be too."""
+    adjustment built on them would be too. A net income that is the whole business's (ni_whole) still includes the
+    minority holders' share, so it is not taken off again: TWFG's 2025 profit of $41.2M, read from ProfitLoss, is its
+    pretax income less tax, $33.2M of it its minority holders' (_owners_net_income leaves it whole). Unless the pretax
+    income was itself worked out from that net income plus the minority share (pretax_derived: a REIT's or a bank's
+    that tags none, _reit_year, derive), which then counts the share twice, and taking it off once squares that."""
     ni, pretax, tax = s.get("net_income"), s.get("pretax"), s.get("income_tax")
     if ni is None or pretax is None or tax is None:
         return False
     eq = 0 if s.get("pretax_has_equity_method") else s.get("equity_method") or 0
-    return abs(pretax - tax + eq + (s.get("discontinued") or 0) - (s.get("minority") or 0) - ni) \
+    mi = 0 if s.get("ni_whole") and not s.get("pretax_derived") else s.get("minority") or 0
+    return abs(pretax - tax + eq + (s.get("discontinued") or 0) - mi - ni) \
         <= 0.1 * max(abs(ni), abs(pretax)) + 1e5
 
 
@@ -3334,7 +3532,73 @@ def _quarter_gross(p, basis, concept=None):
     return v if v is not None and v <= p["revenue"] else None
 
 
-def derive(f, tax_rate=OWN_RATE, bank=False, check_debt=True, gross=True, lender=False):
+# How far the shares a listing's market value counts (its market value over its price) may exceed the shares the
+# company's own earnings per share are worked out on, for that market value to be taken as its listed shares' alone
+# (_owners_net_income). Interactive Brokers' market value counted 453M shares in September 2026, against the 444M its
+# 2025 earnings per share were worked out on: its Class A shares, which own about a quarter of the business. TWFG's
+# counted 54.1M, against 15.1M, since Nasdaq counts its Class B shares too, which stand for the other holders' units.
+LISTED_GAP = 1.25
+
+
+def _owners_net_income(series, listed):
+    """`series` with the minority holders' share taken off each year's net income that is the whole business's
+    (ni_whole: the company tags no NetIncomeLoss, so it was read from ProfitLoss), where the listing's market value
+    counts only its listed shares (`listed`, the shares it counts, at most LISTED_GAP of the shares the newest year's
+    earnings per share are on). A price to earnings must set the market value against the earnings of the shares it
+    counts: Interactive Brokers' 2025 10-K tags $4.36B of profit for the whole group, of which $3.37B went to the
+    holders of its operating company's other units and $984M to its Class A shareholders, the shares its market value
+    is for, so its price to earnings was read as about 9 where it was about 40. Where the market value counts the other
+    holders' shares too, the whole business's profit is the one that matches it and stays (TWFG, LISTED_GAP). Only
+    where the minority share is tagged; a year it is taken off is marked ni_owned. What is left is the owners' profit
+    before preferred dividends, as for a company that tags NetIncomeLoss (Invesco's 2025: a $281.7M loss, its $174.8M
+    loss for the group less $106.9M to minority holders), whose net income left to common shareholders can differ by
+    more than the dividends (Invesco's $726.3M loss, after also $240M paid to buy back preferred stock)."""
+    diluted = next((s.get("diluted_shares") for s in reversed(series) if s.get("diluted_shares")), None)
+    if not listed or not diluted or listed > LISTED_GAP * diluted:
+        return series
+    out = []
+    for s in series:
+        ni, mi = s.get("net_income"), s.get("minority")
+        if s.get("ni_whole") and ni is not None and mi:
+            s = dict(s, net_income=ni - mi, ni_whole=False, ni_owned=True,
+                     common_gap=None if s.get("common_gap") is None else s["common_gap"] - mi)
+        out.append(s)
+    return out
+
+
+def _later_year(newest, s):
+    """Whether a fiscal year's results `s` are a full later year of the same company's than `newest` (both annual
+    entries, _annual): net income for a period of a year (350 to 380 days, which a 52- or 53-week year fits) ending on
+    the same date as `newest`'s, give or take a week, a year or more after it."""
+    try:
+        a = dt.date.fromisoformat(newest["end"])
+        b, start = dt.date.fromisoformat(s["end"]), dt.date.fromisoformat(s["start"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    # The later year's end moved into the newest one's year (February 29 to the 28th), and the gap taken across the turn
+    # of the year where shorter (December 28 against January 3).
+    gap = abs((b.replace(year=a.year, day=min(b.day, 28) if b.month == 2 else b.day) - a).days)
+    same_end = min(gap, 365 - gap) <= 7
+    # With operating cash flow too, which only a yearly report gives: a proxy statement's pay table tags net income
+    # alone, for a year whose 10-K the SEC's data may not hold yet (Seneca Foods' and Friedman Industries' to March 2026).
+    return s.get("net_income") is not None and s.get("ocf") is not None and 350 <= (b - start).days <= 380 \
+        and (b - a).days >= 350 and same_end
+
+
+def _listed_share(series, i_last):
+    """The listed shares' part of the whole business, where the newest year's net income `series[i_last]` was taken as
+    theirs alone (_owners_net_income) and the minority holders own a share of the whole rather than of separate
+    ventures (_owners): their share of its profit, Interactive Brokers' Class A shares' 23% of 2025's, which a market
+    value counting only them is set against (report._whole). 1 for any other company."""
+    if not series[i_last].get("ni_owned"):
+        return 1.0
+    has = [x for x in range(i_last + 1) if series[x].get("net_income") is not None]
+    share = _owners(series, has)[i_last]
+    return share if share < 0.995 else 1.0
+
+
+def derive(f, tax_rate=OWN_RATE, bank=False, check_debt=True, gross=True, lender=False, listed_shares=None,
+           finance_arm=False):
     """Turns raw line items into the ratios the screener and reports use. Missing data stays None.
 
     Earnings-based measures (the adj_ keys and profitable_years) leave out one-time items. `tax_rate` is the
@@ -3352,9 +3616,17 @@ def derive(f, tax_rate=OWN_RATE, bank=False, check_debt=True, gross=True, lender
     lender's income statement lines instead, and a business development company's is its total investment income
     (DURATION): "revenue_basis" says which ("bank", "net_interest" or "investment_income"; None for every other
     company).
+
+    `listed_shares` is the number of shares the listing's market value counts (build.company_metrics), which tells
+    whether a net income read for the whole business should be the listed shares' instead (_owners_net_income).
+    `finance_arm` marks a company most of whose debt is a finance arm's (FINANCE_ARMS), whose debt is left unknown.
     """
     years = sorted(f["annual"])
     series = [f["annual"][y] for y in years]
+    # Not for a REIT, whose operating partnership's other unitholders are taken out of its funds from operations instead
+    # (_owners, report._whole), nor a bank, whose earnings left to common shareholders already leave them out.
+    if not bank and tax_rate != 0:
+        series = _owners_net_income(series, listed_shares)
     if not bank:
         # Gains or losses on stakes in other companies under the broader tags, where none is tagged under SECURITIES
         # (_items' other_securities; a bank reads its own, bank_securities, below).
@@ -3379,7 +3651,7 @@ def derive(f, tax_rate=OWN_RATE, bank=False, check_debt=True, gross=True, lender
                        securities=s["bank_securities"] if s.get("securities") == 0 and s.get("bank_securities") else
                        s.get("securities"),
                        **({"pretax": s["net_income"] + s["income_tax"] - (s.get("discontinued") or 0)
-                           + (s.get("minority") or 0), "pretax_has_equity_method": True}
+                           + (s.get("minority") or 0), "pretax_has_equity_method": True, "pretax_derived": True}
                           if s.get("pretax") is None and s.get("net_income") is not None
                           and s.get("income_tax") is not None else {})) for s in series]
         # Its noninterest income, where it tags none, is then what that pretax income implies, as in _bank_year
@@ -3393,6 +3665,10 @@ def derive(f, tax_rate=OWN_RATE, bank=False, check_debt=True, gross=True, lender
         # gain (Regions' 2022: $2.8B of its $2.9B of pretax income).
         series = [dict(s, operating_income=s.get("pretax")) for s in series]
     reit = tax_rate == 0
+    if lender or bank or reit:
+        # A financial company or a REIT keeps its free cash flow without the capex tags of CAPEX_MORE (_annual's
+        # fcf_base): Morgan Stanley's operating cash flow, $17.9B out in 2025, is its trading book and collateral moving.
+        series = [dict(s, fcf=s.get("fcf_base")) for s in series]
     if reit:
         # Some REITs tag their rent as their only sales figure (Equity Residential, American Homes 4 Rent, One Liberty),
         # or tag as sales only what they earn besides rent, which the rules for sales to customers leave out (Camden
@@ -3425,6 +3701,13 @@ def derive(f, tax_rate=OWN_RATE, bank=False, check_debt=True, gross=True, lender
                    if series[i].get("revenue") is not None and series[i].get("net_income") is not None), None)
     if i_last is None:
         return None
+    # A later fiscal year with results but no revenue read leaves the newest one with revenue out of date, so the
+    # company gets no figures rather than old ones shown as current (filers.kind then says why): Cullinan Therapeutics'
+    # newest year with revenue is 2022, beside its losses of 2023 to 2025. Only a full year ending on the company's own
+    # fiscal year end counts, so neither a quarterly report's last twelve months nor a fiscal year moved to another month
+    # does (_later_year).
+    if any(_later_year(series[i_last], s) for s in series[i_last + 1:]):
+        return None
     # Every company is measured over the four fiscal years ending with its newest one.
     ys, ss = years[max(0, i_last - 3): i_last + 1], series[max(0, i_last - 3): i_last + 1]
     last, prev = ss[-1], ss[-2] if len(ss) > 1 else {}
@@ -3447,9 +3730,24 @@ def derive(f, tax_rate=OWN_RATE, bank=False, check_debt=True, gross=True, lender
         if debt != total_debt:
             lt_debt, total_debt = max(0, debt - (total_debt - lt_debt)), debt
     elif not bank and check_debt:
-        debt_doubt = _debt_check(L, last.get("interest_paid"))
+        # A latest balance sheet that tags no debt at all, where an earlier recent one did, is unread rather than debt
+        # repaid when its total liabilities fell by less than half that debt since: Lennar's May 2026 quarter tags none
+        # of the $6.0B its 10-K showed, its homebuilding notes being tagged only by segment. Debt paid off takes the
+        # liabilities down with it (Shopify's $0.9B of convertible notes, repaid in November 2025), and so does a
+        # balance sheet in between tagging none left (prior_debt), or one tagging the carrying amount of all its debt
+        # instruments as 0 (OneStop Systems' since December 2025). Only debt of at least UNTAGGED_DEBT_MIN of the
+        # liabilities, since a credit line drawn for a quarter comes and goes.
+        peak, before, now = L.get("peak_debt") or 0, L.get("peak_liabilities"), L.get("liabilities")
+        debt_doubt = "finance_arm" if finance_arm else _debt_check(L, last.get("interest_paid"))
+        if (debt_doubt is None and not L.get("debt_reported") and before and now and (L.get("prior_debt") or 0) > 0
+                and (L.get("reit_debt") or {}).get("DebtInstrumentCarryingAmount") != 0
+                and peak >= UNTAGGED_DEBT_MIN * now and now > before - 0.5 * peak):
+            debt_doubt = "untagged"
         debt_known = debt_doubt is None
     cash = (L.get("cash") or 0) + (L.get("st_investments") or 0) + (L.get("lt_securities") or 0)
+    # A latest balance sheet that tags no cash, where recent ones held some, is cash unread rather than none:
+    # BorgWarner's June 2026 10-Q shows $2.45B of cash under a name of its own. Its cash and net cash are then unknown.
+    cash_known = bank or L.get("cash") is not None or not L.get("cash_before")
     equity = L.get("equity")
     rev = last["revenue"]
     ni = last["net_income"]
@@ -3533,12 +3831,14 @@ def derive(f, tax_rate=OWN_RATE, bank=False, check_debt=True, gross=True, lender
         # small (_debt_check, which says why in debt_doubt), whose net cash and debt measures then mean nothing.
         "debt_known": debt_known,
         "debt_doubt": debt_doubt,
-        "cash": cash,
-        "net_cash": cash - total_debt,
+        # None where the latest balance sheet tags no cash though recent ones held some (cash_known False).
+        "cash_known": cash_known,
+        "cash": cash if cash_known else None,
+        "net_cash": cash - total_debt if cash_known else None,
         # Cash and short-term investments alone, without the long-term securities `cash` counts: the money on hand
         # within a year, which the screener's "Under 1x cash" list weighs against the company's debt and market value.
         # None where the balance sheet tags neither.
-        "cash_and_st_investments": None if L.get("cash") is None and L.get("st_investments") is None
+        "cash_and_st_investments": None if not cash_known or L.get("cash") is None and L.get("st_investments") is None
         else (L.get("cash") or 0) + (L.get("st_investments") or 0),
         # Whether `equity` includes minority holders' stakes in subsidiaries: a company that tags only that total (no
         # StockholdersEquity of its own) is read from it, as UWM Holdings, whose founder's units in its operating company
@@ -3621,6 +3921,10 @@ def derive(f, tax_rate=OWN_RATE, bank=False, check_debt=True, gross=True, lender
         # (ProfitLoss), rather than the company's own, whose gap to the common shareholders' is then preferred dividends.
         "common_gap_reported": _reported_gap(ni, last.get("ni_common")),
         "ni_whole": bool(last.get("ni_whole")),
+        # Whether the newest year's net income had the minority holders' share taken off (_owners_net_income), and the
+        # listed shares' part of the business where that share is of the whole business (report._whole).
+        "ni_owned": bool(last.get("ni_owned")),
+        "listed_share": _listed_share(series, i_last),
         "loc": f.get("loc"),
         **(_reit_fields(ffo, window, series, rev, equity, L) if reit else {"reit": False}),
         **(_bank_fields(last, prev, adj_ni, one_time, L) if bank else {"bank": False}),

@@ -660,6 +660,11 @@ def apply(company, got):
         annual[y] = dict(s, revenue=value, revenue_tag=tag, revenue_tags={tag: value},
                          revenue_accns={**(s.get("revenue_accns") or {}), tag: accn}, start=start, end=end)
         used.add(y)
+    # A year whose revenue was tagged under another line, as some are where a company moved its revenue to a label of
+    # its own (filers.kind sends those whose newest year is unread here), has it left out rather than set beside these.
+    for y, s in annual.items():
+        if y not in used and s.get("revenue") is not None:
+            annual[y] = dict(s, revenue=None, revenue_tag=None, revenue_tags={})
     since = min(D(annual[y]["start"]) for y in used) - dt.timedelta(days=seam)
     rows = [list(r) for r in got["rows"] if D(r[0]) >= since and line(r[3]) == key]
     quarters = {k: dict(v) for k, v in (company.get("quarters") or {}).items()}

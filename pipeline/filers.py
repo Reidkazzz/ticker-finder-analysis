@@ -187,7 +187,12 @@ def kind(profile, company=None, statement=None):
         return "no_annual" if quarterly else "new"
     if not years and profile.get("annual_xbrl") is False and quarterly:
         return "annual_untagged"
-    if years and all(s.get("revenue") is None for _, s in years):
+    # The newest year with results decides, as a year with revenue before it is out of date (fundamentals.derive gives
+    # such a company no figures).
+    if years and years[-1][1].get("revenue") is None:
+        # Quarters count only after the newest year with revenue, whose own quarters had sales a company may have
+        # stopped since.
+        since = max((s.get("end") or "" for _, s in years if s.get("revenue") is not None), default=None)
         # A profit needs revenue, and so do quarters that show it (Proficient Auto Logistics' $109M in its latest quarter,
         # beside yearly revenue tagged only under its own labels), unless the income statement shows none: a blank-check
         # company's profit from the interest on its trust (FRNM's), a business development company's investment income.
@@ -198,15 +203,23 @@ def kind(profile, company=None, statement=None):
             # Quarters with sales within its years mean a revenue line the statement's reading missed (a line named
             # in a way taken for something else, such as commission revenue), whose revenue is unread.
             end = max(statement.get("years") or [years[-1][1].get("end") or ""])
-            if _quarter_revenue(company, after=""):
-                return "revenue_unread" if _quarter_revenue(company, after="", until=end) else "revenue_since"
+            if _quarter_revenue(company, after=since or ""):
+                return "revenue_unread" if _quarter_revenue(company, after=since or "", until=end) else "revenue_since"
             return "no_revenue_line" if years[-1][1]["net_income"] > 0 else "no_revenue"
         if status == "currency" and statement.get("currency"):
             return "currency"
-        return "revenue_unread" if years[-1][1]["net_income"] > 0 or _quarter_revenue(company) else "no_revenue"
+        sold = _quarter_revenue(company, after=since) if since else _quarter_revenue(company)
+        return "revenue_unread" if years[-1][1]["net_income"] > 0 or sold else "no_revenue"
     if not years and profile.get("annual_xbrl"):
         return "annual_missing"
     return "unread"
+
+
+def statement_worth_reading(k, company):
+    """Whether a listing of kind `k` (kind) has its revenue looked for on its own income statements (build.py,
+    statements.py): one whose revenue is under labels not read, or one whose newest year gave no revenue read though
+    older years did, which may have moved its revenue to a label of its own (Perspective Therapeutics' 2025)."""
+    return k == "revenue_unread" or k == "no_revenue" and any((s.get("revenue") or 0) > 0 for _, s in _results(company))
 
 
 def _quarter_revenue(company, after=None, until="9999"):
@@ -322,10 +335,15 @@ def note(name, k, profile, company=None, quarters=False, statement=None):
         y, s = _results(company)[-1]
         head = (f"{name} files yearly reports under US accounting rules and reported "
                 f"{'a profit' if s['net_income'] > 0 else 'a loss'} for {y}, but ")
-        tail = ", so it has no full year of sales here and can't be scored or valued."
+        # A company whose older years' revenue was read has those, but they would be out of date (fundamentals.derive).
+        before = [x for x, t in _results(company)[:-1] if (t.get("revenue") or 0) > 0]
+        tail = (f", so it has no sales figure for {y} here, and figures from {before[-1]} would be out of date, so it "
+                "isn't scored or valued." if before else ", so it has no full year of sales here and can't be scored or "
+                                                          "valued.")
         if status == "ambiguous":
-            return (head + f"the income statement in {report} gives its revenue only in parts (by business or product) or "
-                    "beside other income, with no line for the whole that this site can take" + tail)
+            return (head + f"the income statement in {report} gives no revenue figure for the whole year that this site "
+                    "can take (it may give revenue only in parts, by business or product, beside other income, or tagged "
+                    "for other dates)" + tail)
         if status == "unmatched":
             return (head + f"the revenue on the income statement in {report} could not be matched to the yearly "
                     "results in the SEC's data" + tail)
@@ -334,8 +352,8 @@ def note(name, k, profile, company=None, quarters=False, statement=None):
                     f"{'a profit' if s['net_income'] > 0 else 'a loss'} for {y}. Its revenue is read from the income "
                     f"statement in {report}, but too few of its other figures are in the SEC's data to score or value "
                     "it.")
-        return (head + "its revenue in those reports is under labels this site doesn't read (often ones of the company's "
-                "own)" + tail)
+        return (head + ("its revenue for that year" if before else "its revenue in those reports")
+                + " is under labels this site doesn't read (often ones of the company's own)" + tail)
     if k == "revenue_since":
         # The fiscal year of the report read, which the SEC's data may not hold results for (Omeros' newest there is
         # 2022, beside its 10-K for 2025).
@@ -353,11 +371,23 @@ def note(name, k, profile, company=None, quarters=False, statement=None):
                 "so the profit likely came from other income, such as interest, investment income or gains. Without a sales figure it can't be "
                 "scored or valued.")
     if k == "no_revenue":
+        before = [y for y, s in _results(company)[:-1] if (s.get("revenue") or 0) > 0]
+        if status == "none" and before:
+            return (f"{name} files yearly reports under US accounting rules, but the income statement in {report} shows "
+                    f"no line this site reads as revenue or sales, though its reports gave revenue for {before[-1]}. It "
+                    "may have stopped selling. Figures from that older year would be out of date, so it isn't scored or "
+                    "valued.")
         if status == "none":
             return (f"{name} files yearly reports under US accounting rules, but the income statement in {report} shows "
                     "no line this site reads as revenue or sales. It may have no sales yet. Without a sales figure it can't be scored or "
                     "valued.")
-        return (f"{name} files yearly reports under US accounting rules, but none of them gives a revenue figure under "
+        if before:
+            y = _results(company)[-1][0]
+            return (f"{name} files yearly reports under US accounting rules, but its results for {y} come with no "
+                    f"revenue figure under the labels this site reads, though its reports gave one for {before[-1]}. It "
+                    "may have stopped selling, or label its revenue in a way of its own. Figures from that older year "
+                    "would be out of date, so it isn't scored or valued.")
+        return (f"{name} files yearly reports under US accounting rules, but none of them gives any revenue under "
                 "the labels this site reads. It may have no sales yet, or label its revenue in a way of its own. Without "
                 "a sales figure it can't be scored or valued.")
     if k == "unread":
