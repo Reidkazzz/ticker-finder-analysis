@@ -1174,6 +1174,11 @@ SUCCESSORS = {2115436: 34088}
 # Motors', Caterpillar's, Ford's, Deere's and PACCAR's, whose finance arms' debt it finds too large for the debt read.
 # {CIK: name}.
 FINANCE_ARMS = {1567094: "CNH Industrial"}
+# Insurers outside finance that tag neither premiums nor benefits (INSURANCE), so the revenue test can't tell them
+# (derive's claims_cash): Trupanion, a pet insurer, tags its premiums only as "Revenues" and its claims inside its cost of
+# revenue, and its 10-K for 2025 says $320.7M of its $370.7M of cash and short-term investments was held by its insurance
+# entities. {CIK: name}.
+CLAIMS_CASH = {1371285: "Trupanion"}
 
 
 def _successor(new, old):
@@ -3598,7 +3603,7 @@ def _listed_share(series, i_last):
 
 
 def derive(f, tax_rate=OWN_RATE, bank=False, check_debt=True, gross=True, lender=False, listed_shares=None,
-           finance_arm=False):
+           finance_arm=False, insurer=False):
     """Turns raw line items into the ratios the screener and reports use. Missing data stays None.
 
     Earnings-based measures (the adj_ keys and profitable_years) leave out one-time items. `tax_rate` is the
@@ -3619,7 +3624,8 @@ def derive(f, tax_rate=OWN_RATE, bank=False, check_debt=True, gross=True, lender
 
     `listed_shares` is the number of shares the listing's market value counts (build.company_metrics), which tells
     whether a net income read for the whole business should be the listed shares' instead (_owners_net_income).
-    `finance_arm` marks a company most of whose debt is a finance arm's (FINANCE_ARMS), whose debt is left unknown.
+    `finance_arm` marks a company most of whose debt is a finance arm's (FINANCE_ARMS), whose debt is left unknown, and
+    `insurer` one known to be an insurer though it tags no premiums (CLAIMS_CASH).
     """
     years = sorted(f["annual"])
     series = [f["annual"][y] for y in years]
@@ -3754,7 +3760,7 @@ def derive(f, tax_rate=OWN_RATE, bank=False, check_debt=True, gross=True, lender
     # and short-term investments, while its 10-K for 2025 puts $1.33B of cash at the parent, beside $12.4B of debt;
     # Molina's parent held $205M. The parent's own cash is given only in a schedule of the 10-K that the SEC's data
     # doesn't carry, so it can't be counted instead.
-    claims_cash = gross and last.get("gross_why") == "insurer"
+    claims_cash = gross and (last.get("gross_why") == "insurer" or insurer)
     equity = L.get("equity")
     rev = last["revenue"]
     ni = last["net_income"]

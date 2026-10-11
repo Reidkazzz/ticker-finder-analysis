@@ -748,10 +748,12 @@ CASH_UNKNOWN_VALUE_NOTE = ("Its cash could not be read reliably from its latest 
 
 # A company that is mostly an insurer (fundamentals.derive's claims_cash), whose cash is mostly held by its regulated
 # insurance businesses to pay claims: its net cash is its debt alone, and its net cash bar isn't scored.
-CLAIMS_CASH_NOTE = ("Not scored. Most of its cash and investments are held by its regulated businesses, chiefly "
+# "Regulated businesses it runs", not "its": Porch's are mostly the insurance exchange it manages, which belongs to the
+# exchange's policyholders.
+CLAIMS_CASH_NOTE = ("Not scored. Most of its cash and investments are held by regulated businesses it runs, chiefly "
                     "insurance, which must keep them to pay claims, so they aren't counted as the company's own.")
-CLAIMS_CASH_SENTENCE = (" Its cash and investments aren't counted, since most of them are held by its regulated "
-                        "businesses, chiefly insurance, to pay claims.")
+CLAIMS_CASH_SENTENCE = (" Its cash and investments aren't counted, since most of them are held by regulated businesses "
+                        "it runs, chiefly insurance, to pay claims.")
 # For notes on peers' value to sales where any of them is such a company (peer_table's claims_cash).
 CLAIMS_PEER_CLAUSE = ", though for an insurer only its debt, since its cash is held mostly to pay claims"
 
