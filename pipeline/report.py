@@ -746,6 +746,16 @@ CASH_UNKNOWN_VALUE_NOTE = ("Its cash could not be read reliably from its latest 
                            "depend on its cash and debt are left out.")
 
 
+# A company that is mostly an insurer (fundamentals.derive's claims_cash), whose cash is mostly held by its regulated
+# insurance businesses to pay claims: its net cash is its debt alone, and its net cash bar isn't scored.
+CLAIMS_CASH_NOTE = ("Not scored. Most of its cash and investments are held by its regulated businesses, chiefly "
+                    "insurance, which must keep them to pay claims, so they aren't counted as the company's own.")
+CLAIMS_CASH_SENTENCE = (" Its cash and investments aren't counted, since most of them are held by its regulated "
+                        "businesses, chiefly insurance, to pay claims.")
+# For notes on peers' value to sales where any of them is such a company (peer_table's claims_cash).
+CLAIMS_PEER_CLAUSE = ", though for an insurer only its debt, since its cash is held mostly to pay claims"
+
+
 def _debt_value_note(m):
     """DEBT_DOUBT_VALUE_NOTE, or for a company most of whose debt is its finance arm's (fundamentals.FINANCE_ARMS), which
     was read but is left out on purpose, why."""
@@ -953,6 +963,9 @@ def peer_table(universe, metrics, sic=None):
         if m.get("cash_known") is False:
             # Its latest balance sheet tags no cash (fundamentals.derive's cash_known), so it has no value to sales.
             table[sym]["cash_unknown"] = True
+        if m.get("claims_cash"):
+            # An insurer whose value to sales counts its debt alone (fundamentals.derive's claims_cash).
+            table[sym]["claims_cash"] = True
     # Each figure becomes a percentile rank across all companies, so margins, growth and size weigh the same
     # and a few extreme values can't dominate the distance. Banks, which are matched among themselves on their own
     # measures (ranked among banks), are left out of the ranks other companies are matched on, so how a bank's figures
@@ -1256,7 +1269,8 @@ def peer_multiples(sym, table, peers, dropped=(), counted=None):
                      + " included, and not its debt and cash."
                      if me.get("owned", 1.0) < 0.995 else
                      "Price to sales, which the health check ranks, looks at the share price alone.")
-                    + " Value to sales, which the fair value uses, also counts each company's debt and cash.")
+                    + " Value to sales, which the fair value uses, also counts each company's debt and cash"
+                    + (CLAIMS_PEER_CLAUSE if any(r.get("claims_cash") for r in rows + [me]) else "") + ".")
     if reit:
         note.append("Price to FFO compares the price with funds from operations (FFO), the profit measure REITs "
                     "report: net income with depreciation added back and gains on selling property left "
@@ -1875,6 +1889,8 @@ def health(u, m, price, high52, peers, table, news_overall, insider):
         b.append(not_scored("net_cash", "Net cash vs. price", _debt_bar_note(m)))
     elif m.get("cash_known") is False:
         b.append(not_scored("net_cash", "Net cash vs. price", CASH_UNKNOWN_NOTE))
+    elif m.get("claims_cash"):
+        b.append(not_scored("net_cash", "Net cash vs. price", CLAIMS_CASH_NOTE))
     elif shares_off:
         b.append(not_scored("net_cash", "Net cash vs. price", SHARES_BAR_NOTE))
     else:
@@ -2164,11 +2180,13 @@ def _cash_flow_model(u, m, shares, price):
     business = pv + cf * (1 + CF_TERMINAL) / (r - CF_TERMINAL) / (1 + r) ** CF_YEARS
     nc = m.get("net_cash") or 0
     swing = "so the value left for shareholders would swing widely with small changes in the forecast"
+    # An insurer's net cash is its debt alone (fundamentals.derive's claims_cash).
+    owed = "its debt" if m.get("claims_cash") else "its debt less its cash"
     if -nc > mcap:
-        return None, f"its debt less its cash, {money(nc)}, is more than the company's stock market value, {swing}"
+        return None, f"{owed}, {money(nc)}, is more than the company's stock market value, {swing}"
     if -nc > CF_DEBT_SHARE * business:
         return None, (f"its free cash flow of {money(base)} a year values the whole business at only "
-                      f"{money(business)}, less than twice its debt less its cash of {money(nc)}, {swing}")
+                      f"{money(business)}, less than twice {owed} of {money(nc)}, {swing}")
     claims = other_claims(m)
     if claims and claims - nc > CF_DEBT_SHARE * business:
         return None, (f"its free cash flow of {money(base)} a year values the whole business at only "
@@ -2253,7 +2271,9 @@ def _cash_flow_model(u, m, shares, price):
     # The cash flow is the whole business's, of which the listed shares own their part (_whole), as in the value to
     # sales; their minority holders' stake then isn't among the claims (other_claims).
     own = 1.0 if reit_kind(m) == "property" else _whole(m)
-    net = ((f"Its net cash of {money(nc)} is added." if nc > 0 else
+    net = ((f"Its debt of {money(nc)} is subtracted.{CLAIMS_CASH_SENTENCE}" if m.get("claims_cash") and nc < 0 else
+            CLAIMS_CASH_SENTENCE.strip() if m.get("claims_cash") else
+            f"Its net cash of {money(nc)} is added." if nc > 0 else
             f"Its net debt of {money(nc)} is subtracted." if nc < 0 else "") + _claims_sentence(m)
            + _minority_sentence(own)).strip()
     return {"name": "Cash-flow model", "value": (business + nc - claims) * own / shares,
@@ -2536,8 +2556,12 @@ def fair_value(u, m, price, peers, table):
         value = (med_ev * rev + nc - claims) * own / shares if med_ev else 0
         if value > 0:
             methods.append({"name": "Peer value to sales", "value": value,
-                            "note": f"Similar {'REITs' if reit else 'companies'} are valued at {med_ev:.1f}x sales, counting their debt and cash."
-                                    + (f" This company's net cash of {money(nc)} is added." if nc > 0 else
+                            "note": f"Similar {'REITs' if reit else 'companies'} are valued at {med_ev:.1f}x sales, counting their debt and cash"
+                                    + (CLAIMS_PEER_CLAUSE if any(r.get("claims_cash") for r in peer_rows) else "") + "."
+                                    + (f" This company's debt of {money(nc)} is subtracted.{CLAIMS_CASH_SENTENCE}"
+                                       if m.get("claims_cash") and nc < 0 else CLAIMS_CASH_SENTENCE
+                                       if m.get("claims_cash") else
+                                       f" This company's net cash of {money(nc)} is added." if nc > 0 else
                                        f" This company's net debt of {money(nc)} is subtracted." if nc < 0 else "")
                                     + _claims_sentence(m)
                                     + (f" Its shares own {own * 100:.0f}% of the business, the rest belonging to holders "
