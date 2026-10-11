@@ -527,7 +527,8 @@ def company_metrics(u, c, sic, today):
     d = fundamentals.derive(c, report.normal_tax_rate(u, c, sic.get(u["cik"])), bank=report.is_bank(u, sic.get(u["cik"])),
                             check_debt=not report.is_financial(u), gross=not report.is_financial(u),
                             lender=report.is_financial(u), listed_shares=listed,
-                            finance_arm=u["cik"] in fundamentals.FINANCE_ARMS)
+                            finance_arm=u["cik"] in fundamentals.FINANCE_ARMS,
+                            insurer=u["cik"] in fundamentals.CLAIMS_CASH)
     if d and str(sic.get(u["cik"]) or "") == filers.BLANK_CHECK and d.get("revenue_basis") == "investment_income":
         return None  # a SPAC's trust interest is no business's revenue (filers.kind says what it is)
     stale = (today - dt.timedelta(days=BASIS_STALE_DAYS)).isoformat()

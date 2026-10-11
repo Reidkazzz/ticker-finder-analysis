@@ -728,7 +728,8 @@ def run(universe, metrics, prices, analyst_counter, insiders=None):
             "one_time_note": one_time_note(m, ffo=False),
             "lt_de": m["lt_debt_to_equity"],
             "total_debt": m["total_debt"],
-            "net_cash": m["net_cash"],
+            # None for an insurer, whose cash is held mostly to pay claims (fundamentals.derive's claims_cash).
+            "net_cash": None if m.get("claims_cash") else m["net_cash"],
             "fcf": m["fcf"],
             "fcf_yield": (m["fcf"] / u["mcap"]) if u["mcap"] else None,
             "revenue": m["revenue"],

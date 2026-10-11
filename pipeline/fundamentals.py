@@ -1174,6 +1174,11 @@ SUCCESSORS = {2115436: 34088}
 # Motors', Caterpillar's, Ford's, Deere's and PACCAR's, whose finance arms' debt it finds too large for the debt read.
 # {CIK: name}.
 FINANCE_ARMS = {1567094: "CNH Industrial"}
+# Insurers outside finance that tag neither premiums nor benefits (INSURANCE), so the revenue test can't tell them
+# (derive's claims_cash): Trupanion, a pet insurer, tags its premiums only as "Revenues" and its claims inside its cost of
+# revenue, and its 10-K for 2025 says $320.7M of its $370.7M of cash and short-term investments was held by its insurance
+# entities. {CIK: name}.
+CLAIMS_CASH = {1371285: "Trupanion"}
 
 
 def _successor(new, old):
@@ -3598,7 +3603,7 @@ def _listed_share(series, i_last):
 
 
 def derive(f, tax_rate=OWN_RATE, bank=False, check_debt=True, gross=True, lender=False, listed_shares=None,
-           finance_arm=False):
+           finance_arm=False, insurer=False):
     """Turns raw line items into the ratios the screener and reports use. Missing data stays None.
 
     Earnings-based measures (the adj_ keys and profitable_years) leave out one-time items. `tax_rate` is the
@@ -3619,7 +3624,8 @@ def derive(f, tax_rate=OWN_RATE, bank=False, check_debt=True, gross=True, lender
 
     `listed_shares` is the number of shares the listing's market value counts (build.company_metrics), which tells
     whether a net income read for the whole business should be the listed shares' instead (_owners_net_income).
-    `finance_arm` marks a company most of whose debt is a finance arm's (FINANCE_ARMS), whose debt is left unknown.
+    `finance_arm` marks a company most of whose debt is a finance arm's (FINANCE_ARMS), whose debt is left unknown, and
+    `insurer` one known to be an insurer though it tags no premiums (CLAIMS_CASH).
     """
     years = sorted(f["annual"])
     series = [f["annual"][y] for y in years]
@@ -3748,6 +3754,13 @@ def derive(f, tax_rate=OWN_RATE, bank=False, check_debt=True, gross=True, lender
     # A latest balance sheet that tags no cash, where recent ones held some, is cash unread rather than none:
     # BorgWarner's June 2026 10-Q shows $2.45B of cash under a name of its own. Its cash and net cash are then unknown.
     cash_known = bank or L.get("cash") is not None or not L.get("cash_before")
+    # A company that is mostly an insurer (its premiums or benefits at least INSURER_SHARE of revenue, _gross_profit's
+    # "insurer") holds most of its cash and short-term investments in regulated subsidiaries, to pay claims, so none of
+    # it counts toward its net cash, which is then its debt alone: Humana's June 2026 balance sheet shows $23.9B of cash
+    # and short-term investments, while its 10-K for 2025 puts $1.33B of cash at the parent, beside $12.4B of debt;
+    # Molina's parent held $205M. The parent's own cash is given only in a schedule of the 10-K that the SEC's data
+    # doesn't carry, so it can't be counted instead.
+    claims_cash = gross and (last.get("gross_why") == "insurer" or insurer)
     equity = L.get("equity")
     rev = last["revenue"]
     ni = last["net_income"]
@@ -3834,11 +3847,14 @@ def derive(f, tax_rate=OWN_RATE, bank=False, check_debt=True, gross=True, lender
         # None where the latest balance sheet tags no cash though recent ones held some (cash_known False).
         "cash_known": cash_known,
         "cash": cash if cash_known else None,
-        "net_cash": cash - total_debt if cash_known else None,
+        # Whether its cash is left out of its net cash as an insurer's (claims_cash above).
+        "claims_cash": claims_cash,
+        "net_cash": (-total_debt if claims_cash else cash - total_debt) if cash_known else None,
         # Cash and short-term investments alone, without the long-term securities `cash` counts: the money on hand
         # within a year, which the screener's "Under 1x cash" list weighs against the company's debt and market value.
         # None where the balance sheet tags neither.
-        "cash_and_st_investments": None if not cash_known or L.get("cash") is None and L.get("st_investments") is None
+        "cash_and_st_investments": None if not cash_known or claims_cash
+        or L.get("cash") is None and L.get("st_investments") is None
         else (L.get("cash") or 0) + (L.get("st_investments") or 0),
         # Whether `equity` includes minority holders' stakes in subsidiaries: a company that tags only that total (no
         # StockholdersEquity of its own) is read from it, as UWM Holdings, whose founder's units in its operating company
