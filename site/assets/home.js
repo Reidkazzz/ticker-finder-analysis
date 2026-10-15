@@ -1,4 +1,4 @@
-import { attachSearch, chrome, date, esc, load, meter, money, pct, price, searchMarkup, signClass } from "./common.js";
+import { attachSearch, chrome, date, displayName, esc, load, meter, money, pct, price, searchMarkup, signClass } from "./common.js";
 
 chrome();
 
@@ -56,7 +56,7 @@ async function screener() {
     host.innerHTML = s.results.slice(0, 5).map((r, i) => `
       <a class="tt-row" href="report.html?t=${encodeURIComponent(r.symbol)}">
         <span class="rank">${i + 1}</span><span class="sym">${esc(r.symbol)}</span>
-        <span class="nm">${esc(r.name)}</span>${meter(r.score, r.score >= 70 ? "strong" : r.score >= 40 ? "fair" : "weak")}
+        <span class="nm">${esc(displayName(r.name))}</span>${meter(r.score, r.score >= 70 ? "strong" : r.score >= 40 ? "fair" : "weak")}
       </a>`).join("");
     return s;
   } catch {
@@ -91,7 +91,7 @@ async function example(screen) {
     const v = r.valuation;
     const tag = v?.verdict && { undervalued: "tag-up", overvalued: "tag-down", fair: "tag-mid" }[v.verdict];
     host.innerHTML = `
-      <div class="ex-head"><div><span class="sym">${esc(r.symbol)}</span><span class="nm">${esc(r.name)}</span></div>
+      <div class="ex-head"><div><span class="sym">${esc(r.symbol)}</span><span class="nm">${esc(displayName(r.name))}</span></div>
         ${tag ? `<span class="tag ${tag}">${v.verdict[0].toUpperCase() + v.verdict.slice(1)}</span>` : ""}</div>
       ${tag ? `<p class="ex-fv">Estimated fair value <b>${price(v.low)} to ${price(v.high)}</b> vs. price <b>${price(r.price)}</b></p>` : ""}
       <div class="ex-bars">${pick.map((b) => `<div class="ex-bar"><span>${esc(b.label)}</span>${meter(b.score, b.band)}</div>`).join("")}</div>`;

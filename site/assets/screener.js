@@ -1,4 +1,4 @@
-import { chrome, date, esc, load, meter, money, pct, price, times } from "./common.js";
+import { chrome, date, displayName, esc, load, meter, money, pct, price, times } from "./common.js";
 
 chrome();
 
@@ -35,30 +35,54 @@ const ofDrawdown = () => pct(data.rules?.out_of_favor_drawdown ?? 0.25, 0);
 const window_ = () => (insiderDays ? `in the last ${insiderDays} days` : "recently");
 
 const band = (s) => (s >= 70 ? "strong" : s >= 40 ? "fair" : "weak");
+// Long-term debt to equity under 0.01 reads "<0.01x", not "0.00x", which would look like no debt at all.
 const debtTag = (r) =>
   r.debt_status === "none" ? `<span class="tag tag-up">No debt</span>`
   : r.debt_status === "net_cash" ? `<span class="tag tag-up">Net cash</span>`
-  : `<span class="tag">Low, ${times(r.lt_de)}</span>`;
+  : `<span class="tag">Low, ${r.lt_de != null && r.lt_de < 0.005 ? "&lt;0.01x" : times(r.lt_de)}</span>`;
 
-// Each flag as [key, tag class, label, tooltip], in the order the tags show.
+// Each flag as [key, tone, icon, label, tooltip], in the order the flags show. The tone is the site's color meaning:
+// amber for a price or industry that has fallen, green for a sign in the company's favor, red for a warning.
 function flagDefs() {
   const dd = ofDrawdown();
   return [
-    ["out_of_favor", "tag-mid", "Out of favor", `${dd} or more below its 52-week high`],
-    ["industry_out_of_favor", "tag-mid", "Industry out of favor", `The median company in its industry trades ${dd} or more below its 52-week high`],
-    ["undiscovered", "", "Undiscovered", "Two or fewer analysts cover it"],
-    ["under_book", "tag-up", "Under book value", "Its market value is less than its book value (shareholders' equity less preferred stock)"],
-    ["insiders_buying", "tag-up", "Insiders buying", `Tier 1 or 2 open-market insider buying ${window_()}`],
-    ["below_insider_price", "tag-up", "Below insiders' price", "The price is under the average price insiders paid"],
-    ["above_upper_band", "tag-down", "Above upper band, wait for a pullback", "The price is above the average of its last 20 weekly closes plus two standard deviations"],
+    ["out_of_favor", "mid", "ph-trend-down", "Out of favor", `${dd} or more below its 52-week high`],
+    ["industry_out_of_favor", "mid", "ph-factory", "Industry out of favor", `The median company in its industry trades ${dd} or more below its 52-week high`],
+    ["undiscovered", "", "ph-binoculars", "Undiscovered", "Two or fewer analysts cover it"],
+    ["under_book", "up", "ph-scales", "Under book value", "Its market value is less than its book value (shareholders' equity less preferred stock)"],
+    ["insiders_buying", "up", "ph-user-plus", "Insiders buying", `Tier 1 or 2 open-market insider buying ${window_()}`],
+    ["below_insider_price", "up", "ph-tag", "Below insiders' price", "The price is under the average price insiders paid"],
+    ["above_upper_band", "down", "ph-warning", "Above upper band, wait for a pullback", "The price is above the average of its last 20 weekly closes plus two standard deviations"],
   ];
 }
 
+// A row's flags as a line of small icons, each named by its tooltip and, for screen readers, its label. The legend
+// above the table (flagLegend) says what each icon means, and an opened row names its own flags in words (flagNames),
+// so every row keeps one height however many flags it has. Past FLAGS_SHOWN, the rest are counted in a "+N" tile.
+const FLAGS_SHOWN = 4;
+const flagIcon = ([, tone, icon]) => `<span class="flag${tone ? ` flag-${tone}` : ""}" aria-hidden="true"><i class="ph-bold ${icon}"></i></span>`;
 function flags(r) {
-  const f = flagDefs().filter(([k]) => r.flags.includes(k))
-    .map(([, cls, label, tip]) => `<span class="tag ${cls}" title="${esc(tip)}">${esc(label)}</span>`);
-  return f.length ? `<div class="co-flags">${f.join("")}</div>` : "";
+  const f = flagDefs().filter(([k]) => r.flags.includes(k));
+  if (!f.length) return "";
+  const cut = f.length > FLAGS_SHOWN ? FLAGS_SHOWN - 1 : f.length;
+  const rest = f.slice(cut);
+  return `<ul class="flag-set">${f.slice(0, cut).map((d) => `<li title="${esc(`${d[3]}: ${d[4]}`)}">${flagIcon(d)}<span class="sr-only">${esc(d[3])}</span></li>`).join("")}${
+    rest.length ? `<li title="${esc(rest.map((d) => d[3]).join(", "))}"><span class="flag flag-more" aria-hidden="true">+${rest.length}</span><span class="sr-only">${esc(rest.map((d) => d[3]).join(", "))}</span></li>` : ""}</ul>`;
 }
+
+// The flags any company on the list carries, each icon beside its name: the same whichever sector or filter is shown,
+// so the table doesn't move when they change.
+function flagLegend() {
+  const used = flagDefs().filter(([k]) => data.results.some((r) => r.flags.includes(k)));
+  return used.length ? `<ul class="flag-legend" aria-label="What the flag icons mean">${used.map((d) => `<li title="${esc(d[4])}">${flagIcon(d)}${esc(d[3])}</li>`).join("")}</ul>` : "";
+}
+
+// An opened row's flags in words, each with what it means, for readers who can't hover over the icons.
+function flagNames(r) {
+  const f = flagDefs().filter(([k]) => r.flags.includes(k));
+  return f.length ? `<h4>Its flags</h4><ul class="flag-names">${f.map((d) => `<li>${flagIcon(d)}<span><b>${esc(d[3])}</b>: ${esc(d[4])}.</span></li>`).join("")}</ul>` : "";
+}
+
 
 function facts(r) {
   const out = [];
@@ -77,7 +101,7 @@ function facts(r) {
   const asReported = r.profitable_years_reported;
   out.push(["ph-calendar-check", `Profitable in ${r.profitable_years} of the last ${r.years_checked} years${
     asReported != null && asReported !== r.profitable_years ? `, not counting one-time items (${asReported} as reported)` : ""}.`]);
-  if (r.drawdown != null) out.push(["ph-arrow-down-right", `Trades ${pct(r.drawdown, 0)} below its 52-week high of ${price(r.high52)}.`]);
+  if (r.drawdown != null) out.push(["ph-trend-down", `Trades ${pct(r.drawdown, 0)} below its 52-week high of ${price(r.high52)}.`]);
   out.push(["ph-users", r.analysts == null ? "Analyst coverage could not be checked today." : r.analysts === 0 ? "No Wall Street analysts publish estimates on it." : `${r.analysts} analyst${r.analysts === 1 ? " publishes" : "s publish"} estimates on it.`]);
   return out;
 }
@@ -89,7 +113,7 @@ function flagFacts(r) {
   if (ins) {
     const paid = ins.avg_price;
     const vs = paid ? r.price / paid - 1 : null;
-    out.push(["ph-user-check", `Insiders bought ${money(ins.total_value)} of its stock on the open market ${window_()} (Tier ${ins.tier})${
+    out.push(["ph-user-plus", `Insiders bought ${money(ins.total_value)} of its stock on the open market ${window_()} (Tier ${ins.tier})${
       paid ? `, paying ${price(paid)} a share on average. Today's price of ${price(r.price)} is ${pct(Math.abs(vs), Math.abs(vs) < 0.1 ? 1 : 0)} ${vs < 0 ? "below" : "above"} that` : ""}.`]);
   }
   if (r.flags.includes("industry_out_of_favor")) {
@@ -113,7 +137,7 @@ function detailRow(r, cols) {
   const total = r.score_parts.reduce((a, p) => a + p.points, 0);
   const more = flagFacts(r);
   return `<tr class="detail"><td colspan="${cols}"><div class="detail-inner">
-    <div><h4>Why it passed</h4>${factList(facts(r))}${more.length ? `<h4 class="facts-head">What its flags mean</h4>${factList(more)}` : ""}</div>
+    <div>${flagNames(r)}<h4${r.flags.length ? ` class="facts-head"` : ""}>Why it passed</h4>${factList(facts(r))}${more.length ? `<h4 class="facts-head">What its flags mean</h4>${factList(more)}` : ""}</div>
     <div><h4>How the ${r.score} score adds up</h4><div class="parts">${r.score_parts.map((p) => `
       <div class="part"><span>${esc(p.label)}</span><div class="part-track"><span style="width:${p.max ? (p.points / p.max) * 100 : 0}%"></span></div><span class="pts">${pts(p.points)} / ${p.max}</span></div>`).join("")}
       <div class="part part-total"><span>Total</span><span>${Math.abs(total - r.score) < 0.05 ? "" : `Rounds to ${r.score}`}</span><span class="pts">${pts(total)} / ${r.score_parts.reduce((a, p) => a + p.max, 0)}</span></div>
@@ -141,8 +165,11 @@ function renderSectors() {
     ? (name === "All" ? data.results.length : data.sectors.find((s) => s.name === name)?.passed ?? 0)
     : data.results.filter((r) => insiderOk(r) && (name === "All" || r.sector === name)).length);
   const list = [{ name: "All" }, ...data.sectors.filter((s) => s.checked > 0 || s.excluded)];
-  el.innerHTML = list.map((s) => `<button class="pill" type="button" data-sector="${esc(s.name)}" aria-pressed="${s.name === state.sector}">
-    ${esc(s.name === "All" ? "All sectors" : s.name)}<span class="count">${s.excluded ? 0 : count(s.name)}</span></button>`).join("");
+  el.innerHTML = list.map((s) => {
+    const n = s.excluded ? 0 : count(s.name);
+    return `<button class="pill${n ? "" : " pill-empty"}" type="button" data-sector="${esc(s.name)}" aria-pressed="${s.name === state.sector}">
+    ${esc(s.name === "All" ? "All sectors" : s.name)}<span class="count">${n}</span></button>`;
+  }).join("");
   el.onclick = (e) => {
     const b = e.target.closest("[data-sector]");
     if (!b) return;
@@ -151,7 +178,12 @@ function renderSectors() {
     setParam("sector", state.sector === "All" ? null : state.sector);
     renderSectors();
     renderTable();
+    // The pills are drawn again, so keyboard focus goes back to the one chosen rather than to the page.
+    el.querySelector(`[data-sector="${CSS.escape(state.sector)}"]`)?.focus();
   };
+  // On a phone the sectors scroll sideways: bring the chosen one into view without moving the page.
+  const on = el.querySelector('[aria-pressed="true"]');
+  if (on && el.scrollWidth > el.clientWidth) el.scrollLeft = Math.max(0, on.offsetLeft - el.offsetLeft - 16);
 }
 
 function setParam(key, value) {
@@ -249,16 +281,17 @@ function renderTable() {
     return;
   }
   const pb = hasPb();
-  const cols = pb ? 11 : 10;
-  host.innerHTML = `<div class="table-wrap"><table class="data">
+  const cols = pb ? 12 : 11;
+  host.innerHTML = `${flagLegend()}<div class="table-wrap"><table class="data screen-table">
     <thead><tr>
-      <th>#</th><th>Company</th><th style="text-align:left">Score</th><th>Market value</th><th>Price / sales</th>${pb ? "<th>Price / book</th>" : ""}
-      <th>Net margin</th><th>Debt</th><th>Cash yield</th><th>Below high</th><th>Analysts</th>
+      <th>#</th><th>Company</th><th class="flags-col">Flags</th><th class="score-col">Score</th><th>Market value</th><th>Price / sales</th>${pb ? "<th>Price / book</th>" : ""}
+      <th>Net margin</th><th title="No debt, more cash than debt (net cash), or long-term debt as a multiple of equity">Debt</th><th>Cash yield</th><th>Below high</th><th>Analysts</th>
     </tr></thead>
     <tbody>${rows.map((r, i) => `
       <tr class="row" tabindex="0" data-sym="${esc(r.symbol)}" aria-expanded="${state.open === r.symbol}">
         <td class="rank-cell">${i + 1}</td>
-        <td class="co-cell"><div class="co"><span class="sym">${esc(r.symbol)}</span><span class="nm" title="${esc(r.name)}">${esc(r.name)}</span></div>${flags(r)}</td>
+        <td class="co-cell"><div class="co"><div class="co-top"><span class="sym">${esc(r.symbol)}</span>${flags(r)}</div><span class="nm" title="${esc(r.name)}">${esc(displayName(r.name))}</span></div></td>
+        <td class="flags-cell">${flags(r)}</td>
         <td class="score-cell">${meter(r.score, band(r.score))}</td>
         <td>${money(r.mcap)}</td>
         <td>${times(r.ps)}</td>
@@ -273,8 +306,26 @@ function renderTable() {
     <p class="faint" style="font-size:13px;margin-top:12px">Select a row to see why it passed and how its score adds up. Cash yield is free cash flow as a share of market value.${pb ? " Price to book is market value over book value: shareholders' equity less preferred stock." : ""}</p>
     ${unverifiedNote()}`;
 
+  // A table wider than its box scrolls sideways: its right edge fades while there is more to see. An opened row's detail
+  // keeps to the box's width and stays in view, rather than running the table's whole width.
+  const wrap = host.querySelector(".table-wrap");
+  const edge = () => {
+    // A wide screen's box clips rather than scrolls (pages.css); should the table outgrow it, it scrolls after all.
+    wrap.classList.toggle("scrolls", wrap.scrollWidth > wrap.clientWidth + 1);
+    wrap.classList.toggle("more-right", wrap.scrollLeft + wrap.clientWidth < wrap.scrollWidth - 1);
+    const inner = wrap.querySelector(".detail-inner");
+    if (inner) inner.style.width = wrap.scrollWidth > wrap.clientWidth ? `${wrap.clientWidth}px` : "";
+  };
+  wrap.addEventListener("scroll", edge, { passive: true });
+  if (window.ResizeObserver) new ResizeObserver(edge).observe(wrap);
+  edge();
+
   host.querySelectorAll("tr.row").forEach((tr) => {
-    const toggle = () => { state.open = state.open === tr.dataset.sym ? null : tr.dataset.sym; renderTable(); };
+    const toggle = () => {
+      state.open = state.open === tr.dataset.sym ? null : tr.dataset.sym;
+      renderTable();
+      host.querySelector(`tr.row[data-sym="${CSS.escape(tr.dataset.sym)}"]`)?.focus(); // keep the reader's place
+    };
     tr.addEventListener("click", toggle);
     tr.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
   });
@@ -286,7 +337,7 @@ const SHOWN = 15;
 // A ratio a list is "under" (price to book, market value to net cash), cut rather than rounded under 1, so 0.997 reads
 // 0.99x and not 1.00x on a list of companies under 1.
 const under = (x) => (x != null && x < 1 ? `${(Math.floor(x * 100) / 100).toFixed(2)}x` : times(x));
-const coCell = (r) => `<td class="txt co-cell"><div class="co"><a class="sym" href="report.html?t=${encodeURIComponent(r.symbol)}">${esc(r.symbol)}</a><span class="nm" title="${esc(r.name)}">${esc(r.name)}</span></div></td>`;
+const coCell = (r) => `<td class="txt co-cell"><div class="co"><a class="sym" href="report.html?t=${encodeURIComponent(r.symbol)}">${esc(r.symbol)}</a><span class="nm" title="${esc(r.name)}">${esc(displayName(r.name))}</span></div></td>`;
 const asOf = (iso) => (iso ? date(iso, { month: "short", day: "numeric", year: "numeric" }) : "n/a");
 
 function section(key, body) {

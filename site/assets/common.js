@@ -43,6 +43,21 @@ export function pct(n, digits = 1, signed = false) {
 
 export const times = (n) => (n == null ? "n/a" : `${n.toFixed(2)}x`);
 
+// A company name the SEC lists in capitals and of three or more long words ("STRATTEC SECURITY CORPORATION"), in title
+// case like the others ("Strattec Security Corporation"). Shorter all-capital names are often brands that are written in
+// capitals (PAMT CORP, AECOM) and are left as they are, as is any word with a digit or "&", "." or "-" (AT&T, CMB.TECH),
+// and short joining words are lower case after the first ("Bank of America"). The original is kept for tooltips.
+const SMALL_WORDS = new Set(["of", "and", "the", "for", "in", "on", "de", "du", "la"]);
+export function displayName(name) {
+  const s = String(name ?? "");
+  if (s !== s.toUpperCase() || (s.match(/\b[A-Z]{4,}\b/g) || []).length < 3) return s;
+  return s.replace(/[A-Z0-9][A-Z0-9'’&.-]*/g, (w, at) => {
+    if (/[\d&.-]/.test(w.replace(/\.$/, "")) || w.length <= 3 && !/^(INC|CO|LTD|THE|AND|OF|FOR|DE)\.?$/.test(w)) return w;
+    const lower = w.toLowerCase();
+    return at > 0 && SMALL_WORDS.has(lower) ? lower : w[0] + lower.slice(1);
+  });
+}
+
 export function date(iso, opts = { month: "short", day: "numeric" }) {
   if (!iso) return "n/a";
   const d = new Date(iso.length === 10 ? iso + "T12:00:00" : iso);
@@ -133,7 +148,7 @@ export async function attachSearch(form, { onPick } = {}) {
     active = matches.length ? 0 : -1;
     list.innerHTML = matches.length
       ? matches.map((r, i) => `<button type="button" role="option" data-sym="${esc(r[0])}" aria-selected="${i === active}">
-          <span class="s-sym">${esc(r[0])}</span><span class="s-name">${esc(r[1])}</span><span class="s-sec">${esc(r[2])}</span></button>`).join("")
+          <span class="s-sym">${esc(r[0])}</span><span class="s-name">${esc(displayName(r[1]))}</span><span class="s-sec">${esc(r[2])}</span></button>`).join("")
       : `<div class="s-empty">No US-listed stock matches "${esc(input.value.trim())}".</div>`;
     list.classList.add("open");
   }
