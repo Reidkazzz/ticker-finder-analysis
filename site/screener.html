@@ -11,6 +11,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/bold/style.css">
 <link rel="stylesheet" href="assets/app.css">
 <link rel="stylesheet" href="assets/pages.css">
 </head>
@@ -22,28 +23,30 @@
     <p class="lede">Small US companies that look cheap and are still healthy. Pick a sector to see every company that passes all eight checks, best score first.</p>
   </div>
 
-  <div class="toolbar">
-    <div class="pills" role="group" aria-label="Sector" data-sectors></div>
-    <div class="toolbar-row">
+  <div class="screen-toolbar">
+    <div class="pills sector-pills" role="group" aria-label="Sector" data-sectors></div>
+    <div class="screen-bar">
       <p class="result-count" data-count aria-live="polite">&nbsp;</p>
-      <label class="label-inline">Sort by
-        <select class="select" data-sort>
-          <option value="score">Best score</option>
-          <option value="ps">Cheapest vs. sales</option>
-          <option value="pb" data-needs-pb>Cheapest vs. book value</option>
-          <option value="net_margin">Highest profit margin</option>
-          <option value="fcf_yield">Most cash generated</option>
-          <option value="drawdown">Furthest below high</option>
-          <option value="mcap">Smallest company</option>
-        </select>
-      </label>
-    </div>
-    <div class="toolbar-row fit-row" data-insider-only hidden>
-      <div class="pills pills-labelled" role="group" aria-labelledby="insider-label" data-insider-filter>
-        <span class="pills-label" id="insider-label">Insider buying</span>
-        <button class="pill" type="button" data-insider="any" aria-pressed="true">Any company</button>
-        <button class="pill" type="button" data-insider="buying" aria-pressed="false">Insiders buying</button>
-        <button class="pill" type="button" data-insider="below" aria-pressed="false">Below insiders' price</button>
+      <div class="screen-controls">
+        <div class="seg-field" data-insider-only hidden>
+          <span class="seg-label" id="insider-label">Show</span>
+          <div class="seg" role="group" aria-labelledby="insider-label" data-insider-filter>
+            <button class="seg-btn" type="button" data-insider="any" aria-pressed="true">Any company</button>
+            <button class="seg-btn" type="button" data-insider="buying" aria-pressed="false">Insiders buying</button>
+            <button class="seg-btn" type="button" data-insider="below" aria-pressed="false">Below insiders' price</button>
+          </div>
+        </div>
+        <label class="label-inline">Sort by
+          <select class="select" data-sort>
+            <option value="score">Best score</option>
+            <option value="ps">Cheapest vs. sales</option>
+            <option value="pb" data-needs-pb>Cheapest vs. book value</option>
+            <option value="net_margin">Highest profit margin</option>
+            <option value="fcf_yield">Most cash generated</option>
+            <option value="drawdown">Furthest below high</option>
+            <option value="mcap">Smallest company</option>
+          </select>
+        </label>
       </div>
     </div>
   </div>
@@ -67,16 +70,16 @@
         <li><i class="ph ph-check"></i><div><b>Profitable in 2 of the last 3 years</b><span>One good year can be luck. Two out of three is a pattern. One-time items don't count here either.</span></div></li>
         <li><i class="ph ph-check"></i><div><b>Sales not shrinking more than 5%</b><span>Keeps out value traps: stocks that look cheap because the business is dying.</span></div></li>
       </ul>
-      <h3 class="rule-head">Flags</h3>
+      <h2 class="rule-head">Flags</h2>
       <p class="faint rule-note">Flags point out something worth knowing. None of them keeps a company off the list.</p>
       <ul class="rule-list">
-        <li class="bonus"><i class="ph ph-flag"></i><div><b>Out of favor</b><span>The price is 25% or more below its 52-week high.</span></div></li>
-        <li class="bonus" data-new-flag><i class="ph ph-flag"></i><div><b>Industry out of favor</b><span>Its whole industry has slumped: the typical (median) company in it trades 25% or more below its 52-week high. The industries are listed under the results.</span></div></li>
-        <li class="bonus"><i class="ph ph-flag"></i><div><b>Undiscovered</b><span>Two or fewer Wall Street analysts publish estimates on it.</span></div></li>
-        <li class="bonus" data-new-flag><i class="ph ph-flag"></i><div><b>Under book value</b><span>The whole company is worth less on the market than its book value: shareholders' equity less preferred stock, what shareholders would keep if everything were sold at the value on its balance sheet and every debt paid.</span></div></li>
-        <li class="bonus" data-new-flag><i class="ph ph-flag"></i><div><b>Insiders buying</b><span>In the last <span data-window>30</span> days, its executives, directors or big owners bought its stock on the open market with their own money: $1 million or more, or a single buyer growing their stake by 20% or more (Tier 1 or 2 on the <a href="insiders.html">insider buying</a> page).</span></div></li>
-        <li class="bonus" data-new-flag><i class="ph ph-flag"></i><div><b>Below insiders' price</b><span>Insiders are buying, and today's price is under the average price they paid. You can buy for less than they did.</span></div></li>
-        <li class="bonus" data-new-flag><i class="ph ph-flag"></i><div><b>Above upper band, wait for a pullback</b><span>The price has risen unusually fast: it is above the average of its last 20 weekly closing prices plus two standard deviations of them (the upper Bollinger band). Many traders take that as a sign to wait for the price to pull back rather than buy after the run-up.</span></div></li>
+        <li class="bonus flag-rule"><span class="flag flag-mid" aria-hidden="true"><i class="ph-bold ph-trend-down"></i></span><div><b>Out of favor</b><span>The price is 25% or more below its 52-week high.</span></div></li>
+        <li class="bonus flag-rule" data-new-flag><span class="flag flag-mid" aria-hidden="true"><i class="ph-bold ph-factory"></i></span><div><b>Industry out of favor</b><span>Its whole industry has slumped: the typical (median) company in it trades 25% or more below its 52-week high. The industries are listed under the results.</span></div></li>
+        <li class="bonus flag-rule"><span class="flag" aria-hidden="true"><i class="ph-bold ph-binoculars"></i></span><div><b>Undiscovered</b><span>Two or fewer Wall Street analysts publish estimates on it.</span></div></li>
+        <li class="bonus flag-rule" data-new-flag><span class="flag flag-up" aria-hidden="true"><i class="ph-bold ph-scales"></i></span><div><b>Under book value</b><span>The whole company is worth less on the market than its book value: shareholders' equity less preferred stock, what shareholders would keep if everything were sold at the value on its balance sheet and every debt paid.</span></div></li>
+        <li class="bonus flag-rule" data-new-flag><span class="flag flag-up" aria-hidden="true"><i class="ph-bold ph-user-plus"></i></span><div><b>Insiders buying</b><span>In the last <span data-window>30</span> days, its executives, directors or big owners bought its stock on the open market with their own money: $1 million or more, or a single buyer growing their stake by 20% or more (Tier 1 or 2 on the <a href="insiders.html">insider buying</a> page).</span></div></li>
+        <li class="bonus flag-rule" data-new-flag><span class="flag flag-up" aria-hidden="true"><i class="ph-bold ph-tag"></i></span><div><b>Below insiders' price</b><span>Insiders are buying, and today's price is under the average price they paid. You can buy for less than they did.</span></div></li>
+        <li class="bonus flag-rule" data-new-flag><span class="flag flag-down" aria-hidden="true"><i class="ph-bold ph-warning"></i></span><div><b>Above upper band, wait for a pullback</b><span>The price has risen unusually fast: it is above the average of its last 20 weekly closing prices plus two standard deviations of them (the upper Bollinger band). Many traders take that as a sign to wait for the price to pull back rather than buy after the run-up.</span></div></li>
       </ul>
       <p class="faint" style="font-size:13px;margin-top:16px">Figures come from each company's latest fiscal year and latest balance sheet filed with the SEC. Prices are from the last close.</p>
     </div>

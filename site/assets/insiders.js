@@ -1,4 +1,4 @@
-import { chrome, date, esc, load, localToday, money, pct, price, relDay, signClass } from "./common.js";
+import { chrome, date, displayName, esc, load, localToday, money, pct, price, relDay, signClass } from "./common.js";
 
 chrome();
 
@@ -72,7 +72,7 @@ function card(c) {
     <div class="buy-co">
       <div class="top">${TIER_TAG[c.tier]}
         ${link ? `<a class="sym" href="${link}">${esc(c.symbol)}</a>` : `<span class="sym">${esc(c.symbol || "Unlisted")}</span>`}
-        <span class="nm">${esc(c.name)}</span></div>
+        <span class="nm">${esc(displayName(c.name))}</span></div>
       <span class="faint" style="font-size:13px">${esc(c.sector)}${c.mcap ? `, ${money(c.mcap)} market value` : ""}</span>
       ${c.fit ? `<div class="fit-line">${fitLine(c.fit)}</div>` : ""}
       <div class="buy-stats">
@@ -144,7 +144,7 @@ function render() {
   stakesEl.innerHTML = stakes.length ? `<div class="stakes">${stakes.slice(0, 60).map((s) => `
     <div class="stake-row">
       <div><div class="sym">${s.symbol ? `<a href="report.html?t=${encodeURIComponent(s.symbol)}">${esc(s.symbol)}</a>` : "Unlisted"}</div><div class="faint" style="font-size:12.5px">${esc(date(s.filed))}</div></div>
-      <div><div>${esc(s.filer)}</div><div class="faint" style="font-size:13px">in ${esc(s.name)}</div>${s.fit ? `<div class="fit-line">${fitLine(s.fit)}</div>` : ""}</div>
+      <div><div>${esc(s.filer)}</div><div class="faint" style="font-size:13px">in ${esc(displayName(s.name))}</div>${s.fit ? `<div class="fit-line">${fitLine(s.fit)}</div>` : ""}</div>
       <div class="pct">${s.percent == null ? "n/a" : s.percent.toFixed(1) + "%"}</div>
       <div class="purpose">${esc(s.purpose || "No stated purpose in the filing.")}</div>
       <a class="doc" href="${esc(s.filing)}" target="_blank" rel="noopener" title="Open the SEC filing"><i class="ph ph-arrow-up-right" aria-hidden="true"></i><span class="sr-only">SEC filing</span></a>

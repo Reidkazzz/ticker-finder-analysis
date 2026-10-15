@@ -1,4 +1,4 @@
-import { attachSearch, chrome, date, esc, load, meter, money, pct, price, searchMarkup, signClass } from "./common.js";
+import { attachSearch, chrome, date, displayName, esc, load, meter, money, pct, price, searchMarkup, signClass } from "./common.js";
 
 chrome();
 
@@ -507,12 +507,12 @@ function revenueSource(f) {
 
 function render(r) {
   const f = r.fundamentals;
-  document.title = `${r.symbol}: ${r.name} | Ticker Finder`;
+  document.title = `${r.symbol}: ${displayName(r.name)} | Ticker Finder`;
   host.innerHTML = `
     <header class="r-head rise">
       <div class="r-id">
         <div class="sym">${esc(r.symbol)}<span class="faint">${esc(r.exchange || "")}</span>${r.screener ? `<a class="tag tag-up" href="screener.html" style="text-decoration:none">Passes the screener</a>` : ""}</div>
-        <h1>${esc(r.name)}</h1>
+        <h1>${esc(displayName(r.name))}</h1>
         <p class="where">${[r.sector, r.industry].filter(Boolean).map(esc).join(", ")}</p>
       </div>
       <div class="r-price"><div class="p">${price(r.price)}</div>${r.mcap ? `<div class="sub">${money(r.mcap)} market value</div>` : ""}</div>
