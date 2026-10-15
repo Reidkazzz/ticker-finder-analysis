@@ -110,7 +110,7 @@ export function chrome() {
       <div>
         <p>Ticker Finder is an educational research tool. Nothing here is investment advice, a recommendation, or a price target.
         Scores and fair-value ranges are estimates built from public filings and can be wrong. Do your own research.</p>
-        <p>Data: SEC EDGAR filings and financial statements, Nasdaq listings, Yahoo Finance prices and headlines.
+        <p>Data: SEC EDGAR filings and financial statements, Nasdaq listings, Yahoo Finance prices, and headlines from Yahoo Finance, Google News and companies' press releases.
         Refreshed every weekday evening after the SEC's 10pm filing cutoff.</p>
       </div>
       <nav aria-label="Footer">${NAV.map(([h, l]) => `<a href="${h}">${l}</a>`).join("")}<a href="index.html#method">How it works</a></nav>
