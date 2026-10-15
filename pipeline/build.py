@@ -13,7 +13,7 @@ import random
 import shutil
 import time
 
-from . import filers, fundamentals, insiders, market, net, news, report, screener, statements, universe
+from . import filers, fundamentals, insiders, market, net, news, press, report, screener, statements, universe
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "site", "data")
@@ -199,6 +199,11 @@ def main():
     ap.add_argument("--insider-minutes", type=float, default=float(os.environ.get("INSIDER_MINUTES", 75)),
                     help="stop scanning older filing days after this long; the next run picks up where it left off")
     ap.add_argument("--skip-news", action="store_true")
+    # Press releases are read from the 8-K and 6-K reports of this many days, enough to fill a list of headlines; a
+    # first run reads them all, later runs only the new days.
+    ap.add_argument("--press-days", type=int, default=int(os.environ.get("PRESS_DAYS", 45)))
+    ap.add_argument("--press-minutes", type=float, default=float(os.environ.get("PRESS_MINUTES", 30)),
+                    help="stop reading older filing days after this long; the next run picks up where it left off")
     args = ap.parse_args()
     today = market_today()
 
@@ -372,8 +377,27 @@ def main():
 
     heads = {}
     if not args.skip_news:
+        step(f"Reading press releases from EDGAR (last {args.press_days} days)")
+        companies = {}
+        for s in symbols:
+            companies.setdefault(uni[s]["cik"], (uni[s]["name"], []))[1].append(s)
+        # A --limit sample keeps its own cache: its days are marked read for its few companies only, which would
+        # otherwise leave the full run's other companies without those days' releases.
+        press_path = os.path.join(CACHE, "press_sample.json" if args.limit else "press.json")
+        try:
+            got, left = press.update_cache(press_path, companies, args.press_days, today,
+                                           time_budget=args.press_minutes * 60)
+        except Exception as e:  # never lose the reports because one source misbehaved
+            step(f"  Press release scan stopped early: {e!r}. Using the releases read so far.")
+            got, left = press.load_cache(press_path), []
+        releases = press.by_cik(got)
+        by_symbol = {s: releases.get(uni[s]["cik"], []) for s in symbols}
+        step(f"  {sum(map(len, releases.values()))} press releases from {len(releases)} companies"
+             + (f"; {len(left)} day{'s' if len(left) != 1 else ''} still to read" if left else ""))
         step(f"Fetching headlines for {len(symbols)} stocks")
-        heads = news.all_headlines([(s, uni[s]["name"]) for s in symbols])
+        heads = news.all_headlines([(s, uni[s]["name"]) for s in symbols], press=by_symbol)
+        if news.FAILED:
+            step("  Feeds that could not be read: " + ", ".join(f"{n} from {src}" for src, n in news.FAILED.items()))
 
     step("Matching each company with similar companies")
     table = report.peer_table(uni, metrics, sic)

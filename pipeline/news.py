@@ -5,10 +5,12 @@ read the headline with the company's own name and ticker masked out (_mask), so 
 Below", "Growth", "UPS") can't set a label, and where a headline names other companies too, only the part about this one
 counts (_own_part).
 """
+import collections
 import datetime as dt
 import email.utils
 import html
 import re
+import threading
 import urllib.parse
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
@@ -32,19 +34,34 @@ RULES = [
      r"|\b(guidance|outlook|forecast)\b.{0,25}\b(cut|lowered|slashed|trimmed|reduced|withdrawn)\b", -2, "The company lowered its outlook."),
     (r"\bupgrade[sd]?\b|\b(raises?|lifts?|ups)\b \w+ to (buy|outperform|overweight)\b", 1.5, "An analyst upgraded the stock."),
     (r"\binitiat\w*\b.{0,30}\b(buy|outperform|overweight|strong buy)\b", 1, "An analyst started covering the stock with a Buy."),
-    (r"\bdowngrade[sd]?\b|\b(cuts?|lowers?)\b \w+ to (sell|underperform|underweight|neutral|hold|equal[- ]weight)\b", -1.5,
+    (r"\bdowngrade[sd]?\b|\b(cuts?|lowers?)\b (\w+ )?to (sell|underperform|underweight|neutral|hold|equal[- ]weight)\b", -1.5,
      "An analyst downgraded the stock."),
     (r"\b(price targets?|pt)\b.*\b(raise[sd]?|boost(s|ed)?|lift(s|ed)?|hike[sd]?|increase[sd]?)\b"
-     r"|\b(raise[sd]?|boost(s|ed)?|lift(s|ed)?|hike[sd]?|increase[sd]?)\b.*\b(price targets?|pt)\b", 1, "An analyst raised their price target."),
+     r"|\b(raise[sd]?|boost(s|ed)?|lift(s|ed)?|hike[sd]?|increase[sd]?)\b.*\b(price targets?|pt)\b"
+     # "Morgan Stanley raises AMETEK stock target from USD 245.00 to USD 275.00", "UBS cuts target for Crown Holdings stock".
+     r"|\b(raise[sd]?|lift(s|ed)?|boost(s|ed)?)\b.{0,40}\b(stock target|target for .{0,40}\bstock)\b", 1, "An analyst raised their price target."),
     (r"\b(price targets?|pt)\b.*\b(cuts?|trims?|lower(s|ed)?|slash(es|ed)?|reduce[sd]?)\b"
-     r"|\b(cuts?|trims?|lower(s|ed)?|slash(es|ed)?|reduce[sd]?)\b.*\b(price targets?|pt)\b|\btargets? cuts?\b", -1,
+     r"|\b(cuts?|trims?|lower(s|ed)?|slash(es|ed)?|reduce[sd]?)\b.*\b(price targets?|pt)\b|\btargets? cuts?\b"
+     r"|\b(cuts?|trims?|lower(s|ed)?)\b.{0,40}\b(stock target|target for .{0,40}\bstock)\b", -1,
      "An analyst lowered their price target."),
     (r"\b(buyback|repurchase)\b", 1, "A share buyback reduces the share count."),
-    (r"\b(raises?|increases?|hikes?|boosts?)\b.*\b(dividend|distribution)\b|\bspecial (cash )?dividend\b(?!.*\bcvrs?\b)", 1.5,
-     "The dividend is going up."),
+    (r"\b(raises?|increases?|hikes?|boosts?)\b.*\b(dividend|distribution)\b", 1.5, "The dividend is going up."),
+    # A one-time payment, not a higher regular dividend ("VerifyMe Declares Special Dividend").
+    (r"\bspecial (cash )?dividend\b(?!.*\bcvrs?\b)", 1, "The company declared a one-time special dividend."),
     (r"\b(cuts?|suspends?|eliminates?|slashes?)\b.*\bdividend\b", -2, "The dividend is being cut."),
-    (r"\brecord (revenue|sales|profit|earnings|quarter|results)\b", 1.5, "The company reported record results."),
-    (r"\b(fda|regulatory) (approval|approves|clears|clearance)\b|\bapproved by (the )?fda\b", 2, "A regulator approved a product."),
+    # "Record Q1 Fiscal 2027 Revenue", "Record Preliminary Third Quarter Revenue", "Record High Production" (Aura Minerals'),
+    # but not a record low, loss or date ("Announces Record Date for Third Quarter Distribution").
+    (r"\brecord (?!(low|lows|loss|losses|date)\b)((?!(low|loss|losses|date)\b)\w+ ){0,4}(revenue|sales|profit|earnings|quarter"
+     r"|results|production)\b", 1.5, "The company reported record results."),
+    # Not a filing that seeks approval or clearance ("BioCardia Files Revised De Novo Pre-Submission for FDA Approval",
+    # "Submits 510(k) Seeking FDA Clearance"), nor shareholders', a court's or an exchange's approval ("Receives
+    # Stockholder Approval for Reverse Stock Split"); an approval abroad counts ("Novocure's Optune Pax Receives Approval
+    # in Japan").
+    (r"^(?!.*\b(seeks?|seeking|submits?|submitted|files?|filed|pre-submission|applies|applied|application)\b.{0,40}\b(fda|regulatory)"
+     r" (approval|clearance))(?!.*\bfor (fda|regulatory) (approval|clearance)\b)(?!.*\b(stockholder|shareholder|court|board"
+     r"|nasdaq|nyse|tsxv?|listing|exchange|lender|creditor)s?['’]? approval)(.*\b(fda|regulatory) (approval|approves|clears"
+     r"|clearance)\b|.*\bapproved by (the )?fda\b|.*\breceives? (\w+ ){0,2}approval\b(?! process))", 2,
+     "A regulator approved a product."),
     (r"\b(fda|regulator)\b.*\b(rejects?|declines?|complete response letter)\b|\bcomplete response letter\b", -2, "A regulator turned down a product."),
     # Trial results: positive data only beside a trial word, so a miner's "Positive Drilling Results" isn't one.
     (r"(?=.*\b(phase|pivotal|topline|trial|study)\b).*\bpositive\b.*\b(data|results|readout)\b"
@@ -55,9 +72,18 @@ RULES = [
     # project only when won or awarded. Not "award" alone, which catches prizes.
     (r"\b(wins?|won|awarded|secures?|secured|lands?|landed|receives?|received|selected for)\b.*\b(contracts?|orders?|deals?)\b"
      r"|\b(wins?|won|awarded)\b.*\bprojects?\b(?! finance)", 1.5, "The company won new business."),
-    (r"\b(to acquire|agrees? to buy|to be acquired|takeover|buyout|merger agreement)\b", 1, "Deal news, often a premium for shareholders of the target."),
+    # Not where the company is the buyer ("Xco to Acquire Eagle Ford Assets from Devon Energy", Crescent Energy's), whose
+    # shareholders get no premium.
+    # The buyer is the company named just before the verb, a few words at most ("Xco & Everview Partners to Acquire
+    # Slate Grocery REIT"), so "Xco Receives Proposal from Rival Corp to Acquire the Company" stays a target's news.
+    (r"^(?!.*\bXco\b(\W+\w+){0,3}?\W+(to acquire|agrees? to (buy|acquire)|agreement to acquire|acquires|to buy|completes? "
+     r"(the )?acquisition|closes? (the )?acquisition|(launches|makes|submits) .{0,30}\b(takeover|tender) (bid|offer) for)\b)"
+     r"(?=.*\b(to acquire|agrees? to buy|to be acquired|takeover|buyout|merger agreement)\b)", 1,
+     "Deal news, often a premium for shareholders of the target."),
     (r"\b(insiders?|ceo|cfo|director|chair(man)?)\b.*\b(buys?|bought|purchases?|purchased)\b.*\b(shares|stock)\b", 1.5, "An insider bought shares with their own money."),
-    (r"\b(insiders?|ceo|cfo|director)\b.*\b(sells?|sold|dumps?)\b.*\b(shares|stock)\b", -0.5, "An insider sold shares, which is often routine."),
+    # Not a planned sale ("A director plans to sell 1,593 EverQuote (EVER) shares", from a Form 144).
+    (r"^(?!.*\b(plans?|intends?|proposes?|may) to sell\b).*\b(insiders?|ceo|cfo|director)\b.*\b(sells?|sold|dumps?)\b.*\b(shares|stock)\b",
+     -0.5, "An insider sold shares, which is often routine."),
     (r"\b(lawsuit|sued|class action|securities fraud)\b", -1.5, "The company faces legal action."),
     (r"\b(sec|doj|ftc|federal) (probe|investigation|subpoena|charges?)\b|\binvestigat(ion|ing)\b", -1.5, "The company is under investigation."),
     (r"\b(bankruptcy|chapter 11|going concern|default(s|ed)?)\b", -3, "The company is in serious financial distress."),
@@ -66,10 +92,15 @@ RULES = [
     (r"\b(short seller|short report)\b", -1.5, "A short seller published a negative report."),
     # Not a voluntary delisting, which the company chose (WALD's in October 2026).
     (r"^(?!.*\b(voluntar\w*|regain\w*)\b)(.*\b(delist(ing|ed)?|nasdaq notice|non-compliance)\b"
-     r"|.*\b(deficiency|minimum bid)\b.{0,40}\b(notice|notification|letter)\b|.*\b(receiv\w*|receipt)\b.{0,40}"
+     r"|.*\b(deficiency|minimum bid)\b.{0,40}\b(notice|notification|letter)\b|.*\bnot in compliance\b"
+     # "Receives NYSE American Notice Regarding Stockholders' Equity Requirement" (Micropolis'), not a Japanese 6-K's
+     # "Notice Regarding Listing of Shares on Prime Market" or "Notice Regarding Equity Compensation".
+     r"|.*\bnotice regarding ([\w’']+ ){0,3}((stock|share)holders[’']? equity|continued listing|listing (standards?|"
+     r"requirements?|rules?)|minimum bid|bid price|market value of)\b|.*\b(receiv\w*|receipt)\b.{0,40}"
      r"\b(delinquen\w*|deficien\w*|non-?complian\w*)\b)", -2, "The listing is at risk."),
-    (r"\bpriority review\b|\bbreakthrough therapy designation\b", 1.5, "A regulator is speeding up its review of a product."),
-    (r"\b(record|all-time) highs?\b", 1, "The stock hit a record high."),
+    (r"\bpriority review\b|\bbreakthrough therapy designation\b|\bfast track designation\b", 1.5,
+     "A regulator is speeding up its review of a product."),
+    (r"\b(record|all-time) highs?\b(?! (production|revenue|sales|output|quarterly|annual))", 1, "The stock hit a record high."),
     (r"\b(q[1-4]|quarter|earnings|sales|revenues?|eps)\b.{0,30}\bbeats?\b(?!.*\bmiss)|\bbeats?\b.{0,15}\bon "
      r"(earnings|revenue|sales)\b", 2, "Results came in better than analysts expected."),
     (r"\b(ceo|cfo|chief executive)\b.*\b(resigns?|steps down|departs?|ousted|fired)\b", -1, "A top executive is leaving."),
@@ -78,7 +109,9 @@ RULES = [
     (r"^(?!.*\b(blocks?|rejects?|challenges?|appeals?)\b.{0,30}\bsettlement).*\b(settles?|settled|agrees? to (pay|settle)"
      r"|reach(es|ed)? (a |an )?\$?[\w.]* ?settlement)\b", -1, "The company is paying to settle a legal dispute."),
     (r"\b(worries|worried|concerns?|fears?|warns?|warning|headwinds?)\b", -1, "The story focuses on a risk or concern."),
-    (r"\b(growth|grows|jumps|rises)\b.*\b(revenue|sales|profit|earnings)\b|\b(revenue|sales|profits?|earnings|eps)\b.*\b(rise|rises|grow|grows|jump|jumps|climb|climbs|soar|soars|surge|surges)\b", 1.5, "Revenue or profit is growing."),
+    (r"\b(growth|grows|jumps|rises)\b.*\b(revenue|sales|profit|earnings)\b|\b(revenue|sales|profits?|earnings|eps)\b.*\b(rise|rises|grow|grows|jump|jumps|climb|climbs|soar|soars|surge|surges)\b"
+     # "Genius Group Announces 140% Increase in Revenue", "Revenues to Increase by $1.5 Million", "Revenue Up 30%".
+     r"|\bincrease in (revenue|sales|profit|earnings)\b|\b(revenues?|sales) (to )?(increase|grow|up)\b", 1.5, "Revenue or profit is growing."),
     (r"\b(boosts?|lifts?|drives?|expands?)\b.*\b(margins?|profits?|sales|revenue|earnings)\b", 1, "Something is lifting sales or profit."),
     (r"\b(revenue|sales|profit|earnings)\b.*\b(decline|declines|fall|falls|drop|drops|shrink|shrinks)\b|\b(loss widens|wider loss)\b", -1, "Revenue or profit is shrinking."),
 ]
@@ -334,7 +367,14 @@ def classify(title, sym=None, name=None):
 # Google News sources that rewrite price data into machine-written posts, often citing years-old quarters as news, and
 # tag each with a random trailing label ("- Price Surge Stocks"): in September 2026 they supplied 954 of the 2,241
 # Google headlines on 252 reports.
-BLOCKED_SOURCES = {"dars.gov.et", "careplusvn.com", "siam.in"}
+BLOCKED_SOURCES = {"dars.gov.et", "careplusvn.com", "siam.in",
+                   # Sites whose pages for a stock are its quote, forecast or chart, not news ("Zeo Energy Corporation
+                   # Stock Price Today | ZEO Live Chart & News", "Stoke Therapeutics Stock Price Forecast. Should You Buy
+                   # STOK?"). Sites that write news by machine from filings or prices (Stock Titan, AD HOC NEWS) stay: for
+                   # many small companies they are the only ones to report a reverse split or a chief executive's
+                   # dismissal, and PER_PUBLISHER keeps them from filling a list.
+                   "tradersunion.com", "stockinvest.us", "intellectia.ai", "heygotrade.com", "moomoo.com", "tikr.com",
+                   "valueresearchonline.com", "chartmill.com", "stocktradersdaily.com", "revelio.com", "reveliolabs.com"}
 
 
 def _parse_rss(raw, source_default):
@@ -356,7 +396,7 @@ def _parse_rss(raw, source_default):
         if site.removeprefix("www.") in BLOCKED_SOURCES:
             continue
         if title and link:
-            items.append({"title": title, "url": link, "source": source, "date": when})
+            items.append({"title": title, "url": link, "source": source, "date": when, "site": site.removeprefix("www.")})
     return items
 
 
@@ -409,9 +449,38 @@ def _about(title, sym, key):
     return False
 
 
-# Google News is searched where the ticker's Yahoo Finance feed has fewer relevant headlines than this, so a list of
-# three or four doesn't miss the stories only Google carries (Chesapeake Utilities', ADRX's and KTF's in October 2026).
+# A list draws on three sources: the company's own press releases from its SEC filings (pipeline/press.py), Yahoo
+# Finance's feed for the ticker, and Google News, which carries thousands of publishers. Press releases have room kept
+# for their newest (PRESS_MOST). Google's headlines join a list in two ways. Where Yahoo's feed has fewer relevant
+# headlines than GOOGLE_BELOW, any publisher's (bar the blocked and filtered ones) top the list up, so a list of three or
+# four doesn't miss the stories only Google carries (Chesapeake Utilities', ADRX's and KTF's in October 2026). Where
+# Yahoo's is full, only an established news publisher's (NEWS_SITES) take room, up to GOOGLE_MOST and PER_PUBLISHER
+# each: in a blind review of 60 lists in October 2026, taking any publisher's in every list made more of them worse
+# than better, with filing stubs, holdings and moving-average posts, quote pages and one event told four times.
+PRESS_MOST = 3
 GOOGLE_BELOW = 6
+GOOGLE_MOST = 4
+PER_PUBLISHER = 2
+NEWS_SITES = {"reuters.com", "bloomberg.com", "wsj.com", "cnbc.com", "ft.com", "barrons.com", "marketwatch.com",
+              "seekingalpha.com", "investing.com", "benzinga.com", "theglobeandmail.com", "apnews.com", "forbes.com",
+              "fortune.com", "businessinsider.com", "morningstar.com", "fool.com", "thestreet.com", "investors.com",
+              "nasdaq.com", "nytimes.com", "washingtonpost.com", "axios.com", "techcrunch.com", "theverge.com",
+              "fiercebiotech.com", "fiercepharma.com", "fiercehealthcare.com", "endpts.com", "statnews.com",
+              "biospace.com", "americanbanker.com", "bizjournals.com", "financialpost.com", "bnnbloomberg.ca",
+              "mining.com", "utilitydive.com", "insurancejournal.com", "spglobal.com", "theinformation.com"}
+# A Google headline that is a filing's stub rather than news of it ("A director's buy is corrected to 50,000 shares",
+# "Stock Titan '10-Q Filings' index", tax-withholding and award-vesting notices), or a price note written from a
+# template ("... stock sits below 200-day line", "holds near USD 9.60 after market cap update"); or a page of quotes or
+# figures ("Options Overview History", "Advanced Charts", "Number of Employees", "Live Quotes & Charts").
+_GOOGLE_NOISE = re.compile(r"\b(form [345]|form 144|tax[- ]withholding|withh(eld|olding)\b.{0,20}\bshares|rsus?\b.{0,20}\bvest"
+                           r"|vesting|restricted (stock|share) units?|shares held|holdings? correction|\d+-[kq] filings"
+                           r"|sec filing \(|stock (sits|stays|holds|trades) (near|below|above|at)\b|after market cap update"
+                           r"|percent below (its )?(yearly|52-week) high|options (chain|overview|volatility|activity)"
+                           r"|advanced charts?|number of employees|live quotes|latest stock news and headlines"
+                           r"|stock forecast\b|invested \d+ years ago|\$\d+ invested\b|most actively traded)\b", re.I)
+# Publishers whose feed titles are cut at a fixed length, often mid-word ("... Moderate Short In", "... (BR) Af").
+_CUT_TITLES = {"gurufocus.com", "pluang.com"}
+
 # Pages that show a stock's quote or data rather than news ("... Stock Price, News & Analysis", "... Financials",
 # "Should I Buy ...", "Precision Trading with ... Risk Zones"): about 940 of the shown headlines in October 2026.
 _QUOTE_PAGE = re.compile(r"\bstock price(,| &| and)? (news|quote|history|chart|trades|analysis)|\bstock quote\b"
@@ -422,7 +491,27 @@ _QUOTE_PAGE = re.compile(r"\bstock price(,| &| and)? (news|quote|history|chart|t
                          r"|statistics [-–]|financial statements [-–]|share price, .{0,20}stock news|latest stock price)\b"
                          r"|\bstock (forecasts?|price|analysis)\s*$|\bforecast & analyst predictions\b"
                          r"|[-–]\s*(NASDAQ|NYSE\w*|AMEX)\s*:\s*[A-Z.]+\s*$|\binsider trading\s*$|^(ebit|pretax income|net income) of\b"
-                         r"|\bdividend analysis\s*$|\bholds steady at \$", re.I)
+                         r"|\bdividend analysis\s*$|\bholds steady at \$"
+                         r"|\binteractive stock chart\b|\bearnings date,? (reports|& estimates|and estimates)\b"
+                         r"|\bactuals & estimates\b|\bstock price today\b|\blive chart\b|\bwhat is (the )?market cap of\b"
+                         r"|\bstock price forecast\b|\bcompetitors( \d{4})?\s*$|\bstock chart\s*$|\bresearch & ratings\b"
+                         r"|^\[(?:\d{1,2}-k(?:/a)?|[0-9]{1,2}|sc 13[dg](?:/a)?|s-\d|def 14a|20-f|40-f)\]\s"
+                         r"|\bcurrent report \(foreign issuer\)|\|\s*price:|\bsec filing - form\b|\b\d{1,2}-k filings -"
+                         r"|\bstock analysis report\b|\bratings, financials\b"
+                         r"|\bsec \d{1,2}-k\s*$", re.I)
+# Posts a site writes from a template on a price or a consensus, not news ("... Hits New 52-Week Low - What's Next?",
+# "... Shares Gap Up - Here's What Happened", "... Stock Price Breaks Above 200-Day Moving Average - Time to Sell?",
+# "... Stock Has Average Price Target of $32.71", "... Rated 'Reduce' by Sell-Side Brokerages"): MarketBeat's,
+# GuruFocus's and others', about 2,000 of the Google headlines that named their company in October 2026. Only Google's:
+# the same words head real stories in Yahoo's feed ("Acme stock jumped today. Here's why", from The Motley Fool).
+_TEMPLATED = re.compile(r"\bwhat'?s next\W*$|\bhere'?s (what happened|why)\W*$|\btime to (buy|sell)\W*$"
+                        r"|\b(hits?|reaches|sets|touches|marks) (a )?(new )?(52|twelve|12)[- ]week (high|low)\b"
+                        r"|\b(out|under)performs? (its )?competitors\b"
+                        r"|\b(crosses|breaks|moves|trades|passes) (above|below) .{0,30}\bmoving average\b"
+                        r"|\baverage (price target|rating|recommendation)\b|\bconsensus (rating|recommendation)\b"
+                        r"|\brated .{0,30}\bby (wall street|sell-side|brokerages|analysts)\b|\bshares gap (up|down)\b"
+                        r"|\bgf (value|score)\b|\btrading (up|down) [\d.]+%\s*$|\bconsensus price target\b"
+                        r"|\bwould have made\b|\bwhat'?s going on with\b", re.I)
 # A fund's filing of its holdings, as MarketBeat words them ("XYZ Advisors Acquires New Position in ..."): at most one
 # per list, so they don't crowd out news (Amazon's showed nine).
 _HOLDINGS = re.compile(r"\b(acquires|buys|sells|trims|raises|lowers|boosts|increases|decreases|reduces|grows|cuts|takes|"
@@ -469,48 +558,92 @@ def _ny_date(when):
     return local.strftime("%Y-%m-%d")
 
 
-def headlines(sym, name, max_items=10, max_age_days=90):
-    items = []
+def _feed(url, source):
+    """A feed's items, or none where it can't be fetched or read (counted in FAILED, which build reports)."""
     try:
-        items = _parse_rss(web_get(f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={sym.replace('.', '-')}&region=US&lang=en-US"), "Yahoo Finance")
+        return _parse_rss(web_get(url), source)
     except Exception:
-        items = []
+        with _failed_lock:
+            FAILED[source] += 1
+        return []
+
+
+FAILED = collections.Counter()  # feeds that couldn't be fetched or read this run, by source
+_failed_lock = threading.Lock()
+
+
+def headlines(sym, name, max_items=10, max_age_days=90, press=()):
+    """Up to `max_items` headlines about the company from its press releases (`press`, from pipeline/press.py), Google
+    News and Yahoo Finance, each list's room shared among them (PRESS_MOST, GOOGLE_MOST), newest first."""
+    yahoo = _feed(f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={sym.replace('.', '-')}&region=US&lang=en-US",
+                  "Yahoo Finance")
+    q = urllib.parse.quote(f'"{sym}" {name.split(",")[0]} stock')
+    google = _feed(f"https://news.google.com/rss/search?q={q}&hl=en-US&gl=US&ceid=US:en", "Google News")
     key = _name_key(name)
     now = dt.datetime.now(dt.timezone.utc)
-    fresh = lambda xs: [i for i in xs if not i["date"] or (now - i["date"]).days <= max_age_days]
-    # Only headlines that name the company count: a ticker feed mixes in general market stories and other companies'
-    # news, which used to fill out a short list (no headline on NVDA's or DKS's list in September 2026 was about them).
-    # Google News is searched when the feed has fewer than three, and its results must name the company too.
     by_date = lambda xs: sorted(xs, key=lambda x: x["date"] or now - dt.timedelta(days=999), reverse=True)
-    # Google's results only top the list up: Yahoo's own come first, so a quote page or filler from Google never pushes
-    # out an older Yahoo story (USGO's exploration update and SGP's results in October 2026).
-    relevant = by_date([i for i in fresh(items) if _about(i["title"], sym, key) and not _QUOTE_PAGE.search(i["title"])])
-    if len(relevant) < GOOGLE_BELOW:
-        q = urllib.parse.quote(f'"{sym}" {name.split(",")[0]} stock')
-        try:
-            google = _parse_rss(web_get(f"https://news.google.com/rss/search?q={q}&hl=en-US&gl=US&ceid=US:en"), "Google News")
-        except Exception:
-            google = []
-        relevant += by_date([i for i in fresh(google) if _about(i["title"], sym, key) and not _QUOTE_PAGE.search(i["title"])])
-    seen, out, kept, filler = set(), [], [], 0
-    for it in relevant:
+    # Only fresh headlines that name the company count: a ticker feed mixes in general market stories and other
+    # companies' news, which used to fill out a short list (no headline on NVDA's or DKS's list in September 2026 was
+    # about them). A press release always names it (press.release).
+    relevant = lambda xs: by_date([i for i in xs if (not i["date"] or (now - i["date"]).days <= max_age_days)
+                                   and _about(i["title"], sym, key) and not _QUOTE_PAGE.search(i["title"])])
+    # Nor, from Google's publishers, a post written from a template (_TEMPLATED) or a question ("Can Occidental Petroleum
+    # Keep Surging as Oil-and-Gas Shares Gather Pace?", "Is Bit Digital the Penny Stocks Stock Everyone's Talking About
+    # Today?"), which asks rather than reports.
+    press, yahoo = relevant(press), relevant(yahoo)
+    google = [i for i in relevant(google) if not _TEMPLATED.search(i["title"]) and not _GOOGLE_NOISE.search(i["title"])
+              and not i["title"].rstrip().endswith("?")
+              and not (i.get("site") in _CUT_TITLES and not re.search(r"[.!?)%'\"]$", i["title"].rstrip()))]
+    # A full Yahoo list takes only established publishers' headlines from Google (NEWS_SITES). Full in distinct stories:
+    # one story told twice, or a run of fund-holdings filings (one of which a list keeps), doesn't fill it.
+    stories = {re.sub(r"\W+", "", _untagged(i["title"]).lower())[:60] for i in yahoo if not _HOLDINGS.search(i["title"])}
+    if len(stories) + any(_HOLDINGS.search(i["title"]) for i in yahoo) >= GOOGLE_BELOW:
+        google = [i for i in google if ".".join((i.get("site") or "").split(".")[-2:]) in NEWS_SITES]
+
+    seen, kept, filler, publishers = set(), [], [0], collections.Counter()
+
+    def take(it, cap=None):
+        """Keeps a headline unless it tells a story already kept (the first copy stays: a press release over the
+        wire's or Yahoo's copy of it), is a fund's holdings filing past the first, or, from Google (`cap` given), its
+        publisher already has `cap` there (Google's own "Yahoo Finance" articles aren't counted with Yahoo's feed)."""
         key60 = re.sub(r"\W+", "", _untagged(it["title"]).lower())[:60]
-        if key60 in seen or _same_story(it, kept, sym, name):
-            continue
+        if len(kept) >= max_items or key60 in seen or _same_story(it, kept, sym, name) \
+                or cap and publishers[it["source"]] >= cap:
+            return False
         if _HOLDINGS.search(it["title"]):
-            filler += 1
-            if filler > 1:
-                continue
+            filler[0] += 1
+            if filler[0] > 1:
+                return False
         seen.add(key60)
         kept.append(it)
+        if cap:
+            publishers[it["source"]] += 1
+        return True
+
+    for it in press[:PRESS_MOST]:
+        take(it)
+    # Yahoo's newest, leaving room for Google's (as many as it has from different publishers, up to GOOGLE_MOST).
+    room = max_items - min(GOOGLE_MOST, len({i["source"] for i in google}) * PER_PUBLISHER, len(google))
+    for it in yahoo:
+        if len(kept) >= room:
+            break
+        take(it)
+    shown = len(kept)
+    for it in google:
+        if len(kept) - shown >= GOOGLE_MOST:
+            break
+        take(it, PER_PUBLISHER)
+    # Then whatever room is left, newest first from all three.
+    for it in by_date(yahoo + google + press):
+        take(it, PER_PUBLISHER if it in google else None)
+    out = []
+    for it in kept:
         label, reason, score = classify(it["title"], sym, name)
         out.append({
             "title": it["title"], "url": it["url"], "source": it["source"],
             "date": _ny_date(it["date"]) if it["date"] else None,
             "label": label, "reason": reason, "score": score,
         })
-        if len(out) >= max_items:
-            break
     return sorted(out, key=lambda x: x["date"] or "", reverse=True)
 
 
@@ -550,7 +683,8 @@ def overall(items):
     return {"label": label, "score": score, "text": text}
 
 
-def all_headlines(pairs, workers=6):
-    """pairs: [(symbol, name)] -> {symbol: [items]}"""
+def all_headlines(pairs, workers=6, press=None):
+    """pairs: [(symbol, name)], press: {symbol: [press releases]} -> {symbol: [items]}"""
+    press = press or {}
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        return dict(zip([p[0] for p in pairs], pool.map(lambda p: headlines(*p), pairs)))
+        return dict(zip([p[0] for p in pairs], pool.map(lambda p: headlines(*p, press=press.get(p[0], ())), pairs)))
