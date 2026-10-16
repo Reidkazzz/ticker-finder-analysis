@@ -1,253 +1,167 @@
-/* Tool pages: screener, insider buying, ticker report */
-.toolbar { display: flex; flex-direction: column; gap: 14px; margin-bottom: 20px; }
-.toolbar-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-.result-count { color: var(--text-2); font-size: 14px; }
-.result-count b { color: var(--text); font-weight: 500; }
-.select {
-  height: 34px; padding: 0 32px 0 12px; border-radius: var(--r-ctl); background: var(--surface);
-  border: 1px solid var(--line); color: var(--text); font-size: 13.5px; cursor: pointer; appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 256 256'%3E%3Cpath fill='%2386868f' d='M213.7 101.7l-80 80a8 8 0 0 1-11.4 0l-80-80a8 8 0 0 1 11.4-11.4L128 164.7l74.3-74.4a8 8 0 0 1 11.4 11.4z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat; background-position: right 10px center;
-}
-.select:hover { border-color: var(--line-2); }
-.label-inline { display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--text-2); }
+/* Tool pages: the screener and the insider buying page. */
 
-.rule-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 0 32px; }
-.rule-list li { padding: 14px 0; border-top: 1px solid var(--line); display: grid; grid-template-columns: 20px 1fr; gap: 10px; }
-.rule-list i { color: var(--up); margin-top: 3px; }
-.rule-list b { font-weight: 500; display: block; }
-.rule-list span { color: var(--text-2); font-size: 14px; }
-.rule-list li.bonus i { color: var(--text-2); }
-.rule-list b span, .rule-list span span { color: inherit; font-size: inherit; }
-@media (max-width: 720px) { .rule-list { grid-template-columns: 1fr; } }
-
-/* Screener controls: the sector picker, then one bar with the count on the left and the filter and sort on the right,
-   which keep their place however long the count's sentence gets. */
-.screen-toolbar { display: grid; gap: 16px; margin-bottom: 16px; }
-.sector-pills { flex-wrap: wrap; overflow: visible; padding-bottom: 0; }
-.pill.pill-empty:not([aria-pressed="true"]) { color: var(--text-3); background: transparent; }
-.pill.pill-empty:not([aria-pressed="true"]):hover { color: var(--text-2); }
+/* ---- Screener toolbar: the sector pills, then one bar with the count on the left and the filter and sort on the right. ---- */
+.screen-toolbar { display: grid; gap: 14px; margin-bottom: 14px; }
 .screen-bar {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px 24px;
-  padding-top: 16px; border-top: 1px solid var(--line);
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px 20px;
+  padding-top: 14px; border-top: 1px solid var(--line);
 }
-.screen-controls { display: flex; align-items: center; justify-content: flex-end; gap: 12px 20px; flex-wrap: wrap; }
-.seg-field { display: inline-flex; align-items: center; gap: 8px; }
-.seg-label { font-size: 13.5px; color: var(--text-2); white-space: nowrap; }
-.seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: var(--r-ctl); background: var(--surface); border: 1px solid var(--line); }
-.seg-btn {
-  height: 26px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--text-2);
-  font-size: 13px; cursor: pointer; white-space: nowrap; transition: color .15s, background .15s;
-}
-.seg-btn:hover { color: var(--text); }
-/* Chosen the way a sector pill is: a solid light fill, not a shade of gray beside the others. */
-.seg-btn[aria-pressed="true"] { background: var(--text); color: #0a0a0b; }
+.result-count { color: var(--text-2); font-size: 14px; }
+.result-count b { color: var(--text); font-weight: 600; }
+.screen-controls { display: flex; align-items: center; justify-content: flex-end; gap: 10px 18px; flex-wrap: wrap; }
 @media (max-width: 1000px) {
   .screen-bar { grid-template-columns: 1fr; }
   .screen-controls { justify-content: flex-start; }
 }
-/* On a phone the sectors scroll sideways in one row, faded at the right edge to show there are more (with room after
-   the last, so it clears the fade), and each control takes the full width, its options wrapping on the narrowest. */
 @media (max-width: 720px) {
-  .sector-pills { flex-wrap: nowrap; overflow-x: auto; margin: -4px -16px -4px 0; padding: 4px 40px 4px 2px;
-    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); }
   .screen-controls, .seg-field { width: 100%; }
   .seg-field { flex-direction: column; align-items: flex-start; gap: 6px; }
-  .seg { width: 100%; }
-  .seg-btn { flex: 1 1 0; min-width: 0; height: auto; min-height: 30px; padding: 4px 6px; white-space: normal; line-height: 1.2; }
+  .seg { width: 100%; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+  .seg-btn { min-width: 0; height: auto; min-height: 34px; padding: 4px 6px; white-space: normal; line-height: 1.2; }
 }
 
-/* Flags: small icons, one tone each (amber for a fall, green for a sign in its favor, red for a warning), named in the
-   legend above the table, in an opened row and in the list of flags under "What a company needs to pass". */
-.flag-set { list-style: none; margin: 0; padding: 0; display: flex; gap: 4px; }
-.flag {
-  width: 22px; height: 22px; flex: none; display: grid; place-items: center; border-radius: var(--r-tag);
-  background: var(--surface-3); color: var(--text-2); font-size: 13px;
-}
-.flag-up { background: var(--up-dim); color: var(--up); }
-.flag-mid { background: var(--mid-dim); color: var(--mid); }
-.flag-down { background: var(--down-dim); color: var(--down); }
-.flag-more { font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.flag-legend { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; color: var(--text-2); }
-.flag-legend li { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
-.flag-legend .flag { width: 20px; height: 20px; font-size: 12px; }
-.flag-names { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; font-size: 14px; }
-.flag-names li { display: grid; grid-template-columns: 22px 1fr; gap: 10px; align-items: start; }
-.flag-names b { font-weight: 500; }
-.rule-list li.flag-rule { grid-template-columns: 22px 1fr; }
-.rule-list .flag i { color: inherit; margin-top: 0; }
-/* Above the list's own span styles, so each tile keeps its tone and size there. */
-.rule-list span.flag { font-size: 13px; color: var(--text-2); }
-.rule-list span.flag-up { color: var(--up); }
-.rule-list span.flag-mid { color: var(--mid); }
-.rule-list span.flag-down { color: var(--down); }
-/* On a phone the legend is one line that scrolls sideways. */
-@media (max-width: 720px) {
-  .flag-legend { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-right: -16px; padding-right: 40px;
-    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); }
-  .flag-legend::-webkit-scrollbar { display: none; }
-}
+.flag-legend { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12.5px; color: var(--text-3); }
+.flag-legend li { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.flag-legend .flag { width: 18px; height: 18px; }
+.flag-legend .flag .i { width: 12px; height: 12px; }
 
-/* Screener table: every row the same two-line height, the company's ticker over its name. */
-table.data .rank-cell { color: var(--text-3); width: 36px; }
-table.data td.co-cell { min-width: 220px; }
-.screen-table th:nth-child(2), .screen-table td.co-cell, .screen-table th.flags-col, .screen-table td.flags-cell,
-.screen-table th.score-col, .screen-table td.score-cell { text-align: left; }
-table.data.screen-table td { padding-top: 12px; padding-bottom: 12px; }
-/* Beside the ticker, a phone's copy of the row's flags, which stand in for the Flags column there so the score stays in
-   view beside the company. */
-.co-top { display: flex; align-items: center; gap: 8px; }
-.co-top .flag-set { display: none; }
-.co-top .flag { width: 18px; height: 18px; font-size: 11px; }
-@media (max-width: 720px) {
-  .co-top .flag-set { display: flex; gap: 3px; }
-  .screen-table th.flags-col, .screen-table td.flags-cell { display: none; }
+/* ---- The ranked table ---- */
+.screen-table > thead > tr > th, .screen-table > tbody > tr > td { padding-left: 8px; padding-right: 8px; }
+/* Figure columns' names wrap to two lines, so the column is as wide as its figures. */
+.screen-table > thead > tr > th { vertical-align: bottom; }
+.screen-table > thead > tr > th:not(.txt) { white-space: normal; }
+.screen-table > thead > tr > th:not(.txt) .sort { display: inline; }
+.screen-table .c-rank { width: 40px; min-width: 40px; padding-left: 14px; color: var(--text-3); text-align: left; }
+.screen-table th.c-rank { color: var(--text-3); }
+.screen-table td.c-co { padding: 0; }
+.screen-table .c-flags .flag { width: 20px; height: 20px; }
+.screen-table .c-go { width: 40px; padding-right: 12px; }
+.row-toggle {
+  all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0;
+  padding: 5px 8px; cursor: pointer;
 }
-/* While the table is wider than its box, its right edge fades to show it scrolls (screener.js). */
+.row-toggle .co { line-height: 1.3; }
+.row-toggle:focus-visible { outline: 2px solid var(--text); outline-offset: -2px; border-radius: 4px; }
+.row-toggle .caret { font-size: 14px; color: var(--text-3); transition: transform .2s var(--ease), color .15s; }
+.row-toggle[aria-expanded="true"] .caret { transform: rotate(90deg); color: var(--text); }
+.screen-table .co { max-width: 200px; }
+.screen-table .co .nm { max-width: 190px; }
+.screen-table td.c-score { min-width: 140px; }
+.go { display: inline-grid; place-items: center; width: 26px; height: 26px; vertical-align: middle; border-radius: var(--r-ctl); color: var(--text-3); }
+.go:hover { color: var(--text); background: var(--surface-4); }
+.screen-table tbody tr.row > td { background: var(--surface); transition: background .12s; }
+.screen-table tbody tr.row { cursor: pointer; }
+.screen-table tbody tr.row:hover > td,
+.screen-table tbody tr.row:has(.row-toggle[aria-expanded="true"]) > td { background: var(--surface-2); }
+.screen-table tbody tr.row:has(.row-toggle[aria-expanded="true"]) .sym { font-weight: 600; }
+.screen-table tbody tr.row:last-child > td { border-bottom: 0; }
+.screen-table tbody tr.row:last-child:hover > td:first-child { border-bottom-left-radius: var(--r-frame); }
+.screen-table tbody tr.row:last-child:hover > td:last-child { border-bottom-right-radius: var(--r-frame); }
+
+/* Where the table fits its box, the column names stay under the page's header while the list scrolls past. */
+.table-wrap:not(.scrolls) .screen-table thead th { position: sticky; top: var(--nav-h); z-index: 2; }
+/* Where it doesn't, the rank and company stay in view while the figures scroll sideways, the right edge fading. */
+.table-wrap.scrolls .screen-table .c-rank { position: sticky; left: 0; z-index: 1; }
+.table-wrap.scrolls .screen-table .c-co { position: sticky; left: 40px; z-index: 1; border-right: 1px solid var(--line); }
+.table-wrap.scrolls .screen-table thead .c-rank, .table-wrap.scrolls .screen-table thead .c-co { background: var(--bg-raise); }
 .table-wrap.more-right { -webkit-mask-image: linear-gradient(to left, transparent, #000 36px); mask-image: linear-gradient(to left, transparent, #000 36px); }
-/* Where the table fits, its box clips rather than scrolls, so the column names stay in view under the page's header
-   while the list scrolls past. */
-@media (min-width: 1180px) {
-  [data-results] .table-wrap:not(.scrolls) { overflow: clip; }
-  [data-results] table.data th { top: 61px; z-index: 2; }
+.table-note { font-size: 12.5px; color: var(--text-3); margin-top: 10px; }
+
+/* An opened row: its ledger (app.css) on the raised ground, kept to the box's width while the table scrolls sideways,
+   unfolding as it opens: the page's one authored motion. */
+.screen-table .ledger { position: sticky; left: 0; }
+@media (prefers-reduced-motion: no-preference) {
+  .screen-table .ledger { animation: unfold .42s var(--ease) both; }
+  @keyframes unfold { from { clip-path: inset(0 0 100% 0); opacity: 0.35; } to { clip-path: inset(0 0 0 0); opacity: 1; } }
 }
-tr.detail .detail-inner { position: sticky; left: 0; }
-/* The ranked list's twelve columns fit a 1280px screen with company names cut at 180px (the full name is in its title),
-   a narrower score meter and a little less space between columns. */
-[data-results] table.data td.co-cell { min-width: 190px; }
-[data-results] table.data .co .nm { max-width: 180px; }
-[data-results] table.data th, [data-results] table.data td { padding-left: 8px; padding-right: 8px; }
-[data-results] table.data th:first-child, [data-results] table.data td:first-child { padding-left: 14px; }
-[data-results] table.data th:last-child, [data-results] table.data td:last-child { padding-right: 14px; }
-[data-results] table.data td.score-cell { min-width: 100px; }
-[data-results] table.data .meter-track { min-width: 50px; }
-.screen-table td.flags-cell .flag { width: 20px; height: 20px; font-size: 12px; }
+.screen-table > tbody > tr.detail > td { padding: 0; background: var(--bg-raise); border-bottom: 1px solid var(--line); white-space: normal; text-align: left; }
+
+/* ---- On a phone each company is a block: rank, company and score, its flags, then its figures, labelled. ---- */
 @media (max-width: 720px) {
-  [data-results] table.data td.co-cell { min-width: 150px; }
-  [data-results] table.data .co .nm { max-width: 140px; }
-}
-table.data td.score-cell { min-width: 150px; }
-table.data th:nth-child(2), table.data td:nth-child(2) { position: sticky; left: 0; background: inherit; }
-table.data tbody tr { background: var(--surface); }
-table.data tbody tr.row:hover, table.data tbody tr.row[aria-expanded="true"] { background: var(--surface-2); }
-table.data thead th:nth-child(2) { background: var(--bg-raise); z-index: 1; }
-tr.detail td { padding: 0; background: var(--surface-2); white-space: normal; text-align: left; }
-.detail-inner { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; padding: 20px 24px 24px; }
-.detail-inner h4 { margin: 0 0 12px; font-size: 13px; font-weight: 500; color: var(--text-2); }
-.facts { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; font-size: 14px; }
-.facts li { display: grid; grid-template-columns: 18px 1fr; gap: 10px; }
-.facts i { color: var(--text-3); margin-top: 3px; }
-.parts { display: grid; gap: 9px; }
-.part { display: grid; grid-template-columns: 150px 1fr 76px; gap: 12px; align-items: center; font-size: 13px; color: var(--text-2); }
-.part .pts { text-align: right; font-variant-numeric: tabular-nums; color: var(--text); white-space: nowrap; }
-.part-total { border-top: 1px solid var(--line); padding-top: 9px; color: var(--text); font-weight: 500; }
-.part-total span:nth-child(2) { text-align: right; color: var(--text-3); font-weight: 400; }
-.part-track { height: 5px; border-radius: 5px; background: var(--surface-3); overflow: hidden; }
-.part-track span { display: block; height: 100%; background: var(--text-2); border-radius: 5px; }
-.detail-actions { grid-column: 1 / -1; display: flex; gap: 10px; }
-@media (max-width: 760px) {
-  .detail-inner { grid-template-columns: 1fr; padding: 16px; }
-  .part { grid-template-columns: 110px 1fr 70px; }
+  .screen-table, .screen-table tbody { display: block; }
+  .screen-table thead { display: none; }
+  .screen-table tr.row {
+    display: grid; grid-template-columns: 22px repeat(4, minmax(0, 1fr)); column-gap: 10px; row-gap: 10px;
+    padding: 12px 12px 14px 10px; border-bottom: 1px solid var(--line); background: var(--surface);
+  }
+  .screen-table tbody tr.row:last-child { border-bottom: 0; }
+  .screen-table tr.row > td { display: block; padding: 0; border: 0; text-align: left; background: transparent !important; min-width: 0; }
+  .screen-table tbody tr.row:hover, .screen-table tbody tr.row:has(.row-toggle[aria-expanded="true"]) { background: var(--surface-2); }
+  .screen-table td.c-rank { grid-column: 1; grid-row: 1; width: auto; min-width: 0; padding-top: 1px; }
+  .screen-table td.c-co { grid-column: 2 / span 2; grid-row: 1; }
+  .screen-table .row-toggle { padding: 0; }
+  .screen-table .row-toggle .caret { display: none; }
+  .screen-table .co .nm { max-width: 100%; }
+  .screen-table td.c-score { grid-column: 4 / span 2; grid-row: 1; justify-self: end; min-width: 0; }
+  .screen-table td.c-flags { grid-column: 2 / -1; grid-row: 2; }
+  .screen-table tr.row > td.c-flags:not(:has(.flag-set)) { display: none; }
+  .screen-table td[data-label] { font-size: 13px; }
+  .screen-table td[data-label]::before { content: attr(data-label); display: block; font-size: 11px; color: var(--text-3); margin-bottom: 1px; }
+  .screen-table td.c-mcap { grid-column: 2; grid-row: 3; }
+  .screen-table td.c-ps { grid-column: 3; grid-row: 3; }
+  .screen-table td.c-pb { grid-column: 4; grid-row: 3; }
+  .screen-table td.c-margin { grid-column: 5; grid-row: 3; }
+  .screen-table td.c-debt { grid-column: 2; grid-row: 4; }
+  .screen-table td.c-fcf { grid-column: 3; grid-row: 4; }
+  .screen-table td.c-dd { grid-column: 4; grid-row: 4; }
+  .screen-table td.c-an { grid-column: 5; grid-row: 4; }
+  .screen-table tr.row > td.c-go { display: none; }
+  .screen-table td .tag { height: 19px; padding: 0 5px; font-size: 11.5px; }
+  .screen-table tr.detail, .screen-table tr.detail > td { display: block; }
 }
 
-.notice.unverified { margin-top: 16px; }
-.notice.unverified a { color: var(--text); font-family: var(--mono); }
-.detail-inner h4.facts-head { margin-top: 20px; }
-.rule-head { font-size: 15px; font-weight: 500; line-height: 1.3; letter-spacing: -0.02em; margin: 24px 0 4px; }
-.rule-note { font-size: 13.5px; margin-bottom: 4px; }
+/* ---- The rail of links to the lists under the ranked one ---- */
+.index-rail {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 4px; margin-top: 28px; padding: 8px 10px;
+  border: 1px solid var(--line); border-radius: var(--r-frame); background: var(--bg-raise);
+}
+.index-label { font-size: 12.5px; color: var(--text-3); margin: 0 8px 0 4px; }
+.index-rail a { display: inline-flex; align-items: center; gap: 7px; padding: 5px 9px; border-radius: var(--r-ctl); font-size: 13px; color: var(--text-2); text-decoration: none; }
+.index-rail a:hover { color: var(--text); background: var(--surface-2); }
+.index-rail .count { font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; }
 
-/* The sections under the screener's list: industries out of favor and the three watch lists. Their first column
-   (the company or industry) stays in view while the figures scroll sideways on a narrow screen. */
-.section-lede { color: var(--text-2); font-size: 15px; max-width: 72ch; margin: -4px 0 16px; }
-details.list-rules { margin-bottom: 16px; }
-table.data.list th.txt, table.data.list td.txt { text-align: left; }
-table.data.list td.txt:not(.co-cell):not(.ind-cell) { color: var(--text-2); font-size: 13.5px; }
-table.data.list th:nth-child(2), table.data.list td:nth-child(2) { position: static; }
-table.data.list thead th:nth-child(2) { z-index: auto; }
-table.data.list th:first-child, table.data.list td:first-child { position: sticky; left: 0; background: inherit; }
-table.data.list thead th:first-child { background: var(--bg-raise); z-index: 1; }
-table.data.list td.co-cell { min-width: 200px; }
-table.data.list td .co .sym { text-decoration: none; }
-table.data.list td .co .sym:hover { text-decoration: underline; }
-/* An industry's name wraps: the longest ("Water Sewer Pipeline Comm & Power Line Construction") would otherwise widen the
-   sticky first column past a phone's screen and hide every figure behind it. */
-.ind-cell b { display: block; font-weight: 500; white-space: normal; }
-table.data.list td.ind-cell { min-width: 180px; max-width: 260px; white-space: normal; }
-.ind-cell span { display: block; color: var(--text-3); font-size: 12.5px; }
-.list-more { margin-top: 12px; }
-.list-note { font-size: 13px; margin-top: 12px; }
+/* ---- How the list is made: what must pass, what earns points, what is only worth knowing. ---- */
+.method-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: var(--r-frame); background: var(--surface); }
+.method-col { padding: 20px 22px 22px; border-left: 1px solid var(--line); min-width: 0; }
+.method-col:first-child { border-left: 0; }
+.method-col h3 { font-size: 15px; }
+.method-lede { font-size: 13px; color: var(--text-3); margin: 3px 0 12px; }
+.method-foot { font-size: 12.5px; color: var(--text-3); margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.method-foot a { color: var(--text-2); }
+.method .rule-list li { font-size: 13px; }
+.method .rule-list li > .i { color: var(--up); }
+.method .rule-list b { font-size: 13.5px; }
+.flag-rules li { grid-template-columns: 22px minmax(0, 1fr); }
+.tape-key { margin: 0 0 4px; }
+.points-list { list-style: none; margin: 8px 0 0; padding: 0; }
+.points-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 9px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.points-list .pk { font-weight: 600; font-size: 13.5px; }
+.points-list .pmax { font-variant-numeric: tabular-nums; font-weight: 600; }
+.points-list .pdesc { grid-column: 1 / -1; color: var(--text-2); }
+@media (max-width: 1000px) {
+  .method-grid { grid-template-columns: 1fr; }
+  .method-col { border-left: 0; border-top: 1px solid var(--line); }
+  .method-col:first-child { border-top: 0; }
+}
+
+/* ---- The lists under the ranked one ---- */
+details.list-rules { margin-bottom: 14px; }
+.table-wrap.list-wrap { overflow-x: auto; }
+table.data.list td.txt:not(.co-cell):not(.ind-cell) { color: var(--text-2); }
+table.data.list th:first-child, table.data.list td:first-child { position: sticky; left: 0; z-index: 1; background: var(--surface); }
+table.data.list thead th:first-child { background: var(--bg-raise); }
+table.data.list td.co-cell { min-width: 210px; }
+table.data.list .co .nm { max-width: 240px; }
+.ind-cell b { display: block; font-weight: 600; white-space: normal; }
+table.data.list td.ind-cell { min-width: 200px; max-width: 300px; white-space: normal; }
+.ind-cell span { display: block; color: var(--text-3); font-size: 12px; }
+.cell-sub { display: block; font-size: 11.5px; color: var(--text-3); }
+.list-more { margin-top: 10px; }
+.list-note { font-size: 12.5px; color: var(--text-3); margin-top: 10px; max-width: 96ch; }
+.notice.unverified { margin-top: 12px; }
+.notice.unverified p + p { margin-top: 6px; }
 @media (max-width: 640px) {
   table.data.list td.co-cell { min-width: 150px; }
   table.data.list .co .nm { max-width: 150px; }
-  table.data.list td.ind-cell { min-width: 140px; max-width: 160px; }
+  table.data.list td.ind-cell { min-width: 150px; max-width: 170px; }
 }
-
-/* Insider feed */
-.day-group + .day-group { margin-top: 36px; }
-.day-head { display: flex; align-items: baseline; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line); margin-bottom: 12px; }
-.day-head h2 { font-size: 18px; letter-spacing: -0.02em; }
-.day-head span { font-size: 13px; color: var(--text-3); }
-.buy-list { display: grid; gap: 10px; }
-.buy {
-  display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.6fr); gap: 24px;
-  padding: 18px 20px; border: 1px solid var(--line); border-radius: var(--r-panel); background: var(--surface);
-}
-.buy:hover { border-color: var(--line-2); }
-.buy-co { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-.buy-co .top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.buy-co .sym { font-family: var(--mono); font-weight: 500; font-size: 15px; text-decoration: none; }
-.buy-co .sym:hover { text-decoration: underline; }
-.buy-co .nm { color: var(--text-2); font-size: 14px; }
-.buy-stats { display: grid; grid-template-columns: repeat(3, auto); justify-content: start; gap: 4px 24px; font-size: 13px; color: var(--text-3); }
-.buy-stats b { display: block; font-size: 16px; font-weight: 500; color: var(--text); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
-.buy-stats b.up { color: var(--up); }
-.buy-stats b.down { color: var(--down); }
-/* The screener check (insiders.js fitLine): tags wrap, since a missed rule can be longer than the card is wide. */
-.fit-row { justify-content: flex-end; }
-.pills-labelled { flex-wrap: wrap; align-items: center; overflow: visible; }
-.pills-label { font-size: 13.5px; color: var(--text-2); margin-right: 4px; }
-.tag.fit { white-space: normal; height: auto; min-height: 22px; padding: 3px 8px; line-height: 1.35; }
-.fit-note { color: var(--text-3); font-size: 13px; }
-.stake-row .fit-line { margin-top: 6px; }
-.buyers { display: grid; gap: 2px; align-content: start; }
-.buyer {
-  display: grid; grid-template-columns: minmax(0, 1.4fr) 92px 92px 84px 20px; gap: 12px; align-items: center;
-  padding: 8px 10px; border-radius: var(--r-ctl); font-size: 13.5px;
-}
-.buyer:hover { background: var(--surface-2); }
-.buyer .who b { display: block; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.buyer .who span { display: block; color: var(--text-3); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.buyer .n { text-align: right; font-variant-numeric: tabular-nums; }
-.buyer .n small { display: block; color: var(--text-3); font-size: 11.5px; }
-.buyer a.doc { color: var(--text-3); display: grid; place-items: center; }
-.buyer a.doc:hover { color: var(--text); }
-.buyers-head { display: grid; grid-template-columns: minmax(0, 1.4fr) 92px 92px 84px 20px; gap: 12px; padding: 0 10px 6px; font-size: 12px; color: var(--text-3); }
-.buyers-head span { text-align: right; }
-.buyers-head span:first-child { text-align: left; }
-@media (max-width: 900px) {
-  .buy { grid-template-columns: 1fr; gap: 16px; padding: 16px; }
-}
-@media (max-width: 560px) {
-  .buyer, .buyers-head { grid-template-columns: minmax(0, 1fr) 76px 70px 18px; }
-  .buyer .stake, .buyers-head .stake { display: none; }
-  .buy-stats { grid-template-columns: repeat(2, auto); }
-}
-
-.stakes { display: grid; gap: 10px; }
-.stake-row {
-  display: grid; grid-template-columns: 90px minmax(0, 1.2fr) 80px minmax(0, 1.6fr) 20px; gap: 20px; align-items: start;
-  padding: 16px 20px; border: 1px solid var(--line); border-radius: var(--r-panel); background: var(--surface); font-size: 14px;
-}
-.stake-row .sym { font-family: var(--mono); font-weight: 500; }
-.stake-row .pct { font-variant-numeric: tabular-nums; font-weight: 500; font-size: 16px; }
-.stake-row .purpose { color: var(--text-2); font-size: 13.5px; }
-.stake-row a.doc { color: var(--text-3); }
-.stake-row a.doc:hover { color: var(--text); }
-@media (max-width: 760px) {
-  .stake-row { grid-template-columns: 1fr auto; gap: 8px 16px; }
-  .stake-row .purpose { grid-column: 1 / -1; }
-}
-
-.section-title { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin: 64px 0 16px; flex-wrap: wrap; }
-.section-title h2 { font-size: 24px; }
-.section-title p { color: var(--text-2); font-size: 14px; max-width: 60ch; }

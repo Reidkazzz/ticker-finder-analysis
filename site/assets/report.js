@@ -1,89 +1,115 @@
-import { attachSearch, chrome, date, displayName, esc, load, meter, money, pct, price, searchMarkup, signClass } from "./common.js";
+import { attachSearch, chrome, date, displayName, esc, healthBand, icon, load, localToday, longDate, meter, money, pct, price, searchMarkup, signClass } from "./common.js";
+import { ledger } from "./ledger.js";
 
-chrome();
+// The report has its own search box at the top of the page, which opens a report in place.
+chrome({ search: false });
 
 const host = document.querySelector("[data-report]");
+const startHead = document.querySelector("[data-start]");
 const searchHost = document.getElementById("report-search");
 searchHost.innerHTML = searchMarkup("report-q", "Search another ticker or company");
+const searchInput = searchHost.querySelector("input");
 attachSearch(searchHost.querySelector("form"), {
   onPick: (sym) => {
-    history.pushState(null, "", `?t=${encodeURIComponent(sym)}`);
-    show(sym);
+    searchInput.value = "";
+    searchInput.blur();
+    go(sym);
   },
 });
-window.addEventListener("popstate", () => route());
-// Peer links open that company's report in place, like a search pick. A jump to the peer list scrolls without
-// touching the address, since a #fragment there would re-run the router and reload the report.
+
+const TITLE = "TFA";
+const thisYear = localToday().slice(0, 4);
+// A date with its year only when it isn't this year's: "Oct 12", "Dec 18, 2025".
+const day = (iso) => (!iso ? "" : iso.slice(0, 4) === thisYear ? date(iso) : longDate(iso));
+const fullDate = longDate;
+const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : "");
+const andList = (a) => (a.length < 2 ? a.join("") : `${a.slice(0, -1).join(", ")} and ${a[a.length - 1]}`);
+// One decimal for millions and billions ($109.4B, $375.0M), floored like money() so a figure never reads larger.
+const amount = (n) => money(n, Math.abs(n) >= 1e6 ? { digits: 1 } : {});
+
+// ---- Navigation in place: search picks, peer links and the popular list open a report without reloading. ----
+
+// Each history entry carries an id, so Back and Forward return to where that report was scrolled.
+const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+let entry = history.state?.id || newId();
+const initialY = history.state?.y || 0;
+try { history.replaceState({ ...(history.state || {}), id: entry }, ""); } catch {}
+const scrolls = new Map();
+let restoring = true; // scroll events while a report is swapped in don't count as the reader's position
+let current; // the symbol shown, or null on the start page
+addEventListener("scroll", () => { if (!restoring) scrolls.set(entry, scrollY); }, { passive: true });
+addEventListener("pagehide", () => {
+  try { history.replaceState({ ...(history.state || {}), id: entry, y: scrollY }, ""); } catch {}
+});
+
+function go(sym) {
+  scrolls.set(entry, scrollY);
+  try { history.replaceState({ ...(history.state || {}), id: entry, y: scrollY }, ""); } catch {}
+  entry = newId();
+  history.pushState({ id: entry }, "", `?t=${encodeURIComponent(sym)}`);
+  show(sym, { y: 0, focus: true });
+}
+
+addEventListener("popstate", (e) => {
+  const t = new URLSearchParams(location.search).get("t");
+  const sym = t ? t.toUpperCase() : null;
+  // A jump to a #fragment (the skip link) changes the entry but not the report.
+  if (sym === (current ?? null) && current !== undefined) {
+    if (e.state?.id) entry = e.state.id;
+    return;
+  }
+  entry = e.state?.id || newId();
+  route({ y: scrolls.get(entry) ?? e.state?.y ?? 0, focus: true });
+});
+
+// A jump within the report scrolls without touching the address, since a #fragment there would add an entry.
+function jumpTo(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.scrollIntoView({ block: "start" });
+  if (!el.hasAttribute("tabindex")) el.setAttribute("tabindex", "-1");
+  el.focus({ preventScroll: true });
+}
+
 host.addEventListener("click", (e) => {
-  if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
   const jump = e.target.closest("[data-jump]");
   if (jump) {
     e.preventDefault();
-    document.getElementById(jump.dataset.jump)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    jumpTo(jump.dataset.jump);
     return;
   }
-  const peer = e.target.closest("a[data-sym]");
-  if (peer) {
+  const link = e.target.closest("a[data-sym]");
+  if (link) {
     e.preventDefault();
-    history.pushState(null, "", `?t=${encodeURIComponent(peer.dataset.sym)}`);
-    show(peer.dataset.sym);
+    go(link.dataset.sym);
   }
 });
 
-const VERDICT = {
-  undervalued: { word: "Undervalued", tag: "tag-up" },
-  fair: { word: "Fairly valued", tag: "tag-mid" },
-  overvalued: { word: "Overvalued", tag: "tag-down" },
-};
+// ---- Fair value ----
+
+const VERDICT = { undervalued: "Undervalued", fair: "Fairly valued", overvalued: "Overvalued" };
 const NEWS_TAG = { bullish: "tag-up", bearish: "tag-down", neutral: "", none: "" };
-const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : "");
 const CONFIDENCE = {
   higher: "All three methods were available. They can still disagree, so compare the three estimates above before leaning on the range.",
   moderate: "Two methods were available.",
   low: "Only one method was available, so treat this range loosely.",
 };
 
-function chart(points) {
-  if (!points || points.length < 4) return `<p class="faint" style="margin-top:18px;font-size:14px">No price history available.</p>`;
-  const W = 600, H = 190, pad = 4;
-  const ys = points.map((p) => p[1]);
-  const lo = Math.min(...ys), hi = Math.max(...ys);
-  const x = (i) => pad + (i / (points.length - 1)) * (W - pad * 2);
-  const y = (v) => pad + (1 - (v - lo) / (hi - lo || 1)) * (H - pad * 2);
-  const line = points.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p[1]).toFixed(1)}`).join("");
-  const up = ys[ys.length - 1] >= ys[0];
-  const col = up ? "var(--up)" : "var(--down)";
-  const first = new Date(points[0][0] * 1000).toISOString().slice(0, 10);
-  const change = ys[ys.length - 1] / ys[0] - 1;
-  return `<div class="chart">
-    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Weekly closing price over the last year, ${pct(change, 1, true)}">
-      <defs><linearGradient id="fade" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="${col}" stop-opacity=".18"/><stop offset="1" stop-color="${col}" stop-opacity="0"/></linearGradient></defs>
-      <path d="${line}L${x(points.length - 1)},${H}L${x(0)},${H}Z" fill="url(#fade)"/>
-      <path d="${line}" fill="none" stroke="${col}" stroke-width="1.75" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>
-    </svg>
-    <div class="chart-foot"><span>${esc(date(first, { month: "short", year: "numeric" }))}</span><span class="${signClass(change)}">${pct(change, 1, true)} over the year</span><span>Now</span></div>
-  </div>`;
-}
+const noteBox = (n) => `<p class="notice r-note">${icon("info")}<span>${esc(n)}</span></p>`;
 
-function rangeViz(v, px) {
-  const lo = Math.min(v.low, px) * 0.85, hi = Math.max(v.high, px) * 1.15;
-  const at = (n) => ((n - lo) / (hi - lo)) * 100;
-  const pLeft = at(px);
-  return `<div class="range" role="img" aria-label="Estimated fair value ${price(v.low)} to ${price(v.high)}, current price ${price(px)}">
-    <div class="band" style="left:${at(v.low)}%;width:${at(v.high) - at(v.low)}%"></div>
-    <div class="mark" style="left:${pLeft}%"></div>
-    <div class="mark-label" style="left:${Math.min(Math.max(pLeft, 8), 92)}%">Price ${price(px)}</div>
-    <div class="edge" style="left:${at(v.low)}%">${price(v.low)}</div>
-    <div class="edge" style="left:${at(v.high)}%">${price(v.high)}</div>
-  </div>`;
-}
-
-// Shown near the verdict and the profit bars when last year's profit included one-time items, and for a REIT, how its
-// funds from operations (FFO) come from its net income.
-function oneTimeNote(r, style = "margin-top:16px") {
-  const n = r.fundamentals?.one_time_note;
-  // A paragraph rather than a div, so the first bar after it keeps its :first-of-type styling.
-  return n ? `<p class="notice" style="${style}"><i class="ph ph-info" aria-hidden="true"></i><span>${esc(n)}</span></p>` : "";
+// Where the one-time items note (or, for a REIT, how its FFO comes from its net income) is shown, once: in the
+// screener's ledger, which prints it, for a company on the list; beside the fair value it changes; else by the
+// profit bars; else under the financial history; else in the notes.
+function oneTimeHome(r) {
+  const f = r.fundamentals;
+  if (!f?.one_time_note) return null;
+  if (r.screener === true) return "screener";
+  if (r.valuation && VERDICT[r.valuation.verdict]) return "verdict";
+  if (r.health?.length) return "health";
+  if (f.history?.length) return "history";
+  return "notes";
 }
 
 // The model's track record by kind of company, from a point-in-time backtest of this code on four past dates (the
@@ -121,8 +147,9 @@ function valuationKind(r) {
 
 // A plain-English account of how the estimate is made and how well it has done, under the methods. The discount rates
 // and growth limits repeat report.py's CF_RATES, CF_SMALL_RATE, CF_RATE_BASIS, CF_GROWTH_CAP and CF_TERMINAL, and the
-// track record comes from the point-in-time backtest described in the README.
-function howItWorks(r) {
+// track record comes from the point-in-time backtest described in the README. `none`: the company has figures but no
+// fair value, so the explanation names the methods that would apply.
+function howItWorks(r, none = false) {
   const kind = valuationKind(r);
   const item = (title, text) => `<li><b>${title}</b><span>${text}</span></li>`;
   const peersLine = kind === "bank"
@@ -153,11 +180,11 @@ function howItWorks(r) {
     // The methods its fair value used, where it has one: both, or one where the other can't be worked out.
     const [pe, pb] = lenderMethods(r);
     const on = pe && !pb ? "price to net investment income" : pb && !pe ? "price to book" : "price to net investment income and price to book";
-    items.push(item(on[0].toUpperCase() + on.slice(1), `A business development company is a fund listed as a company that lends to and invests in private companies. Its borrowing and its loans are the business itself, so it is valued on similar business development companies' ${on}, with no sales multiple or cash-flow model. Net investment income is what its loans and stakes earn in interest, dividends and fees, less its costs, before the gains and losses on them that swing its net income from year to year. Book value is its net asset value: the loans and stakes it holds as its books carry them, less what it owes. Both are counted after any preferred stock, which is owed to preferred shareholders first.`));
+    items.push(item(cap(on), `A business development company is a fund listed as a company that lends to and invests in private companies. Its borrowing and its loans are the business itself, so it is valued on similar business development companies' ${on}, with no sales multiple or cash-flow model. Net investment income is what its loans and stakes earn in interest, dividends and fees, less its costs, before the gains and losses on them that swing its net income from year to year. Book value is its net asset value: the loans and stakes it holds as its books carry them, less what it owes. Both are counted after any preferred stock, which is owed to preferred shareholders first.`));
   } else if (r.fundamentals?.revenue_basis && r.fundamentals.reit === "mortgage") {
     const [pe, pb] = lenderMethods(r);
     const on = pe && !pb ? "price to earnings" : pb && !pe ? "price to book" : "price to earnings and price to book";
-    items.push(item(on[0].toUpperCase() + on.slice(1), `A REIT that lends or holds mortgage bonds pays for them mostly with borrowed money, so it is valued on similar REITs that lend: their ${on} (book value being its loans and securities as its books carry them, less what it owes), with no sales multiple or cash-flow model. Its gains and losses on its investments and hedges count in its earnings, since they are part of its business. Earnings and book value are counted after any preferred stock, which is owed to preferred shareholders first.`));
+    items.push(item(cap(on), `A REIT that lends or holds mortgage bonds pays for them mostly with borrowed money, so it is valued on similar REITs that lend: their ${on} (book value being its loans and securities as its books carry them, less what it owes), with no sales multiple or cash-flow model. Its gains and losses on its investments and hedges count in its earnings, since they are part of its business. Earnings and book value are counted after any preferred stock, which is owed to preferred shareholders first.`));
   } else if (r.fundamentals?.revenue_basis === "bank") {
     items.push(item("Price to earnings", "A lender whose revenue is its net interest income (interest earned less interest paid) plus fees is valued on similar companies' price to earnings. Most lenders it is compared with count their interest before what they pay on their borrowing, so their sales aren't on the same footing and no sales multiple is used, nor a cash-flow model, since borrowing is a lender's raw material."));
   } else {
@@ -165,54 +192,206 @@ function howItWorks(r) {
   }
   items.push(item("The verdict", "The midpoint is the middle of the estimates counted (with two, their average). A midpoint more than 50% above or below the price needs two independent estimates to agree, and estimates from the same similar companies count as one. The range spans the estimates and is at least 10% either side of the midpoint. Undervalued means today's price is below the range, overvalued means above it."));
   items.push(item("How well has this worked?", r.fundamentals?.revenue_basis ? TRACK_RECORD.untested : TRACK_RECORD[kind]));
-  return `<details class="disclose how" style="margin-top:18px">
-    <summary><i class="ph ph-question" aria-hidden="true" style="margin:0;color:var(--text-2);transform:none"></i>How this fair value is worked out<i class="ph ph-caret-down" aria-hidden="true"></i></summary>
+  return `<details class="disclose v-how">
+    <summary>${icon("question", "lead-i")}${none ? "How a fair value is worked out for this company" : "How this fair value is worked out"}${icon("caret-down", "caret")}</summary>
     <div class="body"><ul class="how-list">${items.join("")}</ul></div>
   </details>`;
 }
 
-function verdictPanel(r) {
+// The fair-value range on a price scale: the band from low to high, its midpoint, and today's price. The gap from the
+// midpoint to the price is drawn in the sign of the figure the verdict line states. Labels are placed by fitRange().
+function rangeViz(v, px) {
+  const lo = Math.min(v.low, px) * 0.85, hi = Math.max(v.high, px) * 1.15;
+  const at = (n) => ((n - lo) / (hi - lo)) * 100;
+  const mid = v.mid != null ? at(v.mid) : null;
+  const p = at(px);
+  const gap = mid == null ? "" : `<span class="rv-gap ${v.upside > 0 ? "up from-right" : "down"}" style="left:${Math.min(mid, p).toFixed(2)}%;width:${Math.abs(p - mid).toFixed(2)}%"></span>`;
+  return `<div class="rv" data-rv role="img" aria-label="${esc(`Estimated fair value ${price(v.low)} to ${price(v.high)}${v.mid != null ? `, midpoint ${price(v.mid)}` : ""}; today's price ${price(px)}`)}">
+    <span class="rv-px" style="--x:${p.toFixed(2)}%" aria-hidden="true">Price ${price(px)}</span>
+    <div class="rv-track" aria-hidden="true">
+      <span class="rv-band" style="left:${at(v.low).toFixed(2)}%;width:${(at(v.high) - at(v.low)).toFixed(2)}%"></span>
+      ${gap}
+      ${mid == null ? "" : `<span class="rv-mid" style="left:${mid.toFixed(2)}%"></span>`}
+      <span class="rv-mark" style="left:${p.toFixed(2)}%;--from:${(mid ?? p).toFixed(2)}%"></span>
+    </div>
+    <span class="rv-lo" style="--x:${at(v.low).toFixed(2)}%" aria-hidden="true">${price(v.low)}</span>
+    <span class="rv-hi" style="--x:${at(v.high).toFixed(2)}%" aria-hidden="true">${price(v.high)}</span>
+  </div>`;
+}
+
+// Puts each label of a range over its point, kept inside the scale and apart from each other: the low and high labels
+// move apart where they would touch, and the high one drops to a second line where the scale is too narrow for both.
+function fitRange(rv) {
+  const W = rv.clientWidth;
+  if (!W) return;
+  const xOf = (el) => (parseFloat(el.style.getPropertyValue("--x")) / 100) * W;
+  const inside = (cx, w) => Math.max(0, Math.min(W - w, cx - w / 2));
+  const place = (el, x) => { el.style.left = `${x.toFixed(1)}px`; el.style.transform = "none"; };
+  const pxEl = rv.querySelector(".rv-px");
+  place(pxEl, inside(xOf(pxEl), pxEl.offsetWidth));
+  const a = rv.querySelector(".rv-lo"), b = rv.querySelector(".rv-hi");
+  const wa = a.offsetWidth, wb = b.offsetWidth, gap = 12;
+  let xa = inside(xOf(a), wa), xb = inside(xOf(b), wb);
+  rv.classList.remove("rv-stack");
+  if (xa + wa + gap > xb) {
+    const m = (xOf(a) + xOf(b)) / 2;
+    xa = m - gap / 2 - wa;
+    xb = m + gap / 2;
+    if (xa < 0) { xb -= xa; xa = 0; }
+    if (xb + wb > W) { xa -= xb + wb - W; xb = W - wb; }
+    if (xa < 0) {
+      rv.classList.add("rv-stack");
+      xa = inside(xOf(a), wa);
+      xb = inside(xOf(b), wb);
+    }
+  }
+  place(a, xa);
+  place(b, xb);
+}
+const rangeObserver = window.ResizeObserver ? new ResizeObserver((es) => es.forEach((e) => fitRange(e.target))) : null;
+function fitRanges() {
+  host.querySelectorAll("[data-rv]").forEach((rv) => { fitRange(rv); rangeObserver?.observe(rv); });
+  // The labels' widths change once the web font arrives.
+  document.fonts?.ready.then(() => host.querySelectorAll("[data-rv]").forEach(fitRange));
+}
+
+// The heading where there is no verdict: a fair value withheld for a stated reason, a company the site doesn't value
+// (coverage, from its SEC filings), or one whose figures gave no estimate.
+const NOT_VALUED = new Set(["fund", "blank_check", "foreign", "currency"]);
+const NOT_YET = new Set(["no_annual", "annual_untagged"]);
+function noVerdictWord(r) {
+  if (r.valuation?.withheld) return "No fair value estimate";
+  const kind = !r.valuation && r.coverage?.kind;
+  if (kind && NOT_VALUED.has(kind)) return "Not valued";
+  if (kind && NOT_YET.has(kind)) return "Not enough data yet";
+  if (!kind && r.fundamentals) return "No fair value estimate";
+  return "Not enough data";
+}
+
+function verdictPanel(r, home) {
   const v = r.valuation;
+  const note = home === "verdict" ? noteBox(r.fundamentals.one_time_note) : "";
   if (!v || !VERDICT[v.verdict]) {
-    // A fair value withheld for a stated reason, or why the company has no figures to value (coverage, from its SEC
-    // filings: too new, a foreign filer, a fund). Older data has neither, so it gets the general explanation.
-    const why = v?.withheld ? esc(v.withheld) : r.coverage?.note ? esc(r.coverage.note) : `There is not enough reliable data to estimate a fair value. This happens when we could not find a full year of financials in the company's SEC filings,
+    // Older data has neither a reason nor coverage, so it gets the general explanation.
+    // The heading already says there is no estimate, so a reason that opens by saying so starts after it.
+    const why = v?.withheld ? esc(v.withheld.replace(/^There is no fair value estimate\.\s*/, ""))
+      : r.coverage?.note ? esc(r.coverage.note)
+      : r.fundamentals ? "None of the valuation methods for this kind of company could be worked out from its figures."
+      : `There is not enough reliable data to estimate a fair value. This happens when we could not find a full year of financials in the company's SEC filings,
       which is common for new listings and foreign companies, foreign banks among them. It also happens when a company is losing money and has no positive cash flow to value,
       since comparing it with others on sales says little about what it is worth.`;
-    const kind = !v && r.coverage?.kind;
-    const word = kind === "fund" ? "Not valued" : kind === "no_annual" || kind === "annual_untagged" ? "Not enough data yet" : "Not enough data";
-    return `<section class="panel panel-pad verdict"><h2>Verdict</h2>
-      <p class="word" style="font-size:28px">${word}</p>
-      <p class="line">${why}</p>${oneTimeNote(r)}</section>`;
+    return `<section class="frame r-verdict is-none" aria-labelledby="verdict-h">
+      <h2 class="v-word" id="verdict-h"><span class="sr-only">Fair value: </span>${noVerdictWord(r)}</h2>
+      <p class="v-line">${why}</p>${note}
+      ${r.fundamentals && !r.coverage ? howItWorks(r, true) : ""}
+    </section>`;
   }
   const up = v.upside;
-  const conf = v.confidence_note || CONFIDENCE[v.confidence];
-  return `<section class="panel panel-pad verdict">
-    <h2>Verdict</h2>
-    <p class="word ${v.verdict}">${VERDICT[v.verdict].word}</p>
-    <p class="line">Estimated fair value <b>${price(v.low)} to ${price(v.high)}</b>.${up == null ? "" : ` The midpoint of <b>${price(v.mid)}</b> is
+  const conf = v.confidence_note || CONFIDENCE[v.confidence] || "";
+  const peers = r.peers?.length && v.methods.some((m) => m.name.startsWith("Peer"));
+  return `<section class="frame r-verdict" aria-labelledby="verdict-h">
+    <h2 class="v-word" id="verdict-h"><span class="sr-only">Fair value verdict: </span>${VERDICT[v.verdict]}</h2>
+    <p class="v-line">Estimated fair value <b>${price(v.low)} to ${price(v.high)}</b>.${up == null ? "" : ` The midpoint of <b>${price(v.mid)}</b> is
       <b class="${signClass(up)}">${pct(Math.abs(up), 0)} ${up >= 0 ? "above" : "below"}</b> today's price.`}${v.limit_note ? ` ${esc(v.limit_note)}` : ""}</p>
     ${r.price ? rangeViz(v, r.price) : ""}
-    <div class="methods">${v.methods.map((m) => `<div class="method-row${m.counted === false ? " ref" : ""}"><b>${esc(m.name)}${m.counted === false ? ` <span class="tag">For comparison</span>` : ""}</b><span class="v">${price(m.value)}</span><p>${esc(m.note)}</p></div>`).join("")}</div>
-    ${r.peers?.length && v.methods.some((m) => m.name.startsWith("Peer")) ? `<p class="fine"><a href="#peers" data-jump="peers">See the ${r.peers.length} similar companies</a> behind the peer estimates.</p>` : ""}
-    ${oneTimeNote(r)}
-    <p class="fine">${esc(conf)} This is an estimate, not a price target, and not investment advice.</p>
+    <ul class="v-methods" aria-label="The estimates behind the range">${v.methods.map((m) => `<li${m.counted === false ? ` class="ref"` : ""}>
+      <div class="m-top"><span class="m-name">${esc(m.name)}${m.counted === false ? ` <span class="tag tag-line">For comparison</span>` : ""}</span><span class="m-v">${price(m.value)}</span></div>
+      <p>${esc(m.note)}</p></li>`).join("")}</ul>
+    ${peers ? `<p class="v-fine"><a href="#peers" data-jump="peers">See the ${r.peers.length} similar companies</a> behind the peer estimates.</p>` : ""}
+    ${note}
+    <p class="v-fine">${esc(conf)} This is an estimate, not a price target, and not investment advice.</p>
     ${howItWorks(r)}
   </section>`;
 }
 
+// ---- Price ----
+
+let chartSeq = 0;
+const isoOf = (unix) => new Date(unix * 1000).toISOString().slice(0, 10);
+
+// Weekly closes as a line, spaced by week (the last point is the latest price, a few days after the last weekly close).
+// The heading and the change say the span the points actually cover: 12 months, or since the first point.
 function pricePanel(r) {
-  const fromHigh = r.high52 ? r.price / r.high52 - 1 : null;
-  return `<section class="panel panel-pad chart-panel">
-    <h2>Price, last 12 months</h2>
-    ${chart(r.weekly)}
-    <div class="stat-row">
-      <div>52-week low<b>${price(r.low52)}</b></div>
-      <div>52-week high<b>${price(r.high52)}</b></div>
-      <div>From high<b class="${signClass(fromHigh)}">${fromHigh == null ? "n/a" : pct(fromHigh, 0, true)}</b></div>
-    </div>
+  const pts = (r.weekly || []).filter((p) => p && p[1] != null);
+  const fromHigh = r.high52 && r.price ? r.price / r.high52 - 1 : null;
+  const stats = `<div class="p-side"><dl class="p-stats">
+      <div><dt>52-week low</dt><dd>${price(r.low52)}</dd></div>
+      <div><dt>52-week high</dt><dd>${price(r.high52)}</dd></div>
+      <div><dt>From 52-week high</dt><dd class="${signClass(fromHigh)}">${fromHigh == null ? "n/a" : pct(fromHigh, 0, true)}</dd></div>
+    </dl>
+    <p class="p-note">The 52-week low and high are from daily prices, so they can fall outside the weekly closes the chart plots.</p></div>`;
+  if (pts.length < 4) {
+    return `<section class="frame r-price" aria-labelledby="price-h">
+      <div class="p-head"><h2 id="price-h">Price</h2></div>
+      <p class="r-none">Too few weekly prices to draw a chart yet${pts.length ? ` (${pts.length} so far)` : ""}.</p>${stats}</section>`;
+  }
+  const W = 600, H = 170, pad = 6;
+  const ys = pts.map((p) => p[1]);
+  const lo = Math.min(...ys), hi = Math.max(...ys);
+  const x = (i) => (i / (pts.length - 1)) * W;
+  const y = (v) => pad + (1 - (v - lo) / (hi - lo || 1)) * (H - pad * 2);
+  const line = pts.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p[1]).toFixed(1)}`).join("");
+  const first = ys[0], last = ys[ys.length - 1];
+  const change = last / first - 1;
+  const tone = last >= first ? "up" : "down";
+  const d0 = isoOf(pts[0][0]), d1 = isoOf(pts[pts.length - 1][0]);
+  const year = (pts[pts.length - 1][0] - pts[0][0]) / 86400 >= 350;
+  const title = year ? "Price, last 12 months" : `Price since ${fullDate(d0)}`;
+  const over = year ? "over 12 months" : `since ${date(d0)}`;
+  const id = `pc-fade-${++chartSeq}`;
+  const lastY = y(last);
+  return `<section class="frame r-price" aria-labelledby="price-h">
+    <div class="p-head"><h2 id="price-h">${title}</h2><span class="p-chg ${signClass(change)}">${pct(change, 1, true)} <span class="p-over">${over}</span></span></div>
+    <figure class="pc">
+      <div class="pc-plot" role="img" aria-label="${esc(`Weekly closing price from ${fullDate(d0)} to ${fullDate(d1)}: ${price(first)} to ${price(last)}, ${pct(change, 1, true)}`)}">
+        <svg class="pc-svg ${tone}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+          <defs><linearGradient id="${id}" x1="0" x2="0" y1="0" y2="1"><stop offset="0" class="pc-stop" stop-opacity=".14"/><stop offset="1" class="pc-stop" stop-opacity="0"/></linearGradient></defs>
+          <line class="pc-base" x1="0" x2="${W}" y1="${y(first).toFixed(1)}" y2="${y(first).toFixed(1)}" vector-effect="non-scaling-stroke"/>
+          <path d="${line}L${W},${H}L0,${H}Z" fill="url(#${id})"/>
+          <path class="pc-line" d="${line}" vector-effect="non-scaling-stroke"/>
+        </svg>
+        <span class="pc-dot ${tone}" style="left:100%;top:${((lastY / H) * 100).toFixed(2)}%" aria-hidden="true"></span>
+      </div>
+      <figcaption class="pc-foot" aria-hidden="true">
+        <span><small>${esc(fullDate(d0))}</small>${price(first)}</span>
+        <span class="pc-end"><small>${esc(fullDate(d1))}</small>${price(last)}</span>
+      </figcaption>
+    </figure>
+    ${stats}
   </section>`;
 }
+
+// ---- Screener score: the ledger the screener shows for a company on its list. ----
+
+function scoreSection(r, sc, meta, home) {
+  if (r.screener !== true) return "";
+  const f = r.fundamentals;
+  const sector = r.sector;
+  const href = `screener.html${sector ? `?sector=${encodeURIComponent(sector)}` : ""}`;
+  const row = sc?.results?.find((x) => x.symbol === r.symbol);
+  const head = (count) => `<div class="sec-head"><h2 id="score-h">Screener score</h2>${count ? `<span class="count">${count}</span>` : ""}</div>`;
+  if (!row || !Array.isArray(row.score_parts)) {
+    return `<section class="sec" id="score" aria-labelledby="score-h">${head("")}
+      <p class="sec-lede">${esc(r.symbol)} passes all eight rules of the sector screener, but its score could not be loaded just now. <a href="${href}">Open the screener</a> to see it, or reload this page.</p>
+      ${home === "screener" ? noteBox(f.one_time_note) : ""}</section>`;
+  }
+  const ctx = { rules: sc.rules, industries: sc.industries, insiderDays: meta?.insider_days ?? null };
+  const n = sc.results.length;
+  const higher = sc.results.filter((x) => x.score > row.score).length;
+  const inSector = sc.sectors?.find((s) => s.name === row.sector)?.passed ?? sc.results.filter((x) => x.sector === row.sector).length;
+  // Here the ledger's headings sit under this section's h2.
+  const body = ledger(row, ctx, { link: false, level: 3 });
+  const own = home === "screener" && row.one_time_note !== f.one_time_note ? noteBox(f.one_time_note) : "";
+  return `<section class="sec" id="score" aria-labelledby="score-h">${head(`${esc(String(row.score))} of 100 points`)}
+    <p class="sec-lede">Passes all eight rules of the sector screener. Of the ${n} companies that pass, ${higher ? `${higher} score${higher === 1 ? "s" : ""} higher` : "none scores higher"}.</p>
+    <p class="r-go"><a class="text-link" href="${href}">${row.sector ? `See the ${inSector} ${esc(row.sector)} ${inSector === 1 ? "company" : "companies"} that pass` : "Open the screener"}${icon("arrow-right")}</a></p>
+    <div class="frame r-ledger">${body}</div>
+    ${own}
+    <p class="r-fine">A high score means a company clears the rules by a wide margin. It is not a forecast and doesn't mean the stock will do well.</p>
+  </section>`;
+}
+
+// ---- Revenue by quarter ----
 
 // Revenue by quarter (fundamentals.quarters: up to 12 quarters, oldest first, back to back; a quarter the filings don't
 // give soundly has null figures) with gross profit and gross margin for the fiscal year and the last 12 months. Reports
@@ -221,9 +400,6 @@ function pricePanel(r) {
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const monthYear = (iso) => (iso ? `${MON[+iso.slice(5, 7) - 1]} ${iso.slice(0, 4)}` : "");
 const shortMonth = (iso) => `${MON[+iso.slice(5, 7) - 1]} ’${iso.slice(2, 4)}`;
-const fullDate = (iso) => date(iso, { month: "short", day: "numeric", year: "numeric" });
-// One decimal for millions and billions ($109.4B, $375.0M), floored like money() so a figure never reads larger.
-const amount = (n) => money(n, Math.abs(n) >= 1e6 ? { digits: 1 } : {});
 // Growth on the year-ago quarter: one decimal below 100%, whole percents above.
 const growth = (g) => (g == null ? "" : pct(g, Math.abs(g) >= 1 ? 0 : 1, true));
 // Why a quarter with revenue has no growth figure (fundamentals._quarter_series' yoy_withheld), or null where its
@@ -253,11 +429,19 @@ function axisLabel(v, top) {
   return `${v < 0 ? "-" : ""}$${+(Math.abs(v) / d).toFixed(2)}${u}`;
 }
 
-// A quarter's name for its tooltip, its label for screen readers and the table: its fiscal quarter where the pipeline
-// could number it, and its dates, or only the month it ended around where they are estimated (a blank quarter in a gap
-// of two or more).
+// A quarter's name for its tooltip and the table: its fiscal quarter where the pipeline could number it, and its dates,
+// or only the month it ended around where they are estimated (a blank quarter in a gap of two or more).
 const quarterName = (q) => q.dates_estimated ? `Quarter ended around ${monthYear(q.end)}`
   : `${q.fiscal_quarter ? `Fiscal Q${q.fiscal_quarter}, ` : "Quarter "}${fullDate(q.start)} to ${fullDate(q.end)}`;
+
+// What "revenue" means for a company whose revenue is read from a lender's income statement or a business development
+// company's investment income (fundamentals.revenue_basis; older data has none).
+function revenueWords(f) {
+  return f.bank || f.revenue_basis === "bank" ? "revenue (interest earned less interest paid, plus fees)"
+    : f.revenue_basis === "net_interest" ? "revenue (net interest income: interest earned less interest paid)"
+    : f.revenue_basis === "investment_income" ? "revenue (total investment income: the interest, dividends and fees its loans and stakes earn)"
+    : "revenue";
+}
 
 function quarterSection(r) {
   const f = r.fundamentals;
@@ -267,22 +451,19 @@ function quarterSection(r) {
   // incomplete (the health check then measures no sales-based figure either).
   const plotted = !f.sales_doubt && qs.some((q) => q.revenue > 0);
   const gbar = (r.health || []).flatMap((g) => g.bars).find((b) => b.key === "gross_margin");
-  const bank = !!f.bank;
   if (!plotted && !gbar) return "";
-  // A company whose revenue is read from a lender's income statement or a business development company's investment
-  // income (fundamentals.revenue_basis; older data has none) says which.
-  const what = bank || f.revenue_basis === "bank" ? "revenue (interest earned less interest paid, plus fees)"
-    : f.revenue_basis === "net_interest" ? "revenue (net interest income: interest earned less interest paid)"
-    : f.revenue_basis === "investment_income" ? "revenue (total investment income: the interest, dividends and fees its loans and stakes earn)"
-    : "revenue";
-  const head = `<div class="h-top" id="quarters"><div><h2>Revenue by quarter</h2>
-    <p>${plotted ? `Each bar is one quarter's ${what}, from the company's SEC filings, with its growth on the same quarter a year before.`
-      : "Revenue and gross margin from the company's SEC filings."}</p></div></div>`;
+  const shown = qs.filter((q) => q.revenue != null);
+  const count = plotted ? `${qs.length} quarter${qs.length === 1 ? "" : "s"} to ${monthYear(qs[qs.length - 1].end)}` : "";
+  const head = `<div class="sec-head"><h2 id="quarters-h">Revenue by quarter</h2>${count ? `<span class="count">${count}</span>` : ""}</div>
+    <p class="sec-lede">${plotted ? `Each bar is one quarter's ${revenueWords(f)}, from the company's SEC filings, with its growth on the same quarter a year before.`
+      : "Revenue and gross margin from the company's SEC filings."}</p>`;
   const none = f.sales_doubt ? "Quarter-by-quarter revenue isn't shown, since the sales figure in the company's SEC data looks incomplete: profit came out larger than sales."
     : qs.length ? "Quarter-by-quarter revenue isn't shown, since the company reported no revenue in these quarters."
     : "Quarter-by-quarter figures aren't available for this company. Companies based outside the US often file only yearly reports with the SEC, and a quarter is left out when its figures in the filings don't check out.";
-  const chart = plotted ? quarterChart(qs, f.quarters_stale) : `<p class="q-none">${none}</p>`;
-  return `${head}<section class="panel q-panel">${chart}${quarterStats(f, plotted, gbar)}${plotted ? quarterTable(qs, !!gbar && qs.some((q) => q.gross_profit != null)) : ""}</section>`;
+  const chart = plotted && shown.length ? quarterChart(qs, f.quarters_stale) : `<p class="r-none">${none}</p>`;
+  return `<section class="sec" id="quarters" aria-labelledby="quarters-h">${head}
+    <div class="frame q-panel">${chart}${quarterStats(f, plotted, gbar)}${plotted ? quarterTable(qs, !!gbar && qs.some((q) => q.gross_profit != null)) : ""}</div>
+  </section>`;
 }
 
 function quarterChart(qs, stale) {
@@ -296,18 +477,23 @@ function quarterChart(qs, stale) {
   const odd = qs.some((q) => q.extra_days && q.yoy != null);
   const restated = qs.some((q) => q.yoy_withheld === "restated");
   const unchecked = qs.some((q) => q.yoy_withheld === "unchecked");
-  const first = qs.find((q) => q.revenue != null), last = qs[n - 1];
-  const summary = `Revenue for the ${n} quarters to ${monthYear(last.end)}, from ${amount(first.revenue)} in the quarter ended ${monthYear(first.end)} to ${amount(last.revenue)} in the quarter ended ${monthYear(last.end)}${last.yoy != null ? `, ${last.yoy >= 0 ? "up" : "down"} ${pct(Math.abs(last.yoy), 1)} on a year before` : ""}. The table below lists every quarter.`;
+  // The summary names the first and last quarters that have a figure, and says how many have none.
+  const withRev = qs.filter((q) => q.revenue != null);
+  const first = withRev[0], last = withRev[withRev.length - 1];
+  const blanks = n - withRev.length;
+  const summary = `Revenue for the ${n} quarters to ${monthYear(qs[n - 1].end)}${withRev.length > 1
+    ? `, from ${amount(first.revenue)} in the quarter ended ${monthYear(first.end)} to ${amount(last.revenue)} in the quarter ended ${monthYear(last.end)}${last.yoy != null ? `, ${last.yoy >= 0 ? "up" : "down"} ${pct(Math.abs(last.yoy), 1)} on a year before` : ""}`
+    : `: ${amount(last.revenue)} in the quarter ended ${monthYear(last.end)}`}.${blanks ? ` ${blanks} ${blanks === 1 ? "quarter has" : "quarters have"} no figure.` : ""} The table below lists every quarter.`;
   const cols = qs.map((q, i) => {
     const name = quarterName(q);
     const align = i < 2 ? " left" : i >= n - 2 ? " right" : "";
-    const label = `<span class="qc-x" aria-hidden="true"><b>${q.fiscal_quarter ? `Q${q.fiscal_quarter}` : ""}</b>${shortMonth(q.end)}</span>`;
+    const label = `<span class="qc-x"><b>${q.fiscal_quarter ? `Q${q.fiscal_quarter}` : ""}</b>${shortMonth(q.end)}</span>`;
     if (q.revenue == null) {
       const why = "The company's SEC filings don't give this quarter's revenue, or it was left out because its figures didn't check out.";
-      return `<div class="qc-col blank" role="listitem" tabindex="0" aria-label="${esc(`${name}: not available. ${why}`)}">
-        <div class="qc-area" aria-hidden="true"><span class="qc-na">n/a</span></div>${label}
-        <span class="qc-val" aria-hidden="true">n/a</span><span class="qc-yoy" aria-hidden="true"></span>
-        <span class="qc-tip${align}" aria-hidden="true"><b>Not available</b><span>${esc(name)}</span><span>${why}</span></span></div>`;
+      return `<div class="qc-col blank">
+        <div class="qc-area"><span class="qc-na">n/a</span></div>${label}
+        <span class="qc-val">n/a</span><span class="qc-yoy"></span>
+        <span class="qc-tip${align}"><b>Not available</b><span>${esc(name)}</span><span>${why}</span></span></div>`;
     }
     const v = q.revenue;
     const bar = `--base:${base.toFixed(2)}%;--h:${Math.abs(at(v) - base).toFixed(2)}%`;
@@ -315,37 +501,37 @@ function quarterChart(qs, stale) {
     const yoyText = q.yoy != null ? `${q.yoy >= 0 ? "Up" : "Down"} ${pct(Math.abs(q.yoy), 1)} on the same quarter a year before.`
       : WITHHELD[q.yoy_withheld] || "No growth figure, since the same quarter a year before isn't available.";
     const extra = q.extra_days && q.yoy != null ? ` It ran ${Math.abs(q.extra_days)} days ${q.extra_days > 0 ? "longer" : "shorter"} than that quarter, since the company's fiscal year sometimes has an extra week, which moves growth by several points.` : "";
-    const tip = `<span class="qc-tip${align}" aria-hidden="true"><b>${amount(v)}</b><span>${esc(name)}</span>
+    const tip = `<span class="qc-tip${align}"><b>${amount(v)}</b><span>${esc(name)}</span>
       <span>${yoyText}${extra}</span>${gm != null ? `<span>Gross margin ${pct(gm, 1)}.</span>` : ""}${q.derived ? `<span>Worked out as the fiscal year's total less its first three quarters.</span>` : ""}</span>`;
-    const aria = `${name}: ${amount(v)}. ${yoyText}${extra}${q.derived ? " Worked out as the fiscal year's total less its first three quarters." : ""}`;
-    return `<div class="qc-col${q.derived ? " derived" : ""}" role="listitem" tabindex="0" aria-label="${esc(aria)}">
-      <div class="qc-area" aria-hidden="true"><div class="qc-bar${v < 0 ? " neg" : ""}" style="${bar}"></div></div>${label}
-      <span class="qc-val" aria-hidden="true">${amount(v)}</span>
-      <span class="qc-yoy ${signClass(q.yoy)}${extra ? " adj" : ""}" aria-hidden="true">${growth(q.yoy)}</span>${tip}</div>`;
+    return `<div class="qc-col${q.derived ? " derived" : ""}">
+      <div class="qc-area"><div class="qc-bar${v < 0 ? " neg" : ""}" style="${bar}"></div></div>${label}
+      <span class="qc-val">${amount(v)}</span>
+      <span class="qc-yoy ${signClass(q.yoy)}${extra ? " adj" : ""}">${growth(q.yoy)}</span>${tip}</div>`;
   }).join("");
   const grid = t.map((v) => `<span class="qc-grid${v === 0 ? " zero" : ""}" style="bottom:${at(v)}%"></span>`).join("");
   const axis = t.map((v) => `<span style="bottom:${at(v)}%">${axisLabel(v, Math.max(Math.abs(lo), hi))}</span>`).join("");
-  const keys = [derived && `<span><i class="qk derived" aria-hidden="true"></i>Fourth quarter worked out as the fiscal year's total less its first three quarters, since companies rarely report it on its own</span>`,
-    odd && `<span><i class="qk adj" aria-hidden="true"></i>Growth over a quarter of a different length, where a fiscal year had an extra week</span>`,
-    restated && `<span><i class="qk none" aria-hidden="true"></i>No growth shown where a later filing restated one of the two quarters (for example after a business was sold), so they aren't on the same footing</span>`,
-    unchecked && `<span><i class="qk none" aria-hidden="true"></i>No growth shown where the two quarters' figures come from filings that couldn't be checked against each other</span>`].filter(Boolean);
-  return `<figure class="qc" style="--n:${n}">
-      <figcaption class="sr-only">${esc(summary)}</figcaption>
-      <div class="qc-axis" aria-hidden="true">${axis}</div>
-      <div class="qc-plot">
-        <div class="qc-grids" aria-hidden="true">${grid}</div>
-        <div class="qc-cols" role="list" aria-label="Revenue by quarter">${cols}</div>
+  const keys = [derived && `<li><span class="qk derived" aria-hidden="true"></span>Fourth quarter worked out as the fiscal year's total less its first three quarters, since companies rarely report it on its own</li>`,
+    odd && `<li><span class="qk adj" aria-hidden="true"></span>Growth over a quarter of a different length, where a fiscal year had an extra week</li>`,
+    restated && `<li><span class="qk none" aria-hidden="true"></span>No growth shown where a later filing restated one of the two quarters (for example after a business was sold), so they aren't on the same footing</li>`,
+    unchecked && `<li><span class="qk none" aria-hidden="true"></span>No growth shown where the two quarters' figures come from filings that couldn't be checked against each other</li>`].filter(Boolean);
+  // The columns are a picture of the table below, which holds the same figures for keyboards and screen readers; the
+  // hover notes are for a mouse.
+  return `<figure class="qc-fig">
+      <div class="qc" style="--n:${n}" aria-hidden="true">
+        <div class="qc-axis">${axis}</div>
+        <div class="qc-plot"><div class="qc-grids">${grid}</div><div class="qc-cols">${cols}</div></div>
       </div>
+      <figcaption class="qc-cap">${esc(summary)}</figcaption>
     </figure>
-    ${stale ? `<p class="qc-stale">The latest quarter in the company's SEC filings ended ${monthYear(last.end)}, so these figures are not current.</p>` : ""}
+    ${stale ? `<p class="qc-stale">${icon("warning")}<span>The latest quarter in the company's SEC filings ended ${monthYear(qs[n - 1].end)}, so these figures are not current.</span></p>` : ""}
     <p class="qc-note">Quarters are the company's own fiscal quarters, labeled with the month each ended.</p>
-    ${keys.length ? `<div class="qc-keys">${keys.join("")}</div>` : ""}`;
+    ${keys.length ? `<ul class="qc-keys">${keys.join("")}</ul>` : ""}`;
 }
 
 // Revenue over the last 12 months, and gross profit and gross margin for the fiscal year and the last 12 months.
 function quarterStats(f, plotted, gbar) {
   const tiles = [];
-  const tile = (k, v, s, cls = "") => `<div><span class="k">${k}</span><b>${v}</b>${s ? `<span class="s ${cls}">${s}</span>` : ""}</div>`;
+  const tile = (k, v, s) => `<div><dt>${k}</dt><dd>${v}</dd>${s ? `<dd class="s">${s}</dd>` : ""}</div>`;
   const fyEnd = f.fiscal_year_end;
   const newer = f.ttm_end && (!fyEnd || f.ttm_end > fyEnd);
   if (plotted && f.ttm_revenue != null) {
@@ -379,7 +565,7 @@ function quarterStats(f, plotted, gbar) {
     }
   }
   if (!tiles.length) return "";
-  return `<div class="q-stats">${tiles.join("")}</div>${fine ? `<p class="q-fine">${fine}</p>` : ""}`;
+  return `<dl class="q-stats">${tiles.join("")}</dl>${fine ? `<p class="q-fine">${fine}</p>` : ""}`;
 }
 
 // The same figures as a table: the chart's text alternative, and the only place quarterly gross profit is listed.
@@ -387,59 +573,154 @@ function quarterTable(qs, gross) {
   const rows = [...qs].reverse().map((q) => {
     const gm = q.gross_profit != null && q.revenue > 0 ? q.gross_profit / q.revenue : null;
     const when = q.dates_estimated ? `ended around ${esc(monthYear(q.end))}` : `ended ${esc(fullDate(q.end))}`;
-    return `<tr><td>${q.fiscal_quarter ? `Q${q.fiscal_quarter}, ` : ""}${when}${q.derived && q.revenue != null ? ` <span class="tag">Worked out</span>` : ""}</td>
-      <td>${q.revenue == null ? "n/a" : amount(q.revenue)}</td>
+    return `<tr><th scope="row">${q.fiscal_quarter ? `Q${q.fiscal_quarter}, ` : ""}${when}${q.derived && q.revenue != null ? ` <span class="tag">Worked out</span>` : ""}</th>
+      <td>${q.revenue == null ? `<span class="faint">n/a</span>` : amount(q.revenue)}</td>
       <td class="${signClass(q.yoy)}">${q.yoy != null ? growth(q.yoy) : q.revenue != null && q.yoy_withheld ? `<span class="faint">Not compared</span>` : ""}${q.extra_days && q.yoy != null ? ` <span class="faint">(${q.extra_days > 0 ? "+" : "-"}${Math.abs(q.extra_days)} days)</span>` : ""}</td>
-      ${gross ? `<td>${q.gross_profit == null ? "n/a" : amount(q.gross_profit)}</td><td>${gm == null ? "n/a" : pct(gm, 1)}</td>` : ""}</tr>`;
+      ${gross ? `<td>${q.gross_profit == null ? `<span class="faint">n/a</span>` : amount(q.gross_profit)}</td><td>${gm == null ? `<span class="faint">n/a</span>` : pct(gm, 1)}</td>` : ""}</tr>`;
   }).join("");
   return `<details class="disclose q-table">
-    <summary>Every quarter as a table<i class="ph ph-caret-down" aria-hidden="true"></i></summary>
-    <div class="body"><div class="table-wrap"><table class="data">
+    <summary>${icon("list-checks", "lead-i")}Every quarter as a table${icon("caret-down", "caret")}</summary>
+    <div class="body"><div class="table-wrap scrolls"><table class="data r-table">
+      <caption class="sr-only">Revenue by fiscal quarter, newest first</caption>
       <thead><tr><th scope="col">Fiscal quarter</th><th scope="col">Revenue</th><th scope="col">Growth on a year before</th>${gross ? `<th scope="col">Gross profit</th><th scope="col">Gross margin</th>` : ""}</tr></thead>
       <tbody>${rows}</tbody></table></div>
       <p class="q-fine">Newest first. A quarter is n/a where the company's SEC filings don't give its revenue, or it was left out because its figures didn't check out. Growth is not compared where the quarter a year before had no revenue, or a later filing restated one of the two, so they aren't on the same footing.</p></div>
   </details>`;
 }
 
-function healthSection(r) {
-  if (!r.health) {
-    // Where the pipeline could tell why from the company's SEC filings (coverage), the verdict panel above says it.
-    const why = r.coverage?.note && !r.valuation ? "Not scored, for the reason given under the verdict above." : `We could not find a full year of revenue and profit in this company's SEC filings, so it cannot be scored.
-      This is common for companies with no sales yet, funds, SPACs and foreign filers, foreign banks among them.`;
-    return `<div class="h-top"><div><h2>Health check</h2><p>${why}</p></div></div>`;
+// ---- Financial history: each fiscal year's figures (fundamentals.history), oldest first, on one zero line. ----
+
+function historySection(r, home) {
+  const f = r.fundamentals;
+  const hist = (f?.history || []).filter((h) => h && h.year != null).sort((a, b) => a.year - b.year);
+  if (!hist.length) return "";
+  const kind = valuationKind(r);
+  const has = (k) => hist.some((h) => h[k] != null);
+  const ffoDiffers = has("adj_ffo") && hist.some((h) => h.adj_ffo != null && h.adj_ffo !== h.ffo);
+  const ROWS = [
+    ["revenue", "Revenue", true],
+    ["gross_profit", "Gross profit", false],
+    ["net_income", "Net income", true],
+    ["fcf", "Free cash flow", true],
+    ["ffo", "FFO", false],
+    ["adj_ffo", "FFO without one-time items", false],
+  ];
+  const rows = ROWS.filter(([k]) => has(k) && (k !== "adj_ffo" || ffoDiffers));
+  const missing = ROWS.filter(([k, , core]) => core && !has(k)).map(([, label]) => label.toLowerCase());
+  if (!rows.length) return "";
+  // Each row on its own scale from zero, so a bar compares a figure across the years (net income's bars aren't
+  // flattened by revenue's), with negatives below the row's zero line.
+  const scale = (k) => {
+    const vals = hist.map((h) => h[k]).filter((v) => v != null);
+    const top = Math.max(0, ...vals), bottom = Math.min(0, ...vals);
+    const span = top - bottom || 1;
+    return { span, zero: (top / span) * 100 };
+  };
+  const cell = (v, { span, zero }) => {
+    if (v == null) return `<td class="fh-na"><span class="faint">n/a</span></td>`;
+    const h = Math.max((Math.abs(v) / span) * 100, v ? 1.5 : 0);
+    const where = v >= 0 ? `bottom:${(100 - zero).toFixed(2)}%` : `top:${zero.toFixed(2)}%`;
+    return `<td><span class="fh-v${v < 0 ? " down" : ""}">${money(v)}</span><span class="fh-bar" aria-hidden="true"><span class="fh-zero" style="top:${zero.toFixed(2)}%"></span><span class="fh-fill${v < 0 ? " neg" : ""}" style="${where};height:${h.toFixed(2)}%"></span></span></td>`;
+  };
+  // The claim the table backs: revenue from the first year to the last, and the years with a profit.
+  const revs = hist.filter((h) => h.revenue != null);
+  const a = revs[0], b = revs[revs.length - 1];
+  const ni = hist.filter((h) => h.net_income != null);
+  const pos = ni.filter((h) => h.net_income > 0).length;
+  const claims = [];
+  if (a && b && a !== b) {
+    claims.push(b.revenue === a.revenue ? `Revenue was ${money(a.revenue)} in both fiscal ${a.year} and fiscal ${b.year}.`
+      : `Revenue ${b.revenue > a.revenue ? "rose" : "fell"} from ${money(a.revenue)} in fiscal ${a.year} to ${money(b.revenue)} in fiscal ${b.year}.`);
   }
-  const s = r.health_score;
-  const band = s == null ? "" : s >= 70 ? "strong" : s >= 40 ? "fair" : "weak";
-  const word = { strong: ", Healthy", fair: ", Mixed", weak: ", Weak" }[band] || "";
-  return `<div class="h-top">
-      <div><h2>Health check</h2><p>Every number becomes a 1 to 100 score, where higher is better. Raw amounts like cash or share count only mean something next to price or history, so each is scored through the ratio that gives it meaning.</p></div>
-      <div class="h-score" title="Average of all scored bars, excluding market mood"><b class="${band}">${s ?? "n/a"}</b><span>/ 100${word}</span></div>
+  if (ni.length > 1) {
+    claims.push(`Net income was positive in ${pos === ni.length ? `all ${ni.length}` : pos === 0 ? "none" : `${pos}`} of ${pos === ni.length || pos === 0 ? "these years" : `these ${ni.length} years`}.`);
+  } else if (ni.length === 1) {
+    claims.push(`Net income was ${ni[0].net_income > 0 ? "positive" : ni[0].net_income < 0 ? "negative" : "zero"} in fiscal ${ni[0].year}.`);
+  }
+  const notes = [
+    "Fiscal years as the company reports them, from its SEC filings, oldest first.",
+    revenueWords(f) !== "revenue" ? `Revenue here is its ${revenueWords(f).replace(/^revenue \(|\)$/g, "")}.` : "",
+    has("net_income") ? "Net income is as reported, one-time items included." : "",
+    has("fcf") ? `Free cash flow is cash from operations less capital spending.${kind === "bank" || kind === "financial" ? " It isn't scored for banks, insurers and other financial companies, whose cash and borrowing are part of the business itself." : ""}` : "",
+    has("ffo") ? `FFO (funds from operations) is net income with property depreciation added back and property sales left out${ffoDiffers ? "; the row under it also leaves out other one-time items" : ""}.` : "",
+    missing.length ? `No ${andList(missing)} figures for these years.` : "",
+  ].filter(Boolean);
+  const yearsLabel = hist.length > 1 ? `Fiscal ${hist[0].year} to ${hist[hist.length - 1].year}` : `Fiscal ${hist[0].year}`;
+  return `<section class="sec r-split" id="history" aria-labelledby="history-h">
+    <div class="r-split-text">
+      <div class="sec-head"><h2 id="history-h">Financial history</h2><span class="count">${yearsLabel}</span></div>
+      ${claims.length ? `<p class="sec-lede">${claims.join(" ")}</p>` : ""}
+      <ul class="r-fine-list">${notes.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>
+      ${home === "history" ? noteBox(f.one_time_note) : ""}
     </div>
-    <div class="h-groups">${r.health.map((g) => `
-      <section class="panel h-group${g.bars.every((b) => b.context) ? " context" : ""}">
-        <header><h3>${esc(g.name)}</h3><p>${esc(g.hint)}</p></header>
-        ${g.bars.some((b) => b.key === "net_margin" || b.key === "ffo_margin" || b.key === "roa") ? oneTimeNote(r, "margin:12px 0 4px") : ""}
-        ${g.bars.map((b) => `<div class="h-bar">
-          <div class="l"><b>${esc(b.label)}</b><span>${esc(b.value)}</span></div>
-          ${meter(b.score, b.band)}
-          <p>${esc(b.note)}</p>
-        </div>`).join("")}
-      </section>`).join("")}
-    </div>`;
+    <div class="table-wrap fh-wrap scrolls"><table class="data r-table fh">
+      <caption class="sr-only">Yearly figures by fiscal year, oldest first</caption>
+      <thead><tr><th scope="col"><span class="sr-only">Figure</span></th>${hist.map((h) => `<th scope="col">${esc(String(h.year))}</th>`).join("")}</tr></thead>
+      <tbody>${rows.map(([k, label]) => `<tr><th scope="row">${label}</th>${(() => { const s = scale(k); return hist.map((h) => cell(h[k], s)).join(""); })()}</tr>`).join("")}</tbody>
+    </table></div>
+  </section>`;
 }
 
-function newsSection(r) {
-  const n = r.news || { items: [], overall: { label: "none", text: "No recent headlines." } };
-  const o = n.overall;
-  return `<div class="h-top"><div><h2>Recent news</h2><p>Each headline is labeled by the words it uses, with the reason shown. Read the story before acting on a label.</p></div></div>
-    <div class="panel news-top"><span class="tag ${NEWS_TAG[o.label]}">${o.label === "none" ? "No news" : "Overall: " + cap(o.label)}</span><p>${esc(o.text)}</p></div>
-    ${n.items.length ? `<div class="news-list">${n.items.map((i) => `
-      <a class="news-item" href="${esc(i.url)}" target="_blank" rel="noopener">
-        <span class="tag ${NEWS_TAG[i.label]}" style="justify-self:start">${cap(i.label)}</span>
-        <div><div class="t">${esc(i.title)}</div><div class="why">${esc(i.reason)}</div>
-        <div class="src">${esc(i.source)}${i.date ? `, ${esc(date(i.date))}` : ""}</div></div>
-      </a>`).join("")}</div>` : ""}`;
+// ---- Health check ----
+
+// A bar with no score says why in the bar's place: the first sentence of its note where the note gives the reason
+// ("Not scored for banks...", "Not measured.", "Not enough history."), "Not scored" where it has a figure but nothing to
+// rank it against, "Not enough data" otherwise. The rest of the note stays under it.
+function nullReason(b) {
+  const note = b.note || "";
+  const m = /^((?:Not |Can't |No revenue)[^.]*)\.\s*([\s\S]*)$/.exec(note);
+  if (m) return [m[1], m[2]];
+  return [b.value && b.value !== "n/a" ? "Not scored" : "Not enough data", note];
 }
+
+function healthBar(b) {
+  const none = b.score == null;
+  const [lead, rest] = none ? nullReason(b) : [null, b.note];
+  return `<li class="hb${none ? " is-none" : ""}">
+    <div class="hb-top"><span class="hb-l">${esc(b.label)}</span><span class="hb-v">${esc(b.value)}</span></div>
+    ${meter(b.score, b.band, lead || "Not enough data", b.label)}
+    ${rest ? `<p class="hb-n">${esc(rest)}</p>` : ""}
+  </li>`;
+}
+
+function healthSection(r, home) {
+  if (!r.health) {
+    // Where the pipeline could tell why from the company's SEC filings (coverage), the fair value panel above says it.
+    const why = r.coverage?.note && !r.valuation ? "Not scored, for the reason given above." : `We could not find a full year of revenue and profit in this company's SEC filings, so it cannot be scored.
+      This is common for companies with no sales yet, funds, SPACs and foreign filers, foreign banks among them.`;
+    return `<section class="sec" id="health" aria-labelledby="health-h"><div class="sec-head"><h2 id="health-h">Health check</h2></div><p class="sec-lede">${why}</p></section>`;
+  }
+  const s = r.health_score;
+  const band = healthBand(s);
+  const word = { strong: ["Healthy", "tag-up"], fair: ["Mixed", "tag-mid"], weak: ["Weak", "tag-down"] }[band];
+  const context = r.health.filter((g) => g.bars.length && g.bars.every((b) => b.context));
+  const ctxNames = context.map((g) => g.name);
+  const scored = r.health.flatMap((g) => g.bars).filter((b) => !b.context && b.score != null).length;
+  const leftOut = ctxNames.length ? `, leaving out ${andList(ctxNames.map((n) => n.toLowerCase()))}` : "";
+  const higher = ctxNames.length
+    ? `In every group but ${andList(ctxNames.map((n) => n.toLowerCase()))}, a higher score is healthier. ${andList(ctxNames)} ${ctxNames.length === 1 ? "is" : "are"} shown for context and not counted, and each of ${ctxNames.length === 1 ? "its" : "their"} bars says what its score means.`
+    : "A higher score is healthier.";
+  // The group by the profit bars holds the one-time items note when it is shown here.
+  const noteGroup = home === "health" ? (r.health.find((g) => g.bars.some((b) => ["net_margin", "ffo_margin", "roa"].includes(b.key))) || r.health[0]) : null;
+  return `<section class="sec" id="health" aria-labelledby="health-h">
+    <div class="sec-head"><h2 id="health-h">Health check</h2></div>
+    <div class="h-sum">
+      <p class="h-score"><b>${s ?? "n/a"}</b><span class="h-of">of 100</span>${word ? `<span class="tag ${word[1]}">${word[0]}</span>` : ""}</p>
+      <p class="h-intro">${s != null ? `The average of ${scored} scored measure${scored === 1 ? "" : "s"}${leftOut}. ` : ""}Each measure is scored from 1 to 100 where its figures allow. ${higher} Raw amounts like cash or share count only mean something next to price or history, so each is scored through the ratio that gives it meaning.</p>
+    </div>
+    <div class="frame h-grid">${r.health.map((g, i) => {
+      const ctx = context.includes(g);
+      return `<section class="hg${ctx ? " is-context" : ""}" aria-labelledby="hg-${i}">
+        <div class="hg-head"><h3 id="hg-${i}">${esc(g.name)}</h3>${ctx ? `<span class="tag tag-line">Not counted</span>` : ""}</div>
+        <p class="hg-hint">${esc(g.hint)}</p>
+        ${g === noteGroup ? noteBox(r.fundamentals.one_time_note) : ""}
+        <ul class="hb-list">${g.bars.map(healthBar).join("")}</ul>
+      </section>`;
+    }).join("")}</div>
+  </section>`;
+}
+
+// ---- Similar companies ----
 
 // A valuation multiple, or n/a where it doesn't apply (the note under the table says why).
 const mult = (x) => (x == null ? "n/a" : `${x >= 100 ? Math.round(x).toLocaleString("en-US") : x.toFixed(1)}x`);
@@ -450,134 +731,268 @@ function peersSection(r) {
   if (!r.peer_basis) return "";
   const list = r.peers || [];
   const pm = r.peer_multiples;
-  const head = `<div class="h-top" id="peers"><div><h2>Similar companies</h2><p>${esc(r.peer_basis)}</p></div></div>`;
-  if (!list.length || !pm) return head;
+  const head = `<div class="sec-head"><h2 id="peers-h">Similar companies</h2>${list.length ? `<span class="count">${list.length} companies</span>` : ""}</div>
+    <p class="sec-lede">${esc(r.peer_basis)}</p>`;
+  if (!list.length || !pm) return `<section class="sec" id="peers" aria-labelledby="peers-h">${head}</section>`;
   // Non-financial companies also get price to sales, the measure their health check ranks. Banks get price to tangible
   // book (ptbv) in place of a sales multiple and have no sales_label, and so do companies valued as lenders on price to
   // book (pb) or on earnings alone; every other report has sales_label.
   const cols = [pm.ps_label && ["ps", pm.ps_label], pm.ptbv_label && ["ptbv", pm.ptbv_label],
     pm.pb_label && ["pb", pm.pb_label], pm.sales_label && ["sales", pm.sales_label], ["pe", pm.pe_label]].filter(Boolean);
   // Price to book sits near 1x for lenders, so it gets two decimals.
-  const cell = (k, v) => (k === "pb" && v != null && v < 10 ? `${v.toFixed(2)}x` : mult(v));
-  const row = (who, name, x) => `<div class="who"><b>${esc(who)}</b><span>${esc(name)}</span></div>
-    ${cols.map(([k]) => `<div class="n">${cell(k, x?.[k])}</div>`).join("")}`;
-  return `${head}
-    <div class="panel peers${cols.length > 2 ? " wide" : cols.length < 2 ? " narrow" : ""}">
-      <div class="peer-row peer-head"><span>Company</span>${cols.map(([, label]) => `<span>${esc(label)}</span>`).join("")}</div>
-      <div class="peer-row self">${row(r.symbol, "This company", pm.company)}</div>
-      ${list.map((p) => `<a class="peer-row" href="?t=${encodeURIComponent(p.symbol)}" data-sym="${esc(p.symbol)}">${row(p.symbol, p.name, p)}</a>`).join("")}
-      <div class="peer-row total">${row("Median", `of the ${list.length} companies above`, pm.median)}</div>
-    </div>
-    ${pm.note ? `<p class="fine peers-note">${esc(pm.note)}</p>` : ""}`;
+  const cell = (k, v) => `<td${v == null ? ` class="faint"` : ""}>${k === "pb" && v != null && v < 10 ? `${v.toFixed(2)}x` : mult(v)}</td>`;
+  const figures = (x) => cols.map(([k]) => cell(k, x?.[k])).join("");
+  return `<section class="sec" id="peers" aria-labelledby="peers-h">${head}
+    <div class="table-wrap scrolls"><table class="data r-table peers">
+      <caption class="sr-only">${esc(r.symbol)} beside its ${list.length} similar companies, with the median of each multiple</caption>
+      <thead><tr><th scope="col">Company</th>${cols.map(([, label]) => `<th scope="col">${esc(label)}</th>`).join("")}</tr></thead>
+      <tbody>
+        <tr class="self"><th scope="row"><span class="co"><span class="sym">${esc(r.symbol)}</span><span class="nm">This company</span></span></th>${figures(pm.company)}</tr>
+        ${list.map((p) => `<tr><th scope="row"><a class="co peer-link" href="?t=${encodeURIComponent(p.symbol)}" data-sym="${esc(p.symbol)}"><span class="sym">${esc(p.symbol)}</span><span class="nm">${esc(displayName(p.name))}</span></a></th>${figures(p)}</tr>`).join("")}
+      </tbody>
+      <tfoot><tr><th scope="row"><span class="co"><span class="sym-plain">Median</span><span class="nm">of the ${list.length} companies above</span></span></th>${figures(pm.median)}</tr></tfoot>
+    </table></div>
+    ${pm.note ? `<p class="r-fine">${esc(pm.note)}</p>` : ""}
+  </section>`;
 }
 
-function stake(b) {
-  if (b.new_position) return `<span class="up">New</span><small>position</small>`;
-  if (b.stake_increase == null) return `<span class="faint">n/a</span>`;
-  return `${pct(b.stake_increase, b.stake_increase < 0.1 ? 1 : 0, true)}<small>stake</small>`;
+// ---- Insider buying ----
+
+// Roles as the insiders page shortens them.
+function role(roles) {
+  if (!roles?.length) return "Insider";
+  return roles.map((x) => x.replace(/Chief Executive Officer/i, "CEO").replace(/Chief Financial Officer/i, "CFO")
+    .replace(/Chief Operating Officer/i, "COO")).join(", ");
 }
+// A share count in a few figures: 5.36M, 12.4K, 950.
+function shares(n) {
+  if (n == null) return "";
+  const a = Math.abs(n);
+  const cut = (v, d) => (Math.floor(v * 10 ** d + 1e-9) / 10 ** d).toFixed(d);
+  return a >= 1e9 ? `${cut(a / 1e9, 2)}B` : a >= 1e6 ? `${cut(a / 1e6, 2)}M` : a >= 1e4 ? `${cut(a / 1e3, 1)}K` : Math.round(a).toLocaleString("en-US");
+}
+
+function stakeCell(b) {
+  const held = b.owned_after != null ? `<small>${b.new_position || !b.owned_before ? "" : `${shares(b.owned_before)} to `}${shares(b.owned_after)} shares</small>` : "";
+  const td = `<td data-label="Stake change">`;
+  if (b.new_position) return `${td}New position${held}</td>`;
+  if (b.stake_increase == null) return `${td}<span class="faint">n/a</span>${held}</td>`;
+  return `${td}${pct(b.stake_increase, b.stake_increase < 0.1 ? 1 : 0, true)}${held}</td>`;
+}
+
+const TIERS = {
+  1: ["Tier 1", "tag-solid", (d) => `Tier 1 means $10 million or more bought on the open market in the last ${d} days.`],
+  2: ["Tier 2", "", () => "Tier 2 means $1 million or more, or a single buyer growing their stake by 20% or more."],
+  3: ["Smaller", "tag-line", () => "Smaller means less than Tier 2: under $1 million, with no single buyer growing their stake by 20% or more."],
+};
 
 function insiderSection(r) {
   const c = r.insiders;
   if (!c) return "";
-  return `<div class="h-top"><div><h2>Insider buying</h2><p>Open-market purchases filed with the SEC in the last ${r.insider_window || 30} days.</p></div>
-      <span class="tag ${c.tier === 1 ? "tag-solid" : ""}">${c.tier <= 2 ? "Tier " + c.tier : "Smaller"}</span></div>
-    <div class="panel" style="padding:12px 8px 8px">
-      <div class="buyers-head"><span>Buyer</span><span>Amount</span><span>Price paid</span><span class="stake">Stake change</span><span></span></div>
-      ${c.buyers.map((b) => `
-      <div class="buyer">
-        <div class="who"><b>${esc(b.name)}</b><span>${esc((b.roles || []).join(", ") || "Insider")}, bought ${esc(date(b.last))}</span></div>
-        <div class="n">${money(b.value)}</div><div class="n">${price(b.avg_price)}</div>
-        <div class="n stake">${stake(b)}</div>
-        <a class="doc" href="${esc(b.filing)}" target="_blank" rel="noopener" title="Open the SEC filing"><i class="ph ph-arrow-up-right" aria-hidden="true"></i><span class="sr-only">SEC filing</span></a>
-      </div>`).join("")}</div>`;
+  const days = r.insider_window || 30;
+  const tier = TIERS[c.tier] || TIERS[3];
+  const vs = c.avg_price && r.price ? r.price / c.avg_price - 1 : null;
+  const summary = c.total_value != null
+    ? ` Insiders bought ${money(c.total_value)} of its stock${c.avg_price ? `, paying ${price(c.avg_price)} a share on average` : ""}.${vs != null
+      ? ` Today's price of ${price(r.price)} is ${Math.abs(vs) < 0.0005 ? "about the same as that" : `<span class="${signClass(vs)}">${pct(Math.abs(vs), Math.abs(vs) < 0.1 ? 1 : 0)} ${vs < 0 ? "below" : "above"}</span> that`}.` : ""}`
+    : "";
+  const bought = (b) => (b.first && b.last && b.first !== b.last ? `${day(b.first)} to ${day(b.last)}` : day(b.last || b.first));
+  return `<section class="sec" id="insiders" aria-labelledby="insiders-h">
+    <div class="sec-head"><h2 id="insiders-h">Insider buying</h2><span class="tag ${tier[1]}">${tier[0]}</span></div>
+    <p class="sec-lede">Open-market purchases filed with the SEC in the last ${days} days.${summary}</p>
+    <div class="table-wrap scrolls"><table class="data r-table buyers">
+      <caption class="sr-only">Insiders who bought ${esc(r.symbol)} stock on the open market in the last ${days} days</caption>
+      <thead><tr><th scope="col">Buyer</th><th scope="col">Bought</th><th scope="col">Amount</th><th scope="col">Price paid</th><th scope="col">Stake change</th><th scope="col"><span class="sr-only">SEC filing</span></th></tr></thead>
+      <tbody>${c.buyers.map((b) => `<tr>
+        <th scope="row"><span class="who"><b>${esc(b.name)}</b><span>${esc(role(b.roles))}</span></span></th>
+        <td data-label="Bought">${esc(bought(b))}</td>
+        <td data-label="Amount">${money(b.value)}${b.shares != null ? `<small>${shares(b.shares)} shares</small>` : ""}</td>
+        <td data-label="Price paid">${price(b.avg_price)}</td>
+        ${stakeCell(b)}
+        <td class="c-doc">${b.filing ? `<a class="doc" href="${esc(b.filing)}" target="_blank" rel="noopener">Filing${icon("arrow-up-right")}<span class="sr-only"> by ${esc(b.name)} at the SEC (opens in a new tab)</span></a>` : ""}</td>
+      </tr>`).join("")}</tbody>
+    </table></div>
+    <p class="r-fine">${esc(tier[2](days))} Stake change is how much the buyer's holding grew, counting every account they reported. <a href="insiders.html">See all insider buying</a></p>
+  </section>`;
 }
+
+// ---- News ----
+
+function newsSection(r) {
+  const n = r.news || { items: [], overall: { label: "none", text: "No recent headlines." } };
+  const o = n.overall || { label: "none", text: "" };
+  const items = n.items || [];
+  const toneTag = (label) => (label ? `<span class="tag${NEWS_TAG[label] ? ` ${NEWS_TAG[label]}` : ""}">${esc(cap(label))}</span>` : "<span></span>");
+  return `<section class="sec" id="news" aria-labelledby="news-h">
+    <div class="sec-head"><h2 id="news-h">Recent news</h2><span class="tag${NEWS_TAG[o.label] ? ` ${NEWS_TAG[o.label]}` : ""}">${o.label === "none" ? "No news" : `Overall: ${esc(cap(o.label))}`}</span></div>
+    <p class="sec-lede">${o.text ? `${esc(o.text)} ` : ""}Each headline is labeled by the words it uses, with the reason shown. Read the story before acting on a label.</p>
+    ${items.length ? `<ul class="frame news">${items.map((i) => {
+      const press = /^press release/i.test(i.source || "");
+      const src = press ? (i.source || "").replace(/^press release\s*\(?([^)]*)\)?\s*$/i, (m, s) => cap(s || "")) : i.source;
+      return `<li class="ni">${toneTag(i.label)}
+        <div class="ni-body">
+          <a class="ni-t" href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.title)}<span class="sr-only"> (opens in a new tab)</span></a>
+          ${i.reason ? `<p class="ni-why">${esc(i.reason)}</p>` : ""}
+          <p class="ni-src">${press ? `<span class="tag tag-line">Press release</span>` : ""}${[src, day(i.date)].filter(Boolean).map(esc).join(", ")}</p>
+        </div></li>`;
+    }).join("")}</ul>` : ""}
+  </section>`;
+}
+
+// ---- Notes, sources and the page around them ----
 
 // Where revenue was read for a company whose revenue the SEC's data gives under no label the site reads: its own income
 // statements (fundamentals.revenue_source; older data has none).
 function revenueSource(f) {
   const s = f.revenue_source;
-  const filed = s.filed ? ` filed ${esc(date(s.filed, { month: "short", day: "numeric", year: "numeric" }))}` : "";
+  const filed = s.filed ? ` filed ${esc(fullDate(s.filed))}` : "";
   const quarters = (f.quarters || []).some((q) => q.revenue != null) ? " Quarterly revenue comes from the same line of its quarterly reports." : "";
   // The breakdown it is shown under, where there is one (APA's "Oil and gas"); a line shown for a company and its
   // predecessor apart gives only one of them for the year.
   const part = s.sections && s.sections.length === 1 ? ` (${esc(s.sections[0])})` : "";
-  return `Revenue is read from the company's own income statements: the "${esc(s.label)}" line${part} of its Form ${esc(s.form)}${filed} for fiscal year ${f.fiscal_year}.${quarters} The SEC's data doesn't give this company's revenue under the labels this site reads for other companies.`;
+  return `Revenue is read from the company's own income statements: the "${esc(s.label)}" line${part} of its Form ${esc(s.form)}${filed} for fiscal year ${esc(String(f.fiscal_year))}.${quarters} The SEC's data doesn't give this company's revenue under the labels this site reads for other companies.`;
 }
 
-function render(r) {
+function notesSection(r, meta, home) {
   const f = r.fundamentals;
-  document.title = `${r.symbol}: ${displayName(r.name)} | Ticker Finder`;
-  host.innerHTML = `
-    <header class="r-head rise">
-      <div class="r-id">
-        <div class="sym">${esc(r.symbol)}<span class="faint">${esc(r.exchange || "")}</span>${r.screener ? `<a class="tag tag-up" href="screener.html" style="text-decoration:none">Passes the screener</a>` : ""}</div>
-        <h1>${esc(displayName(r.name))}</h1>
-        <p class="where">${[r.sector, r.industry].filter(Boolean).map(esc).join(", ")}</p>
-      </div>
-      <div class="r-price"><div class="p">${price(r.price)}</div>${r.mcap ? `<div class="sub">${money(r.mcap)} market value</div>` : ""}</div>
-    </header>
-    <div class="r-grid">${verdictPanel(r)}${pricePanel(r)}</div>
-    ${quarterSection(r)}
-    ${healthSection(r)}
-    ${peersSection(r)}
-    ${insiderSection(r)}
-    ${newsSection(r)}
-    <div class="notes">
-      ${f?.partial ? `<p>Quarterly revenue from the company's quarterly reports (Form 10-Q); the SEC's data holds no full fiscal year of its results${r.coverage?.kind === "revenue_since" ? " with sales" : ""} yet. Source: SEC filings.</p>`
-        : f ? `<p>Financials from fiscal year ${f.fiscal_year}${f.fiscal_year_end ? ` (ended ${esc(date(f.fiscal_year_end, { month: "short", day: "numeric", year: "numeric" }))})` : ""}.${f.balance_as_of ? ` Balance sheet as of ${esc(date(f.balance_as_of, { month: "short", day: "numeric", year: "numeric" }))}.` : ""} Source: SEC filings.</p>` : ""}
-      ${f?.revenue_source ? `<p>${revenueSource(f)}</p>` : ""}
-      ${r.peer_group && !r.peer_basis ? `<p>Compared with ${r.peer_count} other US-listed companies in ${esc(r.peer_group)}.</p>` : ""}
-      <p>Educational estimates only. Not investment advice.</p>
-    </div>`;
+  const items = [
+    f?.partial ? `Quarterly revenue from the company's quarterly reports (Form 10-Q); the SEC's data holds no full fiscal year of its results${r.coverage?.kind === "revenue_since" ? " with sales" : ""} yet. Source: SEC filings.`
+      : f ? `Financials from fiscal year ${esc(String(f.fiscal_year))}${f.fiscal_year_end ? ` (ended ${esc(fullDate(f.fiscal_year_end))})` : ""}.${f.balance_as_of ? ` Balance sheet as of ${esc(fullDate(f.balance_as_of))}.` : ""} Source: SEC filings.` : "",
+    f?.revenue_source ? revenueSource(f) : "",
+    r.peer_group && !r.peer_basis ? `Compared with ${esc(String(r.peer_count))} other US-listed companies in ${esc(r.peer_group)}.` : "",
+    meta?.market_date ? `Prices and data as of ${esc(fullDate(meta.market_date))}.` : "",
+    "Educational estimates only. Not investment advice.",
+  ].filter(Boolean);
+  return `<section class="sec r-notes" aria-labelledby="notes-h">
+    <h2 id="notes-h">Sources and notes</h2>
+    ${home === "notes" ? noteBox(f.one_time_note) : ""}
+    <ul>${items.map((t) => `<li>${t}</li>`).join("")}</ul>
+  </section>`;
 }
+
+function header(r, meta) {
+  const where = [r.sector, r.industry].filter(Boolean).map(esc).join(", ");
+  const href = `screener.html${r.sector ? `?sector=${encodeURIComponent(r.sector)}` : ""}`;
+  return `<header class="r-head">
+    <div class="r-id">
+      <h1 class="r-name" tabindex="-1"><span class="r-tk">${esc(r.symbol)}</span> <span class="r-nm">${esc(displayName(r.name))}</span></h1>
+      <p class="r-where">${r.exchange ? `<span>${esc(r.exchange)}</span>` : ""}${where ? `<span>${where}</span>` : ""}${r.screener === true ? `<a class="tag tag-up r-pass" href="${href}">${icon("check")}Passes the screener</a>` : ""}</p>
+    </div>
+    <dl class="proof-line r-proof" aria-label="Price and size">
+      <div class="r-px"><dt>share price</dt><dd>${price(r.price)}</dd></div>
+      <div><dt>market value</dt><dd>${money(r.mcap)}</dd></div>
+      ${meta?.market_date ? `<div class="r-asof"><dt>data as of</dt><dd>${esc(fullDate(meta.market_date))}</dd></div>` : ""}
+    </dl>
+  </header>`;
+}
+
+function render(r, sc, meta) {
+  document.title = `${r.symbol}: ${displayName(r.name)} | ${TITLE}`;
+  const home = oneTimeHome(r);
+  const parts = [
+    ["score", "Screener score", scoreSection(r, sc, meta, home)],
+    ["quarters", "Revenue by quarter", quarterSection(r)],
+    ["history", "Financial history", historySection(r, home)],
+    ["health", "Health check", healthSection(r, home)],
+    ["peers", "Similar companies", peersSection(r)],
+    ["insiders", "Insider buying", insiderSection(r)],
+    ["news", "Recent news", newsSection(r)],
+  ].filter(([, , html]) => html);
+  host.innerHTML = `${header(r, meta)}
+    <div class="r-grid${r.valuation && VERDICT[r.valuation.verdict] ? "" : " is-none"}">${verdictPanel(r, home)}${pricePanel(r)}</div>
+    <nav class="r-rail" aria-label="Sections of this report"><span class="r-rail-l">On this page</span>${parts.map(([id, label]) =>
+      `<a href="#${id}" data-jump="${id}">${label}</a>`).join("")}</nav>
+    ${parts.map(([, , html]) => html).join("")}
+    ${notesSection(r, meta, home)}`;
+  fitRanges();
+}
+
+// ---- States: the start page, loading, a missing report and a failed load ----
 
 // Bumped on every navigation, so a slow response for an earlier pick never paints over a later one.
 let seq = 0;
 
-async function start() {
+function settle(y, focus) {
+  host.setAttribute("aria-busy", "false");
+  scrollTo(0, y);
+  if (focus) host.querySelector("h1")?.focus({ preventScroll: true });
+  requestAnimationFrame(() => requestAnimationFrame(() => { restoring = false; }));
+}
+
+function setMode(start) {
+  startHead.hidden = !start;
+  searchHost.classList.toggle("is-start", start);
+  searchInput.placeholder = start ? "Ticker or company, e.g. AAPL" : "Search another ticker or company";
+}
+
+async function start({ y = 0, focus = false, initial = false } = {}) {
   const id = ++seq;
-  document.title = "Ticker report | Ticker Finder";
+  current = null;
+  restoring = true;
+  document.title = `Ticker report | ${TITLE}`;
+  setMode(true);
+  host.innerHTML = "";
+  settle(y, false);
+  // The keyboard would cover a phone's screen, so the search box takes focus only with a mouse or trackpad.
+  if (initial && matchMedia("(hover: hover) and (pointer: fine)").matches) searchInput.focus({ preventScroll: true });
+  else if (focus) startHead.querySelector("h1")?.focus({ preventScroll: true });
   let popular = "";
   try {
     const u = await load("universe.json");
     popular = [...u].sort((a, b) => (b[3] || 0) - (a[3] || 0)).slice(0, 8)
-      .map((r) => `<a href="?t=${encodeURIComponent(r[0])}"><span class="s">${esc(r[0])}</span><span class="n">${esc(r[1])}</span></a>`).join("");
+      .map((r) => `<li><a class="chip" href="?t=${encodeURIComponent(r[0])}" data-sym="${esc(r[0])}"><span class="sym">${esc(r[0])}</span><span class="nm">${esc(displayName(r[1]))}</span></a></li>`).join("");
   } catch {}
-  if (id !== seq) return;
-  host.innerHTML = `<section class="start">
-    <h1>Look up any US stock</h1>
-    <p class="lede">Get its news tone, 1 to 100 health scores and an estimated fair value, each with a one-line explanation.</p>
-    ${popular ? `<div class="popular">${popular}</div>` : ""}
-  </section>`;
-  searchHost.querySelector("input").focus();
+  if (id !== seq || !popular) return;
+  host.innerHTML = `<section class="r-pop" aria-labelledby="pop-h"><h2 id="pop-h">Largest by market value</h2><ul class="r-chips">${popular}</ul></section>`;
 }
 
-async function show(sym) {
+const SKELETON = `<div class="r-skel" aria-hidden="true">
+  <div class="r-skel-head"><div><div class="skeleton sk-h1"></div><div class="skeleton sk-line"></div></div><div class="skeleton sk-px"></div></div>
+  <div class="r-grid"><div class="skeleton sk-panel"></div><div class="skeleton sk-panel sk-short"></div></div></div>`;
+
+// A ticker is letters, digits, dots and dashes (BRK.B); anything else can't name a report file.
+const VALID = /^[A-Z0-9][A-Z0-9.\-]{0,11}$/;
+
+async function show(sym, { y = 0, focus = false } = {}) {
   const id = ++seq;
-  host.innerHTML = `<div style="padding-top:40px"><div class="skeleton" style="height:90px;margin-bottom:16px"></div>
-    <div class="r-grid"><div class="skeleton" style="height:360px"></div><div class="skeleton" style="height:360px"></div></div></div>`;
+  const S = String(sym).trim().toUpperCase();
+  current = S;
+  restoring = true;
+  setMode(false);
+  document.title = `${S} | ${TITLE}`;
+  host.setAttribute("aria-busy", "true");
+  host.innerHTML = SKELETON;
   try {
-    const r = await load(`t/${sym.toUpperCase()}.json`);
+    if (!VALID.test(S)) throw Object.assign(new Error("not a ticker"), { status: 404 });
+    const r = await load(`t/${S}.json`);
+    // The screener's ledger and the data date come with the report, so the page is drawn once, at its full height.
+    const [sc, meta] = await Promise.all([
+      r.screener === true ? load("screener.json").catch(() => null) : null,
+      load("meta.json").catch(() => null),
+    ]);
     if (id !== seq) return;
-    render(r);
-    window.scrollTo({ top: 0 });
+    render(r, sc, meta);
+    settle(y, focus);
+    if (!y && location.hash) document.getElementById(decodeURIComponent(location.hash.slice(1)))?.scrollIntoView({ block: "start" });
   } catch (e) {
     if (id !== seq) return;
     if (e.status === 404) {
-      host.innerHTML = `<div class="panel empty" style="margin-top:40px"><h3>No report for "${esc(sym)}"</h3>
-        <p>Reports cover common stocks listed on the NYSE, Nasdaq and NYSE American that file with the SEC. Check the ticker, or search by company name above.</p></div>`;
+      document.title = `No report for ${S} | ${TITLE}`;
+      host.innerHTML = `<section class="frame r-empty"><h1 tabindex="-1">No report for "${esc(S)}"</h1>
+        <p>Reports cover common stocks listed on the NYSE, Nasdaq and NYSE American that file with the SEC. Check the ticker, or search by company name above.</p></section>`;
     } else {
-      host.innerHTML = `<div class="panel empty" style="margin-top:40px"><h3>Could not load the ${esc(sym)} report</h3>
+      document.title = `Could not load ${S} | ${TITLE}`;
+      host.innerHTML = `<section class="frame r-empty"><h1 tabindex="-1">Could not load the ${esc(S)} report</h1>
         <p>The connection may have dropped. Try again in a moment.</p>
-        <button class="btn btn-ghost btn-sm" type="button" data-retry style="margin-top:12px">Try again</button></div>`;
-      host.querySelector("[data-retry]").addEventListener("click", () => show(sym));
+        <button class="btn btn-ghost btn-sm" type="button" data-retry>Try again</button></section>`;
+      host.querySelector("[data-retry]").addEventListener("click", () => show(S, { focus: true }));
     }
+    settle(0, focus);
   }
 }
 
-function route() {
+function route(opts = {}) {
   const t = new URLSearchParams(location.search).get("t");
-  t ? show(t) : start();
+  t ? show(t, opts) : start(opts);
 }
-route();
+route({ y: initialY, initial: true });

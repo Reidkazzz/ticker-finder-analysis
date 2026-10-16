@@ -3,115 +3,110 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ticker Finder</title>
-<meta name="description" content="Screen for undervalued US small caps, track open-market insider buying, and read plain-English reports on any US stock. Built from SEC filings, refreshed every weekday.">
-<meta name="theme-color" content="#0a0a0b">
+<title>TFA | Cheap, healthy US small caps, explained</title>
+<meta name="description" content="A screener for cheap, profitable, debt-light US small caps, an insider-buying tracker and a plain-English report on any US stock. Built from SEC filings, refreshed every weekday evening.">
+<meta name="theme-color" content="#090d14">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,400..600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/app.css">
 <link rel="stylesheet" href="assets/home.css">
 </head>
 <body>
 <header class="nav" data-nav></header>
 
-<main>
+<main id="main">
   <section class="hero">
     <div class="wrap hero-grid">
       <div class="hero-copy">
-        <h1 class="rise">Undervalued US stocks, explained.</h1>
-        <p class="lede rise rise-2">Screens, insider buying and plain-English stock reports built from SEC filings, refreshed every weekday evening.</p>
-        <div class="hero-search rise rise-3" id="hero-search"></div>
-        <a class="text-link rise rise-3" href="#tools">Or pick one of the three tools <i class="ph ph-arrow-down" aria-hidden="true"></i></a>
+        <h1>Cheap, healthy US small caps, with every number explained</h1>
+        <p class="lede">A screener, an insider-buying tracker and a report on any US stock, built from companies' own SEC filings and refreshed every weekday evening.</p>
+        <div class="hero-search" id="hero-search"></div>
+        <p class="hero-links"><a class="text-link" href="screener.html">Open the screener<svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-arrow-right"></use></svg></a></p>
       </div>
 
-      <aside class="panel hero-preview rise rise-2" aria-labelledby="latest-h">
-        <div class="hp-head">
-          <h2 id="latest-h">Latest insider purchases</h2>
-          <span class="faint" data-latest-date></span>
-        </div>
-        <ol class="hp-list" data-latest>
+      <figure class="proof frame" aria-labelledby="top-h">
+        <figcaption class="proof-head">
+          <span class="proof-title" id="top-h">Top of the screener</span>
+          <span data-top-meta>&nbsp;</span>
+        </figcaption>
+        <ol class="top-rows" data-top-screen>
           <li class="skeleton" style="height:52px"></li>
           <li class="skeleton" style="height:52px"></li>
           <li class="skeleton" style="height:52px"></li>
           <li class="skeleton" style="height:52px"></li>
           <li class="skeleton" style="height:52px"></li>
         </ol>
-        <a class="hp-all" href="insiders.html">All insider buying <i class="ph ph-arrow-right" aria-hidden="true"></i></a>
-      </aside>
+        <a class="proof-foot" href="screener.html" data-top-all>See the whole list<svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-arrow-right"></use></svg></a>
+      </figure>
     </div>
   </section>
 
-  <section class="tools" id="tools">
-    <div class="wrap">
-      <div class="section-head">
-        <h2>Pick a tool</h2>
-        <p class="lede">Each one answers a different question. All of them explain their numbers as they go.</p>
+  <section class="pair" id="tools" aria-labelledby="screener-h">
+    <div class="wrap pair-grid">
+      <div class="pair-claim">
+        <h2 id="screener-h">Eight rules decide who is on the list. A 100-point score decides the order.</h2>
+        <p>Every company on the screener is cheap against its sales, profitable, light on debt, based in the US and not shrinking fast. The score then ranks them, and you can open any company to see each part of it beside its own figures.</p>
+        <ul class="claim-points">
+          <li><svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-check"></use></svg><span>Price under 2 times yearly sales, market value under $3 billion</span></li>
+          <li><svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-check"></use></svg><span>Long-term debt under half of equity, <span data-margin-cents>3 cents</span> of profit per sales dollar or more</span></li>
+          <li><svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-check"></use></svg><span>Positive free cash flow, profitable in 2 of the last 3 years</span></li>
+        </ul>
+        <a class="btn btn-primary" href="screener.html">Open the screener<svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-arrow-right"></use></svg></a>
       </div>
-
-      <div class="bento">
-        <article class="tile tile-screener">
-          <div class="tile-top">
-            <h3>Sector screener</h3>
-            <p class="muted">Which small US companies are cheap, profitable and low on debt right now?</p>
-          </div>
-          <ul class="rules">
-            <li><i class="ph ph-check" aria-hidden="true"></i>Priced under 2x yearly sales</li>
-            <li><i class="ph ph-check" aria-hidden="true"></i>Worth less than $3 billion</li>
-            <li><i class="ph ph-check" aria-hidden="true"></i>Little or no debt</li>
-            <li><i class="ph ph-check" aria-hidden="true"></i><span>Keeps <span data-margin-cents>3 cents</span> or more of every sales dollar</span></li>
-            <li><i class="ph ph-check" aria-hidden="true"></i>Brings in more cash than it spends</li>
-            <li><i class="ph ph-check" aria-hidden="true"></i>Based and incorporated in the US</li>
-          </ul>
-          <div class="tile-table">
-            <div class="tt-head"><span>Top ranked today</span><span data-screen-count class="faint"></span></div>
-            <div data-top-screen>
-              <div class="skeleton" style="height:44px;margin-bottom:6px"></div>
-              <div class="skeleton" style="height:44px;margin-bottom:6px"></div>
-              <div class="skeleton" style="height:44px"></div>
-            </div>
-          </div>
-          <a class="btn btn-primary" href="screener.html">Open screener <i class="ph ph-arrow-right" aria-hidden="true"></i></a>
-        </article>
-
-        <article class="tile tile-insider">
-          <div class="tile-top">
-            <h3>Insider buying</h3>
-            <p class="muted">Who inside a company is buying its stock with their own money?</p>
-          </div>
-          <p class="insider-summary" data-insider-summary>&nbsp;</p>
-          <div class="tier-key">
-            <div><span class="tag tag-solid">Tier 1</span><span class="muted">$10M or more bought</span></div>
-            <div><span class="tag">Tier 2</span><span class="muted">$1M or more, or a stake up 20%+</span></div>
-          </div>
-          <a class="btn btn-ghost" href="insiders.html">See insider buying <i class="ph ph-arrow-right" aria-hidden="true"></i></a>
-        </article>
-
-        <article class="tile tile-report">
-          <div class="tile-top">
-            <h3>Ticker report</h3>
-            <p class="muted">Is one stock healthy, and is its price fair? News, scores and a verdict.</p>
-          </div>
-          <div class="example" data-example>
-            <div class="skeleton" style="height:120px"></div>
-          </div>
-          <a class="btn btn-ghost" data-example-link href="report.html">Open ticker report <i class="ph ph-arrow-right" aria-hidden="true"></i></a>
-        </article>
+      <div class="frame pair-proof" data-ledger-proof aria-live="polite">
+        <div class="skeleton" style="height:340px"></div>
       </div>
     </div>
   </section>
 
-  <section class="method" id="method">
+  <section class="pair pair-flip" aria-labelledby="insiders-h">
+    <div class="wrap pair-grid">
+      <div class="pair-claim">
+        <h2 id="insiders-h">See who inside a company is buying its stock with their own money</h2>
+        <p data-insider-summary>Executives, directors and big owners must report their trades to the SEC within two business days. TFA reads every filing and ranks the open-market purchases.</p>
+        <dl class="tier-key">
+          <div><dt><span class="tag tag-solid">Tier 1</span></dt><dd><span data-tier1>$10 million</span> or more bought</dd></div>
+          <div><dt><span class="tag tag-line">Tier 2</span></dt><dd><span data-tier2>$1 million</span> or more, or one buyer growing their stake by <span data-tier2-stake>20%</span> or more</dd></div>
+        </dl>
+        <a class="btn btn-ghost" href="insiders.html">See insider buying<svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-arrow-right"></use></svg></a>
+      </div>
+      <figure class="frame pair-proof" aria-labelledby="latest-h">
+        <figcaption class="proof-head"><span class="proof-title" id="latest-h">Latest Tier 1 and 2 purchases</span><span data-latest-date>&nbsp;</span></figcaption>
+        <ol class="buy-rows" data-latest>
+          <li class="skeleton" style="height:50px"></li>
+          <li class="skeleton" style="height:50px"></li>
+          <li class="skeleton" style="height:50px"></li>
+          <li class="skeleton" style="height:50px"></li>
+          <li class="skeleton" style="height:50px"></li>
+        </ol>
+      </figure>
+    </div>
+  </section>
+
+  <section class="pair" aria-labelledby="report-h">
+    <div class="wrap pair-grid">
+      <div class="pair-claim">
+        <h2 id="report-h">Any US stock: is the business healthy, and is the price fair?</h2>
+        <p>A health check from its filings, a fair-value range from similar companies and a cash-flow model, its peers, insider trades and the latest news. Each estimate says how it was made and how well that method has done in a test on past data.</p>
+        <a class="btn btn-ghost" data-example-link href="report.html">Open a ticker report<svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-arrow-right"></use></svg></a>
+      </div>
+      <div class="frame pair-proof" data-example>
+        <div class="skeleton" style="height:260px"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="method" id="method" aria-labelledby="method-h">
     <div class="wrap method-grid">
       <div>
-        <h2>How to read the numbers</h2>
+        <h2 id="method-h">How to read the numbers</h2>
         <p class="lede">New to investing? These six ideas cover almost everything on this site.</p>
         <div class="notice method-note">
-          <i class="ph ph-info" aria-hidden="true"></i>
+          <svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-info"></use></svg>
           <span>Cheap is not the same as good. A stock can look cheap because the business is shrinking.
-          That is why every screen also checks that the company is profitable, growing and not drowning in debt.</span>
+          That is why the screener also checks that a company is profitable, isn't shrinking fast and isn't drowning in debt.</span>
         </div>
       </div>
       <dl class="glossary">

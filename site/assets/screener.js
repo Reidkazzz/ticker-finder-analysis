@@ -1,21 +1,27 @@
-import { chrome, date, displayName, esc, load, meter, money, pct, price, times } from "./common.js";
+import { chrome, displayName, esc, icon, load, longDate, money, pct, tape, times } from "./common.js";
+import { debtTag, flagDefs as sharedFlagDefs, flagIcons, flagTile, ledger, under } from "./ledger.js";
 
 chrome();
 
 const params = new URLSearchParams(location.search);
 const INSIDER_FILTERS = ["any", "buying", "below"];
+// Each sort's order is fixed: a score from best to worst, a ratio from cheapest, a margin from highest.
+const SORT_NAMES = ["score", "ps", "pb", "net_margin", "fcf_yield", "drawdown", "mcap"];
 const state = {
   sector: params.get("sector") || "All",
   insider: INSIDER_FILTERS.includes(params.get("insider")) ? params.get("insider") : "any",
-  sort: "score",
+  sort: SORT_NAMES.includes(params.get("sort")) ? params.get("sort") : "score",
   open: null,
 };
 const host = document.querySelector("[data-results]");
 const countEl = document.querySelector("[data-count]");
+const sortEl = document.querySelector("[data-sort]");
+const resetEl = document.querySelector("[data-reset]");
 let data;
 let insiderDays = null; // the insider scan's window (meta.json), for "in the last 30 days"
+let insiderPending = 0; // the insider scan's days not yet read (meta.json), which the filter's empty state names
 
-// Missing values sort last whichever way a column sorts.
+// Missing values sort last whichever way a column sorts. Ties keep the score's order (the sort is stable).
 const low = (v) => v ?? Number.MAX_VALUE;
 const high = (v) => v ?? -Number.MAX_VALUE;
 const SORTS = {
@@ -27,6 +33,7 @@ const SORTS = {
   drawdown: (a, b) => high(b.drawdown) - high(a.drawdown),
   mcap: (a, b) => a.mcap - b.mcap,
 };
+const SORT_DIR = { score: "descending", ps: "ascending", pb: "ascending", net_margin: "descending", fcf_yield: "descending", drawdown: "descending", mcap: "ascending" };
 
 // Older data (a screener.json from before a feature) lacks its keys, and the page hides what it can't show.
 const hasPb = () => data.results.some((r) => "pb" in r);
@@ -34,117 +41,24 @@ const hasInsiders = () => data.insiders_checked === true;
 const ofDrawdown = () => pct(data.rules?.out_of_favor_drawdown ?? 0.25, 0);
 const window_ = () => (insiderDays ? `in the last ${insiderDays} days` : "recently");
 
-const band = (s) => (s >= 70 ? "strong" : s >= 40 ? "fair" : "weak");
-// Long-term debt to equity under 0.01 reads "<0.01x", not "0.00x", which would look like no debt at all.
-const debtTag = (r) =>
-  r.debt_status === "none" ? `<span class="tag tag-up">No debt</span>`
-  : r.debt_status === "net_cash" ? `<span class="tag tag-up">Net cash</span>`
-  : `<span class="tag">Low, ${r.lt_de != null && r.lt_de < 0.005 ? "&lt;0.01x" : times(r.lt_de)}</span>`;
-
-// Each flag as [key, tone, icon, label, tooltip], in the order the flags show. The tone is the site's color meaning:
-// amber for a price or industry that has fallen, green for a sign in the company's favor, red for a warning.
-function flagDefs() {
-  const dd = ofDrawdown();
-  return [
-    ["out_of_favor", "mid", "ph-trend-down", "Out of favor", `${dd} or more below its 52-week high`],
-    ["industry_out_of_favor", "mid", "ph-factory", "Industry out of favor", `The median company in its industry trades ${dd} or more below its 52-week high`],
-    ["undiscovered", "", "ph-binoculars", "Undiscovered", "Two or fewer analysts cover it"],
-    ["under_book", "up", "ph-scales", "Under book value", "Its market value is less than its book value (shareholders' equity less preferred stock)"],
-    ["insiders_buying", "up", "ph-user-plus", "Insiders buying", `Tier 1 or 2 open-market insider buying ${window_()}`],
-    ["below_insider_price", "up", "ph-tag", "Below insiders' price", "The price is under the average price insiders paid"],
-    ["above_upper_band", "down", "ph-warning", "Above upper band, wait for a pullback", "The price is above the average of its last 20 weekly closes plus two standard deviations"],
-  ];
-}
-
-// A row's flags as a line of small icons, each named by its tooltip and, for screen readers, its label. The legend
-// above the table (flagLegend) says what each icon means, and an opened row names its own flags in words (flagNames),
-// so every row keeps one height however many flags it has. Past FLAGS_SHOWN, the rest are counted in a "+N" tile.
-const FLAGS_SHOWN = 4;
-const flagIcon = ([, tone, icon]) => `<span class="flag${tone ? ` flag-${tone}` : ""}" aria-hidden="true"><i class="ph-bold ${icon}"></i></span>`;
-function flags(r) {
-  const f = flagDefs().filter(([k]) => r.flags.includes(k));
-  if (!f.length) return "";
-  const cut = f.length > FLAGS_SHOWN ? FLAGS_SHOWN - 1 : f.length;
-  const rest = f.slice(cut);
-  return `<ul class="flag-set">${f.slice(0, cut).map((d) => `<li title="${esc(`${d[3]}: ${d[4]}`)}">${flagIcon(d)}<span class="sr-only">${esc(d[3])}</span></li>`).join("")}${
-    rest.length ? `<li title="${esc(rest.map((d) => d[3]).join(", "))}"><span class="flag flag-more" aria-hidden="true">+${rest.length}</span><span class="sr-only">${esc(rest.map((d) => d[3]).join(", "))}</span></li>` : ""}</ul>`;
-}
+// The ledger an opened row unfolds, shared with the ticker report (ledger.js).
+const ctx = () => ({ rules: data.rules, industries: data.industries, insiderDays });
+const flagDefs = () => sharedFlagDefs(ctx());
+const flags = (r) => flagIcons(r, ctx());
 
 // The flags any company on the list carries, each icon beside its name: the same whichever sector or filter is shown,
 // so the table doesn't move when they change.
 function flagLegend() {
   const used = flagDefs().filter(([k]) => data.results.some((r) => r.flags.includes(k)));
-  return used.length ? `<ul class="flag-legend" aria-label="What the flag icons mean">${used.map((d) => `<li title="${esc(d[4])}">${flagIcon(d)}${esc(d[3])}</li>`).join("")}</ul>` : "";
+  return used.length ? `<ul class="flag-legend" aria-label="What the flag icons mean">${used.map((d) => `<li>${flagTile(d)}<span>${esc(d[3])}</span></li>`).join("")}</ul>` : "";
 }
 
-// An opened row's flags in words, each with what it means, for readers who can't hover over the icons.
-function flagNames(r) {
-  const f = flagDefs().filter(([k]) => r.flags.includes(k));
-  return f.length ? `<h4>Its flags</h4><ul class="flag-names">${f.map((d) => `<li>${flagIcon(d)}<span><b>${esc(d[3])}</b>: ${esc(d[4])}.</span></li>`).join("")}</ul>` : "";
-}
-
-
-function facts(r) {
-  const out = [];
-  out.push(["ph-receipt", `Sold ${money(r.revenue)} in fiscal ${r.fiscal_year} and kept ${pct(r.net_margin, 0)} of it as profit${r.one_time_note ? ", not counting one-time items" : ""}.`]);
-  if (r.one_time_note) out.push(["ph-info", r.one_time_note]);
-  if (r.revenue_growth != null) out.push(["ph-trend-up", `Sales ${r.revenue_growth >= 0 ? "grew" : "slipped"} ${pct(Math.abs(r.revenue_growth))} from the year before.`]);
-  out.push(["ph-coins", r.debt_status === "none" ? (r.net_cash == null ? "Has no debt." : `Has no debt. Cash on hand: ${money(r.net_cash)}.`)
-    : r.net_cash > 0 ? `Holds ${money(r.net_cash)} more cash than all of its debt.`
-    : `Long-term debt is ${times(r.lt_de)} its equity, under the 0.5 limit.`]);
-  if (r.fcf_yield != null) out.push(["ph-hand-coins", `Generated ${money(r.fcf)} of free cash, ${pct(r.fcf_yield)} of its market value.`]);
-  if ("pb" in r) {
-    out.push(["ph-scales", r.pb != null
-      ? `Its market value is ${under(r.pb)} its book value of ${money(r.book_value)} (shareholders' equity less preferred stock).`
-      : "Its book value (shareholders' equity less preferred stock) is zero or less, so it has no price to book."]);
-  }
-  const asReported = r.profitable_years_reported;
-  out.push(["ph-calendar-check", `Profitable in ${r.profitable_years} of the last ${r.years_checked} years${
-    asReported != null && asReported !== r.profitable_years ? `, not counting one-time items (${asReported} as reported)` : ""}.`]);
-  if (r.drawdown != null) out.push(["ph-trend-down", `Trades ${pct(r.drawdown, 0)} below its 52-week high of ${price(r.high52)}.`]);
-  out.push(["ph-users", r.analysts == null ? "Analyst coverage could not be checked today." : r.analysts === 0 ? "No Wall Street analysts publish estimates on it." : `${r.analysts} analyst${r.analysts === 1 ? " publishes" : "s publish"} estimates on it.`]);
-  return out;
-}
-
-// The flags that aren't already told by the facts above, in words.
-function flagFacts(r) {
-  const out = [];
-  const ins = r.insiders;
-  if (ins) {
-    const paid = ins.avg_price;
-    const vs = paid ? r.price / paid - 1 : null;
-    out.push(["ph-user-plus", `Insiders bought ${money(ins.total_value)} of its stock on the open market ${window_()} (Tier ${ins.tier})${
-      paid ? `, paying ${price(paid)} a share on average. Today's price of ${price(r.price)} is ${pct(Math.abs(vs), Math.abs(vs) < 0.1 ? 1 : 0)} ${vs < 0 ? "below" : "above"} that` : ""}.`]);
-  }
-  if (r.flags.includes("industry_out_of_favor")) {
-    const ind = (data.industries || []).find((x) => x.industry === r.industry);
-    out.push(["ph-factory", ind ? `Its industry, ${ind.industry}, is out of favor: its median company trades ${pct(ind.median_drawdown, 0)} below its 52-week high.`
-      : `Its industry, ${r.industry}, is out of favor.`]);
-  }
-  if (r.flags.includes("above_upper_band") && r.upper_band != null) {
-    out.push(["ph-warning", `Its price of ${price(r.price)} is above its upper band of ${price(r.upper_band)} (the average of its last 20 weekly closes plus two standard deviations), so it has risen unusually fast. Many traders would wait for the price to pull back before buying.`]);
-  }
-  return out;
-}
-
-const factList = (list) => `<ul class="facts">${list.map(([i, t]) => `<li><i class="ph ${i}" aria-hidden="true"></i><span>${esc(t)}</span></li>`).join("")}</ul>`;
-
+const detailId = (sym) => `ledger-${sym.replace(/[^A-Za-z0-9]/g, "-")}`;
 function detailRow(r, cols) {
-  // Whole points when the pipeline sends them. Older data has one-decimal parts, and rounding those
-  // one by one here would stop them adding up to the score, so they keep their decimal.
-  const whole = r.score_parts.every((p) => Number.isInteger(p.points));
-  const pts = (n) => (whole ? String(n) : (Math.round(n * 10) / 10).toFixed(1));
-  const total = r.score_parts.reduce((a, p) => a + p.points, 0);
-  const more = flagFacts(r);
-  return `<tr class="detail"><td colspan="${cols}"><div class="detail-inner">
-    <div>${flagNames(r)}<h4${r.flags.length ? ` class="facts-head"` : ""}>Why it passed</h4>${factList(facts(r))}${more.length ? `<h4 class="facts-head">What its flags mean</h4>${factList(more)}` : ""}</div>
-    <div><h4>How the ${r.score} score adds up</h4><div class="parts">${r.score_parts.map((p) => `
-      <div class="part"><span>${esc(p.label)}</span><div class="part-track"><span style="width:${p.max ? (p.points / p.max) * 100 : 0}%"></span></div><span class="pts">${pts(p.points)} / ${p.max}</span></div>`).join("")}
-      <div class="part part-total"><span>Total</span><span>${Math.abs(total - r.score) < 0.05 ? "" : `Rounds to ${r.score}`}</span><span class="pts">${pts(total)} / ${r.score_parts.reduce((a, p) => a + p.max, 0)}</span></div>
-    </div></div>
-    <div class="detail-actions"><a class="btn btn-primary btn-sm" href="report.html?t=${encodeURIComponent(r.symbol)}">Full report on ${esc(r.symbol)}</a></div>
-  </div></td></tr>`;
+  return `<tr class="detail" id="${detailId(r.symbol)}"><td colspan="${cols}">${ledger(r, ctx())}</td></tr>`;
 }
+
+// ---- Filters, sort and the table ----
 
 // The insider filter above the list (Tier 1 or 2 buying, and a price under what insiders paid).
 const insiderOk = (r) => state.insider === "any"
@@ -155,8 +69,16 @@ const INSIDER_WORDS = {
   buying: ["has Tier 1 or 2 insider buying", "have Tier 1 or 2 insider buying"],
   below: ["trades below what Tier 1 or 2 insiders paid", "trade below what Tier 1 or 2 insiders paid"],
 };
-// The insider scan's days not yet read (meta.json), which the filter's empty state names.
-let insiderPending = 0;
+
+function setParam(key, value) {
+  const u = new URL(location);
+  value == null ? u.searchParams.delete(key) : u.searchParams.set(key, value);
+  history.replaceState(null, "", u);
+}
+
+function paintReset() {
+  resetEl.hidden = state.sector === "All" && state.insider === "any" && state.sort === "score";
+}
 
 function renderSectors() {
   const el = document.querySelector("[data-sectors]");
@@ -166,9 +88,10 @@ function renderSectors() {
     : data.results.filter((r) => insiderOk(r) && (name === "All" || r.sector === name)).length);
   const list = [{ name: "All" }, ...data.sectors.filter((s) => s.checked > 0 || s.excluded)];
   el.innerHTML = list.map((s) => {
-    const n = s.excluded ? 0 : count(s.name);
+    const n = s.excluded ? null : count(s.name);
+    const label = s.name === "All" ? "All sectors" : s.name;
     return `<button class="pill${n ? "" : " pill-empty"}" type="button" data-sector="${esc(s.name)}" aria-pressed="${s.name === state.sector}">
-    ${esc(s.name === "All" ? "All sectors" : s.name)}<span class="count">${n}</span></button>`;
+    ${esc(label)}<span class="count"><span class="sr-only">, </span>${n == null ? "<span class=\"sr-only\">not screened</span><span aria-hidden=\"true\">n/a</span>" : `${n}<span class="sr-only"> passed</span>`}</span></button>`;
   }).join("");
   el.onclick = (e) => {
     const b = e.target.closest("[data-sector]");
@@ -184,18 +107,14 @@ function renderSectors() {
   // On a phone the sectors scroll sideways: bring the chosen one into view without moving the page.
   const on = el.querySelector('[aria-pressed="true"]');
   if (on && el.scrollWidth > el.clientWidth) el.scrollLeft = Math.max(0, on.offsetLeft - el.offsetLeft - 16);
-}
-
-function setParam(key, value) {
-  const u = new URL(location);
-  value == null ? u.searchParams.delete(key) : u.searchParams.set(key, value);
-  history.replaceState(null, "", u);
+  paintReset();
 }
 
 function renderInsiderFilter() {
   const row = document.querySelector("[data-insider-only]");
   if (!hasInsiders()) {
     state.insider = "any";
+    setParam("insider", null);
     return;
   }
   row.hidden = false;
@@ -214,6 +133,16 @@ function renderInsiderFilter() {
   };
 }
 
+function setSort(key) {
+  if (!SORTS[key] || (key === "pb" && !hasPb())) return;
+  state.sort = key;
+  state.open = null;
+  sortEl.value = key;
+  setParam("sort", key === "score" ? null : key);
+  paintReset();
+  renderTable();
+}
+
 // Companies that passed every other check but were left out because a check could not be confirmed on this run:
 // their US registration ("us") or their debt ("debt"), each listed in "unconfirmed" with its reason in "reason".
 // Older data lists only registration problems, as symbols or as objects without "unconfirmed".
@@ -225,7 +154,7 @@ const UNCONFIRMED = {
   "debt us": (n) => `passed every other check, but ${its(n)} debt could not be read reliably from ${its(n)} filings and ${its(n)} US headquarters or incorporation could not be confirmed with the SEC today, so ${isLeftOut(n)}`,
 };
 const andList = (a) => (a.length < 2 ? a.join("") : `${a.slice(0, -1).join(", ")} and ${a[a.length - 1]}`);
-const symLink = (s, title) => `<a href="report.html?t=${encodeURIComponent(s)}"${title ? ` title="${esc(title)}"` : ""}>${esc(s)}</a>`;
+const symLink = (s, title) => `<a class="mono" href="report.html?t=${encodeURIComponent(s)}"${title ? ` title="${esc(title)}"` : ""}>${esc(s)}</a>`;
 
 function unverifiedNote() {
   const list = (data.unverified || []).map((u) => (typeof u === "string" ? { symbol: u } : u))
@@ -249,11 +178,59 @@ function unverifiedNote() {
     const again = key.split(" ").includes("us") ? " The next update checks again." : "";
     return `${n} ${n === 1 ? "company" : "companies"} ${why}: ${links}.${again}`;
   });
-  return `<div class="notice unverified"><i class="ph ph-info" aria-hidden="true"></i>
-    <div>${sentences.map((s, i) => `<p${i ? ` style="margin-top:6px"` : ""}>${s}</p>`).join("")}</div></div>`;
+  return `<div class="notice unverified">${icon("info")}
+    <div>${sentences.map((s) => `<p>${s}</p>`).join("")}</div></div>`;
+}
+
+// The ranked table's columns: [key, heading, the sort it sets or null, its label on a phone].
+const COLUMNS = () => [
+  ["rank", `<span class="sr-only">Rank</span>#`, null],
+  ["co", "Company", null],
+  ["score", "Score", "score"],
+  ["flags", "Flags", null],
+  ["mcap", "Market value", "mcap", "Value"],
+  ["ps", "Price / sales", "ps", "P/S"],
+  ...(hasPb() ? [["pb", "Price / book", "pb", "P/B"]] : []),
+  ["margin", "Net margin", "net_margin", "Margin"],
+  ["debt", "Debt", null, "Debt"],
+  ["fcf", "Cash yield", "fcf_yield", "Cash yield"],
+  ["dd", "Below high", "drawdown", "Below high"],
+  ["an", "Analysts", null, "Analysts"],
+  ["go", `<span class="sr-only">Report</span>`, null],
+];
+
+function head() {
+  return `<thead><tr>${COLUMNS().map(([k, h, s]) => {
+    const cls = ["co", "score", "flags"].includes(k) ? ` class="txt c-${k}"` : ` class="c-${k}"`;
+    if (!s) return `<th scope="col"${cls}${k === "debt" ? ` title="No debt, more cash than debt (net cash), or long-term debt as a multiple of equity"` : ""}>${h}</th>`;
+    const on = state.sort === s;
+    return `<th scope="col"${cls}${on ? ` aria-sort="${SORT_DIR[s]}"` : ""}><button class="sort" type="button" data-sort-key="${s}">${h}${icon(on ? (SORT_DIR[s] === "descending" ? "sort-down" : "sort-up") : "sort")}<span class="sr-only">${on ? ", sorted" : ", sort"}</span></button></th>`;
+  }).join("")}</tr></thead>`;
+}
+
+function row(r, i) {
+  const sym = esc(r.symbol);
+  const labelled = (k, label, v, extra = "") => `<td class="c-${k}" data-label="${label}"${extra}>${v}</td>`;
+  return `<tr class="row" data-sym="${sym}">
+    <td class="c-rank">${i + 1}</td>
+    <td class="txt c-co"><button class="row-toggle" type="button" aria-expanded="${state.open === r.symbol}" aria-controls="${detailId(r.symbol)}">
+      ${icon("caret-right", "caret")}<span class="co"><span class="sym">${sym}</span><span class="nm" title="${esc(r.name)}">${esc(displayName(r.name))}</span></span></button></td>
+    <td class="txt c-score"><div class="score" role="img" aria-label="Score ${esc(String(r.score))} out of 100"><b>${esc(String(r.score))}</b>${tape(r.score_parts)}</div></td>
+    <td class="txt c-flags">${flags(r)}</td>
+    ${labelled("mcap", "Value", money(r.mcap))}
+    ${labelled("ps", "P/S", times(r.ps))}
+    ${hasPb() ? labelled("pb", "P/B", under(r.pb)) : ""}
+    ${labelled("margin", "Margin", pct(r.net_margin), r.one_time_note && r.net_margin_reported != null ? ` title="Leaves out one-time items. Reported margin: ${pct(r.net_margin_reported)}"` : "")}
+    ${labelled("debt", "Debt", debtTag(r))}
+    ${labelled("fcf", "Cash yield", pct(r.fcf_yield))}
+    ${labelled("dd", "Below high", r.drawdown == null ? "n/a" : pct(r.drawdown, 0))}
+    ${labelled("an", "Analysts", r.analysts ?? "n/a")}
+    <td class="c-go"><a class="go" href="report.html?t=${encodeURIComponent(r.symbol)}" aria-label="Open the ${sym} report">${icon("arrow-up-right")}</a></td>
+  </tr>`;
 }
 
 function renderTable() {
+  host.setAttribute("aria-busy", "false");
   const rows = data.results.filter((r) => (state.sector === "All" || r.sector === state.sector) && insiderOk(r)).sort(SORTS[state.sort]);
   const sec = data.sectors.find((s) => s.name === state.sector);
   const which = state.insider === "any" ? "" : ` and ${INSIDER_WORDS[state.insider][rows.length === 1 ? 0 : 1]}`;
@@ -280,112 +257,123 @@ function renderTable() {
       Try another sector or come back after the next update.</p></div>${unverifiedNote()}`;
     return;
   }
-  const pb = hasPb();
-  const cols = pb ? 12 : 11;
+  const cols = COLUMNS().length;
   host.innerHTML = `${flagLegend()}<div class="table-wrap"><table class="data screen-table">
-    <thead><tr>
-      <th>#</th><th>Company</th><th class="flags-col">Flags</th><th class="score-col">Score</th><th>Market value</th><th>Price / sales</th>${pb ? "<th>Price / book</th>" : ""}
-      <th>Net margin</th><th title="No debt, more cash than debt (net cash), or long-term debt as a multiple of equity">Debt</th><th>Cash yield</th><th>Below high</th><th>Analysts</th>
-    </tr></thead>
-    <tbody>${rows.map((r, i) => `
-      <tr class="row" tabindex="0" data-sym="${esc(r.symbol)}" aria-expanded="${state.open === r.symbol}">
-        <td class="rank-cell">${i + 1}</td>
-        <td class="co-cell"><div class="co"><div class="co-top"><span class="sym">${esc(r.symbol)}</span>${flags(r)}</div><span class="nm" title="${esc(r.name)}">${esc(displayName(r.name))}</span></div></td>
-        <td class="flags-cell">${flags(r)}</td>
-        <td class="score-cell">${meter(r.score, band(r.score))}</td>
-        <td>${money(r.mcap)}</td>
-        <td>${times(r.ps)}</td>
-        ${pb ? `<td>${under(r.pb)}</td>` : ""}
-        <td${r.one_time_note && r.net_margin_reported != null ? ` title="Leaves out one-time items. Reported margin: ${pct(r.net_margin_reported)}"` : ""}>${pct(r.net_margin)}</td>
-        <td>${debtTag(r)}</td>
-        <td>${pct(r.fcf_yield)}</td>
-        <td>${r.drawdown == null ? "n/a" : pct(r.drawdown, 0)}</td>
-        <td>${r.analysts ?? "n/a"}</td>
-      </tr>${state.open === r.symbol ? detailRow(r, cols) : ""}`).join("")}
-    </tbody></table></div>
-    <p class="faint" style="font-size:13px;margin-top:12px">Select a row to see why it passed and how its score adds up. Cash yield is free cash flow as a share of market value.${pb ? " Price to book is market value over book value: shareholders' equity less preferred stock." : ""}</p>
+    <caption class="sr-only">Companies that passed every check, ${esc(sortEl.selectedOptions[0]?.textContent || "best score")} first. Open a company to see its score and rules.</caption>
+    ${head()}
+    <tbody>${rows.map((r, i) => row(r, i) + (state.open === r.symbol ? detailRow(r, cols) : "")).join("")}</tbody></table></div>
+    <p class="table-note">Open a row to see how its score adds up and its figure for each rule. Cash yield is free cash flow as a share of market value.${hasPb() ? " Price to book is market value over book value: shareholders' equity less preferred stock." : ""}</p>
     ${unverifiedNote()}`;
-
-  // A table wider than its box scrolls sideways: its right edge fades while there is more to see. An opened row's detail
-  // keeps to the box's width and stays in view, rather than running the table's whole width.
-  const wrap = host.querySelector(".table-wrap");
-  const edge = () => {
-    // A wide screen's box clips rather than scrolls (pages.css); should the table outgrow it, it scrolls after all.
-    wrap.classList.toggle("scrolls", wrap.scrollWidth > wrap.clientWidth + 1);
-    wrap.classList.toggle("more-right", wrap.scrollLeft + wrap.clientWidth < wrap.scrollWidth - 1);
-    const inner = wrap.querySelector(".detail-inner");
-    if (inner) inner.style.width = wrap.scrollWidth > wrap.clientWidth ? `${wrap.clientWidth}px` : "";
-  };
-  wrap.addEventListener("scroll", edge, { passive: true });
-  if (window.ResizeObserver) new ResizeObserver(edge).observe(wrap);
-  edge();
-
-  host.querySelectorAll("tr.row").forEach((tr) => {
-    const toggle = () => {
-      state.open = state.open === tr.dataset.sym ? null : tr.dataset.sym;
-      renderTable();
-      host.querySelector(`tr.row[data-sym="${CSS.escape(tr.dataset.sym)}"]`)?.focus(); // keep the reader's place
-    };
-    tr.addEventListener("click", toggle);
-    tr.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
-  });
+  watch(host.querySelector(".table-wrap"));
 }
 
-// The sections under the list. Each is hidden in the page and shown only when the data has it, so a screener.json
-// from before these lists leaves them out. A long list shows its first SHOWN rows and a button for the rest.
-const SHOWN = 15;
-// A ratio a list is "under" (price to book, market value to net cash), cut rather than rounded under 1, so 0.997 reads
-// 0.99x and not 1.00x on a list of companies under 1.
-const under = (x) => (x != null && x < 1 ? `${(Math.floor(x * 100) / 100).toFixed(2)}x` : times(x));
-const coCell = (r) => `<td class="txt co-cell"><div class="co"><a class="sym" href="report.html?t=${encodeURIComponent(r.symbol)}">${esc(r.symbol)}</a><span class="nm" title="${esc(r.name)}">${esc(displayName(r.name))}</span></div></td>`;
-const asOf = (iso) => (iso ? date(iso, { month: "short", day: "numeric", year: "numeric" }) : "n/a");
+// Opens or closes one row's ledger in place, leaving the rest of the table (and its scroll position) as it is.
+function toggle(sym) {
+  const tbody = host.querySelector("tbody");
+  if (!tbody) return;
+  const prev = state.open;
+  tbody.querySelector("tr.detail")?.remove();
+  tbody.querySelectorAll("tr.row .row-toggle[aria-expanded='true']").forEach((b) => b.setAttribute("aria-expanded", "false"));
+  state.open = prev === sym ? null : sym;
+  if (!state.open) return;
+  const tr = tbody.querySelector(`tr.row[data-sym="${CSS.escape(sym)}"]`);
+  const r = data.results.find((x) => x.symbol === sym);
+  if (!tr || !r) return;
+  tr.querySelector(".row-toggle").setAttribute("aria-expanded", "true");
+  tr.insertAdjacentHTML("afterend", detailRow(r, COLUMNS().length));
+  fitLedger();
+}
 
-function section(key, body) {
+// A table wider than its box scrolls sideways, its right edge fading while there is more to see. An opened row's ledger
+// keeps to the box's width rather than running the table's whole width. One observer serves every redraw.
+let observed = null;
+const ro = window.ResizeObserver ? new ResizeObserver(() => observed && edge(observed)) : null;
+function edge(wrap) {
+  const scrolls = wrap.scrollWidth > wrap.clientWidth + 1 || wrap.querySelector("table").offsetWidth > wrap.clientWidth + 1;
+  wrap.classList.toggle("scrolls", scrolls);
+  wrap.classList.toggle("more-right", scrolls && wrap.scrollLeft + wrap.clientWidth < wrap.scrollWidth - 1);
+  fitLedger();
+}
+function fitLedger() {
+  const wrap = host.querySelector(".table-wrap");
+  const inner = wrap?.querySelector(".ledger");
+  if (inner) inner.style.width = wrap.classList.contains("scrolls") ? `${wrap.clientWidth - 2}px` : "";
+}
+function watch(wrap) {
+  observed = wrap;
+  wrap.addEventListener("scroll", () => edge(wrap), { passive: true });
+  ro?.observe(wrap);
+  edge(wrap);
+}
+
+host.addEventListener("click", (e) => {
+  const sortBtn = e.target.closest("[data-sort-key]");
+  if (sortBtn) { setSort(sortBtn.dataset.sortKey); host.querySelector(`[data-sort-key="${sortBtn.dataset.sortKey}"]`)?.focus(); return; }
+  if (e.target.closest("a, .ledger")) return;
+  const tr = e.target.closest("tr.row");
+  if (tr) toggle(tr.dataset.sym);
+});
+
+// ---- The lists under the ranked one ----
+
+// Each is hidden in the page and shown only when the data has it, so a screener.json from before these lists leaves
+// them out. A long list shows its first SHOWN rows and a button for the rest.
+const SHOWN = 15;
+const coCell = (r) => `<td class="txt co-cell"><div class="co"><a class="sym" href="report.html?t=${encodeURIComponent(r.symbol)}">${esc(r.symbol)}</a><span class="nm" title="${esc(r.name)}">${esc(displayName(r.name))}</span></div></td>`;
+const asOf = (iso) => (iso ? longDate(iso) : "n/a");
+
+function section(key, body, count) {
   const el = document.querySelector(`[data-section="${key}"]`);
   el.hidden = false;
   el.querySelector("[data-body]").innerHTML = body;
+  const c = el.querySelector("[data-sec-count]");
+  if (c && count != null) c.textContent = typeof count === "number" ? `${count} ${count === 1 ? "company" : "companies"}` : `${count} industries`;
   const more = el.querySelector("[data-more]");
   if (more) {
     more.onclick = () => {
       const extra = el.querySelectorAll("tr[data-extra]");
-      extra.forEach((tr) => { tr.hidden = false; });
-      more.remove();
-      extra[0]?.querySelector("a")?.focus(); // keep keyboard focus in the list, at the first row it revealed
+      const opening = more.getAttribute("aria-expanded") !== "true";
+      extra.forEach((tr) => { tr.hidden = !opening; });
+      more.setAttribute("aria-expanded", String(opening));
+      more.textContent = opening ? "Show fewer" : more.dataset.label;
+      if (opening) extra[0]?.querySelector("a")?.focus(); // keep keyboard focus in the list, at the first row it revealed
     };
   }
+  index[key] = count;
 }
 
 // head: the column names. The first column (the company or industry) and those numbered in `text` hold words, aligned
 // left (class "txt"); the rest hold figures, aligned right.
-function listTable(head, rows, cell, note = "", text = []) {
+function listTable(caption, head, rows, cell, note = "", text = []) {
   const extra = rows.length - SHOWN;
-  return `<div class="table-wrap"><table class="data list">
-    <thead><tr>${head.map((h, i) => `<th${i === 0 || text.includes(i) ? ` class="txt"` : ""}>${h}</th>`).join("")}</tr></thead>
+  return `<div class="table-wrap list-wrap"><table class="data list">
+    <caption class="sr-only">${esc(caption)}</caption>
+    <thead><tr>${head.map((h, i) => `<th scope="col"${i === 0 || text.includes(i) ? ` class="txt"` : ""}>${h}</th>`).join("")}</tr></thead>
     <tbody>${rows.map((r, i) => `<tr${i >= SHOWN ? " data-extra hidden" : ""}>${cell(r)}</tr>`).join("")}</tbody></table></div>
-    ${extra > 0 ? `<button class="btn btn-ghost btn-sm list-more" type="button" data-more>Show all ${rows.length}</button>` : ""}${note}`;
+    ${extra > 0 ? `<button class="btn btn-ghost btn-sm list-more" type="button" data-more aria-expanded="false" data-label="Show all ${rows.length}">Show all ${rows.length}</button>` : ""}${note}`;
 }
 
 function unconfirmedNote(syms, what) {
   if (!syms?.length) return "";
-  return `<div class="notice unverified"><i class="ph ph-info" aria-hidden="true"></i><p>${syms.length} more ${syms.length === 1 ? "company meets" : "companies meet"} ${what}, but where ${syms.length === 1 ? "it is" : "they are"} incorporated or based could not be confirmed with the SEC today: ${andList(syms.map((s) => symLink(s)))}. The next update checks again.</p></div>`;
+  return `<div class="notice unverified">${icon("info")}<p>${syms.length} more ${syms.length === 1 ? "company meets" : "companies meet"} ${what}, but where ${syms.length === 1 ? "it is" : "they are"} incorporated or based could not be confirmed with the SEC today: ${andList(syms.map((s) => symLink(s)))}. The next update checks again.</p></div>`;
 }
 
 function renderIndustries() {
   if (!Array.isArray(data.industries)) return;
   const out = data.industries.filter((x) => x.out_of_favor);
   const market = data.market_median_ps;
-  const lead = `<p class="faint list-note">${data.industries.length} industries measured${market != null ? `. The whole market's median price to sales is ${times(market)}; an industry's median shown in green is under it` : ""}.</p>`;
+  const lead = `<p class="list-note">${data.industries.length} industries measured${market != null ? `. The whole market's median price to sales is ${times(market)}; an industry's median shown in green is under it` : ""}.</p>`;
   if (!data.industries.length) {
-    section("industries", `<div class="panel empty"><h3>Industries could not be measured today</h3><p>Too few companies had a year of prices loaded to measure any industry.</p></div>`);
+    section("industries", `<div class="panel empty"><h3>Industries could not be measured today</h3><p>Too few companies had a year of prices loaded to measure any industry.</p></div>`, 0);
     return;
   }
   if (!out.length) {
-    section("industries", `<div class="panel empty"><h3>No industry is out of favor today</h3><p>In every industry measured, the median company trades less than ${ofDrawdown()} below its 52-week high.</p></div>${lead}`);
+    section("industries", `<div class="panel empty"><h3>No industry is out of favor today</h3><p>In every industry measured, the median company trades less than ${ofDrawdown()} below its 52-week high.</p></div>${lead}`, 0);
     return;
   }
-  section("industries", `${listTable(["Industry", "Companies", "Median below high", "Median price / sales"], out, (x) => `
+  section("industries", `${listTable("Industries out of favor", ["Industry", "Companies", "Median below high", "Median price / sales"], out, (x) => `
     <td class="txt ind-cell"><b>${esc(x.industry)}</b><span>${esc(x.sector)}</span></td><td>${x.count}</td><td>${pct(x.median_drawdown, 0)}</td>
-    <td${x.median_ps != null && market != null ? ` class="${x.median_ps < market ? "up" : ""}"` : ""}>${times(x.median_ps)}</td>`)}${lead}`);
+    <td${x.median_ps != null && market != null ? ` class="${x.median_ps < market ? "up" : ""}"` : ""}>${times(x.median_ps)}</td>`)}${lead}`, `${out.length} of ${data.industries.length}`);
 }
 
 function runway(r) {
@@ -393,7 +381,7 @@ function runway(r) {
     const n = Math.max(1, Math.round(r.runway_years * 12));
     return r.runway_years < 1 ? `${n} month${n === 1 ? "" : "s"}` : `${r.runway_years.toFixed(1)} years`;
   }
-  return r.runway_note === "not_burning" ? `<span class="faint" title="Free cash flow was zero or more in its latest fiscal year">Not burning cash</span>`
+  return r.runway_note === "not_burning" ? `<span class="faint">Not burning cash</span>`
     : r.runway_note === "stale" ? `<span class="faint" title="Its latest fiscal year of figures (${esc(String(r.fiscal_year ?? ""))}) is over a year older than its balance sheet, so its cash burn is out of date">Out of date</span>`
     : `<span class="faint" title="Its free cash flow could not be read from its filings">Unknown</span>`;
 }
@@ -403,13 +391,13 @@ function renderNetCash() {
   const rows = data.net_cash_list;
   const note = unconfirmedNote(data.net_cash_unconfirmed, "the other tests");
   if (!rows.length) {
-    section("net_cash", `<div class="panel empty"><h3>No company is worth less than its net cash today</h3><p>None of the US companies checked has a market value under its cash and short-term investments minus all debt, preferred stock and outside stakes in its subsidiaries.</p></div>${note}`);
+    section("net_cash", `<div class="panel empty"><h3>No company is worth less than its net cash today</h3><p>None of the US companies checked has a market value under its cash and short-term investments minus all debt, preferred stock and outside stakes in its subsidiaries.</p></div>${note}`, 0);
     return;
   }
-  section("net_cash", listTable(["Company", "Market value", "Net cash", "Value / net cash", "Free cash flow", "Cash runway", "Balance sheet"], rows, (r) => `
+  section("net_cash", listTable("Companies worth less than their net cash", ["Company", "Market value", "Net cash", "Value / net cash", "Free cash flow", "Cash runway", "Balance sheet"], rows, (r) => `
     ${coCell(r)}<td>${money(r.mcap)}</td><td>${money(r.net_cash)}</td><td>${under(r.mcap_to_net_cash)}</td>
     <td class="${r.fcf != null && r.fcf < 0 ? "down" : ""}">${money(r.fcf)}</td><td>${runway(r)}</td><td>${esc(asOf(r.balance_as_of))}</td>`,
-  `<p class="faint list-note">${rows.length} ${rows.length === 1 ? "company" : "companies"}, cheapest against net cash first. Free cash flow is for the latest fiscal year; cash and debt are from the balance sheet dated on the right.</p>${note}`));
+  `<p class="list-note">Cheapest against net cash first. Free cash flow is for the latest fiscal year; cash and debt are from the balance sheet dated on the right. "Not burning cash" means free cash flow was zero or more in its latest fiscal year.</p>${note}`), rows.length);
 }
 
 function renderFinancials() {
@@ -417,59 +405,114 @@ function renderFinancials() {
   const rows = data.financials_list;
   const note = unconfirmedNote(data.financials_unconfirmed, "the other tests");
   if (!rows.length) {
-    section("financials", `<div class="panel empty"><h3>No profitable bank or insurer trades under book value today</h3></div>${note}`);
+    section("financials", `<div class="panel empty"><h3>No profitable bank or insurer trades under book value today</h3></div>${note}`, 0);
     return;
   }
-  section("financials", listTable(["Company", "Kind", "Market value", "Book used", "Price / book", "Profit last year", "Return on equity"], rows, (r) => `
+  section("financials", listTable("Profitable banks and insurers under book value", ["Company", "Kind", "Market value", "Book used", "Price / book", "Profit last year", "Return on equity"], rows, (r) => `
     ${coCell(r)}<td class="txt">${esc(r.kind === "bank" ? "Bank" : r.industry || "Financial")}</td><td>${money(r.mcap)}</td>
-    <td title="${esc(r.book_basis === "tangible" ? "Tangible book value: equity less preferred stock, goodwill and other intangible assets" : "Book value: equity less preferred stock")}">${r.book_basis === "tangible" ? "Tangible" : "Book"}, ${money(r.book)}</td>
+    <td>${r.book_basis === "tangible" ? "Tangible" : "Book"}, ${money(r.book)}</td>
     <td>${under(r.price_to_book)}</td><td>${money(r.net_income)}</td><td>${pct(r.roe)}</td>`,
-  `<p class="faint list-note">${rows.length} ${rows.length === 1 ? "company" : "companies"}, lowest price to book first. Profit and return on equity leave out one-time items and are what is left to common shareholders, after preferred dividends.</p>${note}`, [1]));
+  `<p class="list-note">Lowest price to book first. A bank is measured on tangible book value (equity less preferred stock, goodwill and other intangible assets), any other on book value (equity less preferred stock). Profit and return on equity leave out one-time items and are what is left to common shareholders, after preferred dividends.</p>${note}`, [1]), rows.length);
 }
 
 function renderGiants() {
   if (!Array.isArray(data.giants)) return;
   const rows = data.giants;
   if (!rows.length) {
-    section("giants", `<div class="panel empty"><h3>No company worth over $90 billion trades above 10 times its sales today</h3></div>`);
+    section("giants", `<div class="panel empty"><h3>No company worth over $90 billion trades above 10 times its sales today</h3></div>`, 0);
     return;
   }
   // Older data has no sales_basis: its sales were the latest fiscal year's.
   const period = (r) => (r.sales_basis === "ttm" ? `the 12 months to ${asOf(r.sales_end)}` : `fiscal ${r.fiscal_year ?? "year"}`);
-  section("giants", listTable(["Company", "Sector", "Market value", "Price / sales"], rows, (r) => `
-    ${coCell(r)}<td class="txt">${esc(r.sector)}</td><td>${money(r.mcap)}</td><td class="down" title="${esc(`On ${money(r.revenue)} of sales in ${period(r)}`)}">${times(r.ps)}</td>`,
-  `<p class="faint list-note">Highest price to sales first, on each company's sales over the last 12 months where its quarterly reports give them, otherwise its latest fiscal year's.</p>`, [1]));
+  section("giants", listTable("Companies worth over $90 billion at more than 10 times sales", ["Company", "Sector", "Market value", "Sales", "Price / sales"], rows, (r) => `
+    ${coCell(r)}<td class="txt">${esc(r.sector)}</td><td>${money(r.mcap)}</td><td><span class="cell-sub">${esc(period(r))}</span>${money(r.revenue)}</td><td class="down">${times(r.ps)}</td>`,
+  `<p class="list-note">Highest price to sales first, on each company's sales over the last 12 months where its quarterly reports give them, otherwise its latest fiscal year's.</p>`, [1]), rows.length);
 }
 
-// The explanations above the lists say what the data was built with: the profit margin rule from its rules (8% in
-// data from before September 2026), and the newer flags and the score's weights only where the data has them.
+// The rail of links to the lists under the ranked one, each with its count.
+const index = {};
+function renderIndex() {
+  const el = document.querySelector("[data-index]");
+  const items = [["how", "How the list is made", null], ["industries", "Industries out of favor", index.industries],
+    ["net-cash", "Under 1x cash", index.net_cash], ["financials", "Banks and insurers under book value", index.financials], ["giants", "Overpriced giants", index.giants]]
+    .filter(([id]) => !document.getElementById(id)?.hidden);
+  el.innerHTML = `<span class="index-label">On this page</span>${items.map(([id, label, n]) => `<a href="#${id}">${esc(label)}${n != null ? `<span class="count">${n}</span>` : ""}</a>`).join("")}`;
+  el.hidden = false;
+}
+
+// ---- Explanations wired to the data the page was built with ----
+
+// The rules from the data (8% margin in data from before September 2026), the newer flags and the score's weights only
+// where the data has them.
 function explainRules() {
-  const margin = data.rules?.min_net_margin;
+  const R = data.rules || {};
+  const margin = R.min_net_margin;
   if (margin != null) {
     const n = Math.round(margin * 10000) / 100;
     document.querySelectorAll("[data-margin-pct]").forEach((el) => { el.textContent = `${n}%`; });
     document.querySelectorAll("[data-margin-cents]").forEach((el) => { el.textContent = `${n} cent${n === 1 ? "" : "s"}`; });
     document.querySelectorAll("[data-thin-margin]").forEach((el) => { el.hidden = margin > 0.05; });
   }
+  const words = {
+    max_ps: (v) => String(v),
+    max_mcap: (v) => money(v).replace(/\.00B$/, " billion").replace(/B$/, " billion"),
+    bonus_mcap: (v) => money(v).replace(/\.00B$/, " billion").replace(/B$/, " billion"),
+    max_lt_de: (v) => (v === 0.5 ? "half" : `${times(v)}`),
+    min_profitable_years: (v) => String(v),
+    min_revenue_growth: (v) => pct(Math.abs(v), 0),
+    out_of_favor_drawdown: (v) => pct(v, 0),
+  };
+  document.querySelectorAll("[data-rule]").forEach((el) => {
+    const k = el.dataset.rule;
+    if (R[k] != null && words[k]) el.textContent = words[k](R[k]);
+  });
   const fresh = Array.isArray(data.industries);
   document.querySelectorAll("[data-new-flag]").forEach((el) => { el.hidden = !fresh; });
   const w = data.score_weights || {};
-  document.querySelector("[data-score-help]").hidden = !Object.keys(STATED_WEIGHTS).every((k) => w[k] === STATED_WEIGHTS[k])
-    || Object.keys(w).length !== Object.keys(STATED_WEIGHTS).length;
+  const stated = Object.keys(STATED_WEIGHTS).every((k) => w[k] === STATED_WEIGHTS[k]) && Object.keys(w).length === Object.keys(STATED_WEIGHTS).length;
+  const help = document.querySelector("[data-score-help]");
+  help.hidden = !stated;
+  if (stated) {
+    help.querySelector("[data-tape-key]").innerHTML = tape(Object.entries(STATED_WEIGHTS).map(([key, max]) => ({ key, max, points: max })), "tape-lg");
+  }
 }
-// The weights "How the score adds up" states (screener.SCORE_WEIGHTS). Data scored with other weights hides it, so the
-// page never explains a score by weights it wasn't built with; each row's own parts still show.
+// The weights "Ranked by 100 points" states (screener.SCORE_WEIGHTS), in the pipeline's order. Data scored with other
+// weights hides it, so the page never explains a score by weights it wasn't built with; each row's own parts still show.
 const STATED_WEIGHTS = { ps: 15, debt: 20, margin: 15, fcf: 10, growth: 10, small: 5, out_of_favor: 5, undiscovered: 5, under_book: 10, insiders_buying: 5 };
 
-document.querySelector("[data-sort]").addEventListener("change", (e) => { state.sort = e.target.value; renderTable(); });
+function renderProof(meta) {
+  // The claim carries its own proof: how many of the companies checked passed all eight rules.
+  const checked = data.sectors.reduce((a, s) => a + (s.checked || 0), 0);
+  const n = data.results.length;
+  if (checked) document.querySelector("[data-claim]").textContent = `${n.toLocaleString("en-US")} of ${checked.toLocaleString("en-US")} companies pass all eight quality checks`;
+  document.querySelector("[data-proof-date]").textContent = meta?.market_date ? `Data as of ${longDate(meta.market_date)}` : "";
+}
+
+sortEl.addEventListener("change", (e) => setSort(e.target.value));
+resetEl.addEventListener("click", () => {
+  state.sector = "All"; state.insider = "any"; state.open = null;
+  ["sector", "insider", "sort"].forEach((k) => setParam(k, null));
+  document.querySelectorAll("[data-insider]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.insider === "any"));
+  renderSectors();
+  setSort("score");
+  document.querySelector("[data-sectors] [aria-pressed='true']")?.focus();
+});
 
 Promise.all([load("screener.json"), load("meta.json").catch(() => null)]).then(([d, meta]) => {
   data = d;
   insiderDays = meta?.insider_days ?? null;
   insiderPending = meta?.insider_pending?.length ?? 0;
   if (insiderDays) document.querySelectorAll("[data-window]").forEach((el) => { el.textContent = insiderDays; });
-  if (!hasPb()) document.querySelector("[data-needs-pb]")?.remove();
-  if (state.sector !== "All" && !d.sectors.some((s) => s.name === state.sector)) state.sector = "All";
+  if (!hasPb()) {
+    document.querySelector("[data-needs-pb]")?.remove();
+    if (state.sort === "pb") state.sort = "score";
+  }
+  if (state.sector !== "All" && !d.sectors.some((s) => s.name === state.sector && (s.checked > 0 || s.excluded))) {
+    state.sector = "All";
+    setParam("sector", null);
+  }
+  sortEl.value = state.sort;
+  renderProof(meta);
   explainRules();
   renderInsiderFilter();
   renderSectors();
@@ -478,6 +521,10 @@ Promise.all([load("screener.json"), load("meta.json").catch(() => null)]).then((
   renderNetCash();
   renderFinancials();
   renderGiants();
+  renderIndex();
+  // A link to a list further down (screener.html#giants) lands on it once the lists are drawn.
+  if (location.hash) document.getElementById(decodeURIComponent(location.hash.slice(1)))?.scrollIntoView({ block: "start", behavior: "instant" });
 }).catch(() => {
-  host.innerHTML = `<div class="panel empty"><h3>Screener data is not available yet</h3><p>Results appear after the first nightly update runs.</p></div>`;
+  host.setAttribute("aria-busy", "false");
+  host.innerHTML = `<div class="panel empty"><h3>Screener data is not available yet</h3><p>Results appear after the first nightly update runs. If you expected them, reload the page in a minute.</p></div>`;
 });

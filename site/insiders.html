@@ -3,69 +3,96 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Insider buying | Ticker Finder</title>
+<title>Insider buying | TFA</title>
 <meta name="description" content="Open-market stock purchases by executives, directors and major owners, from SEC Form 4 and Schedule 13D filings.">
-<meta name="theme-color" content="#0a0a0b">
+<meta name="theme-color" content="#090d14">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,400..600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/app.css">
-<link rel="stylesheet" href="assets/pages.css">
+<link rel="stylesheet" href="assets/insiders.css">
 </head>
 <body>
 <header class="nav" data-nav></header>
-<main class="wrap">
-  <div class="page-head">
-    <h1>Insider buying</h1>
-    <p class="lede">Executives, directors and big owners buying their own company's stock on the open market, with their own money. Newest filings first, checked every weekday evening.</p>
-  </div>
+<main class="wrap" id="main">
+  <section class="claim-head">
+    <div>
+      <h1>Insiders buying their own company's stock</h1>
+      <p class="lede">Executives, directors and big owners buying their company's shares on the open market with their own money, from their SEC filings. Newest first, checked every weekday evening.</p>
+    </div>
+    <dl class="proof-line" aria-label="Companies with insider buying, and new stakes">
+      <div><dt>Tier 1 companies</dt><dd data-proof="t1">&nbsp;</dd></div>
+      <div><dt>Tier 2 companies</dt><dd data-proof="t2">&nbsp;</dd></div>
+      <div><dt>with smaller buys</dt><dd data-proof="t3">&nbsp;</dd></div>
+      <div><dt>new 5%+ stakes</dt><dd data-proof="stakes">&nbsp;</dd></div>
+      <div class="proof-date"><dt>data as of</dt><dd data-proof="date">&nbsp;</dd></div>
+    </dl>
+  </section>
 
-  <div class="toolbar">
-    <div class="pills" role="group" aria-label="Sector" data-sectors></div>
-    <div class="toolbar-row">
-      <p class="result-count" data-count aria-live="polite">&nbsp;</p>
-      <div class="pills" role="group" aria-label="Size" data-tiers>
-        <button class="pill" type="button" data-tier="12" aria-pressed="true">Tier 1 and 2</button>
-        <button class="pill" type="button" data-tier="1" aria-pressed="false">Tier 1 only</button>
-        <button class="pill" type="button" data-tier="123" aria-pressed="false">All purchases</button>
+  <div class="ins-toolbar">
+    <div class="pills scroll" role="group" aria-label="Sector" data-sectors></div>
+    <div class="ins-bar">
+      <div class="ins-controls">
+        <div class="seg-field">
+          <span class="seg-label" id="tier-label">Size</span>
+          <div class="seg" role="group" aria-labelledby="tier-label" data-tiers>
+            <button class="seg-btn" type="button" data-tier="12" aria-pressed="true">Tier 1 and 2</button>
+            <button class="seg-btn" type="button" data-tier="1" aria-pressed="false">Tier 1 only</button>
+            <button class="seg-btn" type="button" data-tier="123" aria-pressed="false">All purchases</button>
+          </div>
+        </div>
+        <div class="seg-field" data-fit-only hidden>
+          <span class="seg-label" id="fit-label">Screener</span>
+          <div class="seg" role="group" aria-labelledby="fit-label" data-fits>
+            <button class="seg-btn" type="button" data-fit="any" aria-pressed="true">Any company</button>
+            <button class="seg-btn" type="button" data-fit="pass" aria-pressed="false">Passes</button>
+            <button class="seg-btn" type="button" data-fit="near" aria-pressed="false">Passes or misses by one</button>
+          </div>
+        </div>
+        <button class="btn btn-ghost btn-sm reset" type="button" data-reset hidden>Reset</button>
+      </div>
+      <div class="ins-sum">
+        <p class="ins-count" data-count aria-live="polite">&nbsp;</p>
+        <dl class="tier-key" aria-label="What the tiers mean">
+          <div><dt><span class="tag tag-solid">Tier 1</span></dt><dd><span data-tier-def="1">$10 million or more bought</span></dd></div>
+          <div><dt><span class="tag">Tier 2</span></dt><dd><span data-tier-def="2">$1 million or more, or one buyer's stake up 20% or more</span></dd></div>
+          <div><dt><span class="tag tag-line">Smaller</span></dt><dd>every other purchase</dd></div>
+        </dl>
       </div>
     </div>
-    <div class="toolbar-row fit-row" data-fit-only hidden>
-      <div class="pills pills-labelled" role="group" aria-labelledby="fit-label" data-fits>
-        <span class="pills-label" id="fit-label">Screener</span>
-        <button class="pill" type="button" data-fit="any" aria-pressed="true">Any company</button>
-        <button class="pill" type="button" data-fit="pass" aria-pressed="false">Passes</button>
-        <button class="pill" type="button" data-fit="near" aria-pressed="false">Passes or misses by one</button>
-      </div>
+  </div>
+
+  <details class="disclose how">
+    <summary><svg class="i lead-i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-info"></use></svg>How purchases are counted, tiered and checked<svg class="i caret" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-caret-down"></use></svg></summary>
+    <div class="body">
+      <dl class="defs">
+        <div><dt><span class="tag tag-solid">Tier 1</span></dt><dd><span data-tier-def="1-long">$10 million or more bought on the open market</span> in the last <span data-window>30</span> days, by all of the company's buyers together.</dd></div>
+        <div><dt><span class="tag">Tier 2</span></dt><dd><span data-tier-def="2-long">$1 million or more, or a single buyer growing their stake by 20% or more</span>.</dd></div>
+        <div><dt><span class="tag tag-line">Smaller</span></dt><dd>Every other open-market purchase. These show when you choose All purchases.</dd></div>
+        <div><dt>Real purchases only</dt><dd>Only real purchases count. Option exercises, stock awards and sales are left out, because insiders sell for many reasons but buy for one.</dd></div>
+        <div><dt>Stake change</dt><dd>A stake counts every share the buyer reports owning, in their own name or through trusts, retirement accounts and family, and "New position" means they owned none before. Under each change are the shares they owned before their first purchase in the window and the shares their latest filing reports.</dd></div>
+        <div><dt>One entry per company</dt><dd>Each company is listed once, under the day of its newest filing. Its totals add up every purchase in the window, and each buyer links to their latest Form 4.</dd></div>
+        <div><dt>Prices</dt><dd>Average price paid is what the buyers spent divided by the shares they bought. Price now is the price in the latest update, and the percentage under it is how far that is above or below the average paid.</dd></div>
+        <div data-fit-only hidden><dt>Screener check</dt><dd>Each company is also checked against the <a href="screener.html">screener's rules</a>, except those the screener leaves out (Nasdaq's Finance sector and other lenders) and those with no yearly figures. Passes means it is on the screener's list. Misses one rule names the only rule its figures miss. A rule that needs a figure its filings don't give is marked as not checked, not as missed.</dd></div>
+      </dl>
     </div>
+  </details>
+
+  <div class="notice pending" data-pending hidden></div>
+
+  <div class="feed" data-feed aria-busy="true">
+    <div class="skeleton" style="height:28px;width:220px;margin-bottom:12px"></div>
+    <div class="skeleton" style="height:190px;margin-bottom:10px"></div>
+    <div class="skeleton" style="height:190px;margin-bottom:10px"></div>
+    <div class="skeleton" style="height:190px"></div>
   </div>
 
-  <div class="notice" style="margin-bottom:28px">
-    <i class="ph ph-info" aria-hidden="true"></i>
-    <span><b style="color:var(--text);font-weight:500">Tier 1</b> means $10 million or more bought on the open market in the last <span data-window>30</span> days.
-    <b style="color:var(--text);font-weight:500">Tier 2</b> means $1 million or more, or a single buyer growing their stake by 20% or more.
-    A stake counts every share the buyer reports owning, in their own name or through trusts, retirement accounts and family, and "New position" means they owned none before.
-    Only real purchases count. Option exercises, stock awards and sales are left out, because insiders sell for many reasons but buy for one.
-    <span data-fit-only hidden>Companies outside Finance with yearly figures are also checked against the <a href="screener.html">screener's rules</a>.
-    <b style="color:var(--text);font-weight:500">Passes the screener</b> means it is on the screener's list: a US company worth under $3 billion that clears every rule on price, debt, profit, cash flow and sales.
-    <b style="color:var(--text);font-weight:500">Misses one rule</b> names the only rule its figures miss. A rule that needs a figure its filings don't give is marked as not checked, not as missed.</span></span>
-  </div>
-
-  <div class="notice" data-pending hidden style="margin:-12px 0 28px"></div>
-
-  <div data-feed>
-    <div class="skeleton" style="height:140px;margin-bottom:10px"></div>
-    <div class="skeleton" style="height:140px;margin-bottom:10px"></div>
-    <div class="skeleton" style="height:140px"></div>
-  </div>
-
-  <div class="section-title">
-    <h2>New 5%+ stakes</h2>
-    <p>Schedule 13D filings: an investor crossed 5% ownership and may push the company for changes. Newest first.</p>
-  </div>
-  <div data-stakes></div>
+  <section class="sec" id="stakes" aria-labelledby="stakes-h">
+    <div class="sec-head"><h2 id="stakes-h">New 5%+ stakes</h2><span class="count" data-stakes-count></span></div>
+    <p class="sec-lede">Schedule 13D filings: an investor crossed 5% ownership and may push the company for changes. Newest first. The sector and screener choices above apply here; the tiers don't.</p>
+    <div data-stakes></div>
+  </section>
 </main>
 <footer class="foot" data-foot></footer>
 <script type="module" src="assets/insiders.js"></script>

@@ -1,0 +1,213 @@
+/* Insider buying (insiders.html): the filters, the feed of purchases grouped by filing day (each company a block with
+   its figures and a table of its buyers), then the new 5%+ stakes. Loaded after app.css; nothing here is shared. */
+
+/* ---- Toolbar: the sector pills, then the size and screener choices, then the count beside the tier key. ---- */
+.ins-toolbar { display: grid; gap: 14px; }
+.ins-bar { display: grid; gap: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.ins-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 26px; }
+.ins-controls .reset { margin-left: auto; }
+.ins-sum { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 28px; }
+.ins-count { color: var(--text-2); font-size: 14px; }
+.ins-count b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.tier-key { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; margin: 0; font-size: 12.5px; color: var(--text-3); }
+.tier-key > div { display: inline-flex; align-items: center; gap: 7px; }
+.tier-key dt, .tier-key dd { margin: 0; }
+.tier-key .tag { height: 19px; padding: 0 6px; font-size: 11.5px; }
+
+/* ---- How purchases are counted: each term beside its meaning. ---- */
+details.how { margin-top: 18px; }
+.defs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 36px; margin: 0; }
+.defs > div { display: grid; grid-template-columns: 148px minmax(0, 1fr); gap: 4px 14px; padding: 11px 0; border-top: 1px solid var(--line); font-size: 13.5px; }
+.defs > div:nth-child(-n+2) { border-top: 0; }
+.defs dt { font-weight: 600; color: var(--text); }
+.defs dd { margin: 0; color: var(--text-2); max-width: 70ch; }
+.defs dd a { color: var(--text); }
+.notice.pending { margin-top: 12px; }
+
+/* Anchors and keyboard focus land clear of the page's header and of the sticky day heading under it. app.css offsets
+   an anchor twice (the page's scroll-padding-top plus each [id]'s scroll-margin-top), so here the padding alone does it. */
+html { scroll-padding-top: calc(var(--nav-h) + 52px); }
+main [id] { scroll-margin-top: 0; }
+@media (max-width: 560px) { html { scroll-padding-top: calc(var(--nav-h) + 76px); } }
+
+/* ---- The feed: a day's heading stays under the page's header while its companies scroll past. ---- */
+.feed { margin-top: 26px; }
+.day + .day { margin-top: 26px; }
+.day-head {
+  position: sticky; top: var(--nav-h); z-index: 3; display: flex; align-items: baseline; justify-content: space-between; gap: 6px 16px;
+  flex-wrap: wrap; padding: 12px 0 10px; margin-bottom: 10px; background: var(--bg); border-bottom: 1px solid var(--line);
+}
+.day-head h2 { font-size: 16px; line-height: 1.3; letter-spacing: -0.012em; }
+.day-head .rel { margin-left: 8px; font-size: 13px; font-weight: 400; color: var(--text-3); letter-spacing: 0; }
+.day-n { font-size: 13px; color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.buy-list { display: grid; gap: 10px; }
+
+/* A company: who it is and its tier on the left, what was bought and the price against it on the right. */
+.buy { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-frame); }
+.buy-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 12px 40px; padding: 16px 18px 12px; }
+.buy-id { min-width: 0; }
+.buy-id h3 { font-size: 15px; line-height: 1.35; }
+.buy-id h3 a { text-decoration: none; }
+.buy-id h3 a:focus-visible { outline-offset: 3px; }
+.buy-id .sym, .s-name .sym { font-family: var(--mono); font-weight: 600; letter-spacing: 0.01em; color: var(--text); }
+.buy-id .sym { font-size: 15px; margin-right: 10px; }
+.buy-id .nm { font-weight: 600; }
+.buy-id h3 a:hover .nm, .s-name a:hover .nm { text-decoration: underline; text-decoration-color: var(--line-3); text-underline-offset: 3px; }
+.buy-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 7px; font-size: 13px; color: var(--text-3); }
+.buy-figs { display: grid; grid-template-columns: repeat(3, auto); gap: 4px 32px; margin: 0; }
+.buy-figs > div { display: flex; flex-direction: column; align-items: flex-end; min-width: 0; }
+.buy-figs dt { font-size: 12px; color: var(--text-3); white-space: nowrap; }
+.buy-figs dd { margin: 0; font-size: 17px; font-weight: 600; line-height: 1.35; letter-spacing: -0.015em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.buy-figs dd.sub { font-size: 12.5px; font-weight: 400; line-height: 1.4; letter-spacing: 0; color: var(--text-3); }
+.buy-figs dd.sub.up { color: var(--up); }
+.buy-figs dd.sub.down { color: var(--down); }
+
+/* The screener check: its result, what it misses, then the figures it used. */
+.fit { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 8px; padding: 0 18px 14px; font-size: 13px; color: var(--text-2); }
+.fit-k { color: var(--text-3); }
+.fit .tag { height: 20px; font-size: 11.5px; padding: 0 6px; align-self: center; }
+.fit-t a { color: var(--text); }
+.fit-figs { color: var(--text-3); }
+
+/* The buyers: a table flush with the block's edges, one row each, its columns fixed so every company's table lines up. */
+.buy-table { border-top: 1px solid var(--line); }
+table.data.buyers { table-layout: fixed; }
+table.data.buyers col.w-role { width: 21%; }
+table.data.buyers col.w-when { width: 128px; }
+table.data.buyers col.w-val { width: 112px; }
+table.data.buyers col.w-paid { width: 96px; }
+table.data.buyers col.w-stake { width: 178px; }
+table.data.buyers col.w-doc { width: 92px; }
+.b-when-inline { display: none; }
+.buy table.data.buyers > thead > tr > th { border-radius: 0; padding-top: 8px; padding-bottom: 8px; vertical-align: bottom; }
+.buy table.data.buyers > thead > tr > th:first-child, table.data.buyers > tbody > tr > th { padding-left: 18px; }
+.buy table.data.buyers > thead > tr > th:last-child, table.data.buyers > tbody > tr > td:last-child { padding-right: 18px; }
+table.data.buyers > tbody > tr > th {
+  text-align: left; font-weight: 600; padding: 10px 12px 10px 18px; border-bottom: 1px solid var(--line);
+  vertical-align: top; white-space: normal; overflow-wrap: anywhere;
+}
+table.data.buyers > tbody > tr > td { vertical-align: top; padding-top: 10px; padding-bottom: 10px; }
+table.data.buyers > tbody > tr:last-child > th { border-bottom: 0; }
+/* The last row showing before rows a button hides has no seam of its own: the button's row draws it. */
+table.data.buyers > tbody > tr:not([hidden]):has(+ tr[hidden]) > * { border-bottom: 0; }
+table.data.buyers .b-role { white-space: normal; color: var(--text-2); }
+table.data.buyers .b-when { color: var(--text-2); }
+table.data.buyers .b-stake b { font-weight: 600; }
+table.data.buyers .b-stake .sub { white-space: normal; }
+.sub { display: block; margin-top: 1px; font-size: 12px; font-weight: 400; color: var(--text-3); white-space: nowrap; }
+a.doc { display: inline-flex; align-items: center; gap: 4px; color: var(--text-2); font-size: 12.5px; text-decoration: none; white-space: nowrap; border-radius: 3px; }
+a.doc .i { font-size: 13px; }
+a.doc:hover { color: var(--text); text-decoration: underline; text-decoration-color: var(--line-3); }
+.buy-foot { padding: 10px 18px 12px; border-top: 1px solid var(--line); }
+
+.feed-more { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-top: 18px; font-size: 13px; color: var(--text-3); }
+
+/* Companies a "Show more" adds unfold into place: the page's one authored motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .buy.fresh { animation: arrive .5s var(--ease); }
+  @keyframes arrive { from { clip-path: inset(0 0 100% 0 round var(--r-frame)); opacity: .4; } to { clip-path: inset(0 0 0 0 round var(--r-frame)); opacity: 1; } }
+}
+
+/* ---- New 5%+ stakes ---- */
+table.data.stakes { table-layout: fixed; }
+table.data.stakes col.w-filed { width: 78px; }
+table.data.stakes col.w-co { width: 17%; }
+table.data.stakes col.w-filer { width: 13%; }
+table.data.stakes col.w-pct { width: 72px; }
+table.data.stakes col.w-fit { width: 16%; }
+table.data.stakes col.w-doc { width: 76px; }
+table.data.stakes > tbody > tr > th {
+  text-align: left; font-weight: 400; padding: 11px 12px; border-bottom: 1px solid var(--line); vertical-align: top; white-space: normal;
+}
+table.data.stakes > tbody > tr > td { vertical-align: top; padding-top: 11px; padding-bottom: 11px; }
+table.data.stakes > tbody > tr:last-child > th { border-bottom: 0; }
+table.data.stakes > tbody > tr:not([hidden]):has(+ tr[hidden]) > * { border-bottom: 0; }
+table.data.stakes > thead > tr > th:first-child, table.data.stakes > tbody > tr > td.s-filed { padding-left: 16px; }
+table.data.stakes .s-filed { color: var(--text-2); }
+table.data.stakes .s-filer { white-space: normal; overflow-wrap: anywhere; }
+table.data.stakes .s-fit { white-space: normal; font-size: 12.5px; color: var(--text-2); }
+table.data.stakes .s-pct { font-weight: 600; }
+table.data.stakes .s-purpose { white-space: normal; color: var(--text-2); font-size: 13px; line-height: 1.5; }
+table.data.stakes .s-doc { padding-right: 16px; }
+.s-name a { text-decoration: none; }
+.s-name .sym { display: block; font-size: 13px; }
+.s-name .nm { display: block; color: var(--text-2); font-size: 12.5px; }
+.fit-c { display: grid; justify-items: start; gap: 4px; }
+.fit-c .tag { height: 20px; font-size: 11.5px; padding: 0 6px; }
+a.more-in { color: var(--text); white-space: nowrap; }
+.stakes-more { margin-top: 10px; }
+
+/* ---- Narrower screens ---- */
+@media (max-width: 1000px) {
+  .defs { grid-template-columns: 1fr; }
+  .defs > div:nth-child(2) { border-top: 1px solid var(--line); }
+}
+
+/* Tablets and phones: each buyer and stake becomes a block of labelled figures. */
+@media (max-width: 960px) {
+  table.data.buyers, table.data.buyers > tbody, table.data.stakes, table.data.stakes > tbody { display: block; }
+  table.data.buyers > thead, table.data.stakes > thead { display: none; }
+  table.data.buyers > tbody > tr, table.data.stakes > tbody > tr { display: grid; column-gap: 16px; row-gap: 8px; border-bottom: 1px solid var(--line); }
+  table.data.buyers > tbody > tr:last-child, table.data.stakes > tbody > tr:last-child { border-bottom: 0; }
+  table.data.buyers > tbody > tr:not([hidden]):has(+ tr[hidden]), table.data.stakes > tbody > tr:not([hidden]):has(+ tr[hidden]) { border-bottom: 0; }
+  table.data.buyers > tbody > tr > *, table.data.stakes > tbody > tr > * {
+    display: block; padding: 0 !important; border: 0 !important; text-align: left; white-space: normal; min-width: 0; max-width: none;
+  }
+  table.data.buyers td[data-label]::before, table.data.stakes td[data-label]::before {
+    content: attr(data-label); display: block; margin-bottom: 1px; font-size: 11.5px; color: var(--text-3);
+  }
+
+  table.data.buyers > tbody > tr { grid-template-columns: repeat(4, minmax(0, 1fr)) auto; padding: 12px 18px 13px; }
+  .b-who { grid-column: 1 / 5; grid-row: 1; }
+  .b-doc { grid-column: 5; grid-row: 1; justify-self: end; }
+  .b-role { grid-column: 1 / -1; grid-row: 2; margin-top: -6px; font-size: 13px; }
+  .b-when { grid-column: 1; grid-row: 3; }
+  .b-val { grid-column: 2; grid-row: 3; }
+  .b-paid { grid-column: 3; grid-row: 3; }
+  .b-stake { grid-column: 4; grid-row: 3; }
+  table.data.buyers .sub { white-space: normal; }
+
+  table.data.stakes > tbody > tr { grid-template-columns: minmax(0, 1fr) auto; padding: 13px 16px 14px; }
+  .s-co { grid-column: 1; grid-row: 1; }
+  .s-pct { grid-column: 2; grid-row: 1; font-size: 15px; }
+  .s-pct::before { text-align: right; }
+  .s-filer { grid-column: 1; grid-row: 2; }
+  .s-filed { grid-column: 2; grid-row: 2; text-align: right !important; }
+  .s-fit { grid-column: 1 / -1; grid-row: 3; }
+  .s-purpose { grid-column: 1 / -1; grid-row: 4; }
+  .s-doc { grid-column: 1 / -1; grid-row: 5; }
+  .fit-c { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 8px; }
+  .fit-c .tag { align-self: center; }
+}
+
+@media (max-width: 860px) {
+  .buy-head { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .buy-figs { justify-content: start; gap: 4px 28px; }
+  .buy-figs > div { align-items: flex-start; }
+}
+
+@media (max-width: 720px) {
+  .ins-controls, .ins-controls .seg-field { width: 100%; }
+  .ins-controls .seg-field { flex-direction: column; align-items: flex-start; gap: 6px; }
+  .ins-controls .seg { width: 100%; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+  .ins-controls .seg-btn { min-width: 0; height: auto; min-height: 34px; padding: 4px 6px; white-space: normal; line-height: 1.2; }
+  .ins-controls .reset { margin-left: 0; }
+  .defs > div { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 560px) {
+  .buy-head { padding: 14px 14px 10px; }
+  .fit { padding: 0 14px 12px; }
+  .buy-figs { gap: 4px 20px; }
+  .buy-figs dd { font-size: 16px; }
+  .buy-foot { padding: 10px 14px 12px; }
+  table.data.buyers > tbody > tr { grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 12px; padding: 12px 14px 13px; }
+  .b-who { grid-column: 1 / 3; }
+  .b-doc { grid-column: 3; }
+  table.data.buyers > tbody > tr > td.b-when { display: none; }
+  .b-when-inline { display: inline; }
+  .b-val { grid-column: 1; grid-row: 3; }
+  .b-paid { grid-column: 2; grid-row: 3; }
+  .b-stake { grid-column: 3; grid-row: 3; }
+  table.data.stakes > tbody > tr { padding: 12px 14px 13px; }
+}
