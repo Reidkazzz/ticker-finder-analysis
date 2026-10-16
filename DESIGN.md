@@ -242,7 +242,7 @@ One cool, faintly blue neutral scale carries the entire interface; two sign colo
 - **Cool Near-White** (#e8ecf2): primary text and every figure.
 - **Fog** (#a3adbd): secondary text, ledes, company names under tickers, a ledger's "measured on" column.
 - **Slate Label** (#7c879a): column heads, counts, notes, placeholders and icons at rest (5.0:1 on Frame Slate).
-- **Pale Steel** (#c3ccda; ground at 10%): a middle reading ("Fair", "Mixed", "Misses one rule", "Not confirmed") and the earned fill of the score tape.
+- **Pale Steel** (#c3ccda; ground at 10%): a middle reading ("Fairly valued", "Mixed", "Misses one rule", "Not confirmed") and the earned fill of the score tape.
 - **Tape Track** (#2b364b): the unearned part of each tape slot, the meter's track, the fair-value band.
 
 ### Named Rules
@@ -264,7 +264,7 @@ Archivo loads from Google Fonts as a variable face on two axes (width 75 to 100,
 
 ### Hierarchy
 - **Display** (600, clamp(32px, 4.2vw, 52px), 1.06, 92% width): the home hero's claim only, held to 19ch.
-- **Headline** (600, clamp(26px, 2.6vw, 33px), 1.12, 92% width): each page's h1, which is its claim; it may carry live counts ("77 of 4,229 companies pass all eight quality checks"). The report's company name runs clamp(26px, 2.8vw, 34px) and the home page's claim heads clamp(24px, 2.6vw, 32px).
+- **Headline** (600, clamp(26px, 2.6vw, 33px), 1.12, 92% width): each page's h1, which is its claim; it may carry live counts ("77 of 4,229 stocks pass all eight quality checks": one per listing, so "stocks"). The report's company name runs clamp(26px, 2.8vw, 34px) and the home page's claim heads clamp(24px, 2.6vw, 32px).
 - **Title** (600, clamp(21px, 2.1vw, 25px), 1.2, 92% width): section h2s, with their count or date in Slate Label beside them on the baseline.
 - **Subhead** (600, 16px, 1.35, normal width): h3, a frame's own title ("Price"), the feed's day headings; company blocks run 15px.
 - **Body** (400, 15px, 1.55): running text. The lede is 16px in Fog at 64ch; section ledes are 14.5px at 76ch.
@@ -288,7 +288,7 @@ Pages open with a claim block: the h1 across the top, the lede below it on the l
 
 Vertical rhythm is generous between sections and tight inside them: 72px between sections (64px on the report), 88px home bands (56px under 960px), 112px before the footer, and more space above a heading than below it (12px to its content). Inside frames, rows inset 18px from the edge; panels pad 20px (16px on phones).
 
-The screener's table keeps its column names under the site header while the list scrolls past. A table wider than its frame scrolls inside the frame, never the page: the rank and company columns stay put and the right edge fades over 36px. On phones tables reflow into labelled blocks: the screener under 720px (rank, company and score on the first line, flags on the second, then eight figures in a four-column grid each with its label), the insider buyers and stakes under 960px, the report's insider table under 640px.
+Where the screener's table fits its frame, it keeps its column names under the site header while the list scrolls past. A table wider than its frame scrolls inside the frame, never the page: the rank and company columns stay put and the right edge fades over 36px while there is more to see, the lists under the ranked one included, and an opened row's ledger keeps clear of that fade. On phones tables reflow into labelled blocks: the screener under 720px (rank, company and score on the first line, flags on the second, then eight figures in a four-column grid each with its label), the insider buyers and stakes under 960px, the report's insider table under 640px.
 
 ### Named Rules
 **The Claim Beside Proof Rule.** A page or section opens with one short claim and, beside it, the live figures that make it true: a row of counts, a top-five frame, a ledger. A claim with no figure next to it does not ship.
@@ -321,12 +321,12 @@ Icons come from one sprite drawn on a 24px grid with 1.75px round strokes in cur
 Quiet and decisive: one light slab for the action, hairline outlines for everything else.
 - **Shape:** gently squared (6px), 38px tall, 16px sides; small 32px tall, 12px sides.
 - **Primary:** Inverse Near-White ground, Navy-Black 14px semibold text, an optional trailing arrow icon at 15px.
-- **Hover / Focus:** primary brightens to pure white; ghost takes Hover Slate and a Strong Seam border; 150ms color transitions; focus is a 2px Cool Near-White outline 2px out.
+- **Hover / Focus:** primary brightens to pure white; ghost takes Hover Slate and a Strong Seam border; 150ms color transitions; focus is a 2px Cool Near-White outline 2px out, drawn 2px inside instead where a frame clips its edge (the report's "How this fair value is worked out" row).
 - **Ghost:** transparent with a Control Edge outline and regular-weight Cool Near-White text, for secondary paths ("See insider buying", "Show more", "Reset").
 - **Text link:** 14px Cool Near-White with a trailing arrow that moves 2px right on hover.
 
 ### Pills and Segmented Control
-- **Pills:** a sector or tier choice with its count; 30px, 6px corner, Control Edge outline, Fog text, count in Slate Label. Pressed inverts to Inverse Near-White with Navy-Black text. An empty choice dims to Slate Label on a Hairline Seam. On phones the row scrolls sideways inside itself with a faded right edge.
+- **Pills:** a sector or tier choice with its count; 30px, 6px corner, Control Edge outline, Fog text, count in Slate Label. Pressed inverts to Inverse Near-White with Navy-Black text. An empty choice dims to Slate Label on a Hairline Seam. On phones the row scrolls sideways inside itself with a faded right edge, keeping 4px around each pill for its focus ring; keyboard focus brings a pill fully into view, clear of the fade (so does the report's row of section links).
 - **Segmented control:** a Control Edge outline holding 26px buttons (4px corner); the pressed one is Pressed Slate with Cool Near-White text. On phones it stretches to full width in equal columns and lets labels wrap.
 
 ### Tags
@@ -346,7 +346,7 @@ Context, not verdicts. A 22px tile (4px corner, Hover Slate, Control Edge inset 
 ### Inputs / Fields
 - **Style:** 44px, Frame Slate, Control Edge border, 6px corner, a 17px search icon in Slate Label at the left, placeholder in Slate Label.
 - **Hover / Focus:** border to Strong Seam on hover; on focus the border goes to Fog and the ground to Hover Slate.
-- **Suggestions:** a popover list (Hover Slate, 8px corner, Pop shadow) of ticker, name and sector; the highlighted row is Pressed Slate. "/" anywhere focuses the header search, shown by a small key hint that hides once typing starts.
+- **Suggestions:** a popover list (Hover Slate, 8px corner, Pop shadow) of ticker, name and sector; the highlighted row is Pressed Slate, its sector in Fog rather than Slate Label, which falls under 4.5:1 there. "/" anywhere focuses the header search, shown by a small key hint that hides once typing starts.
 
 ### Navigation
 A single sticky bar: mark and "TFA" (the long name in Slate Label until 1100px), three tool links in Fog at 14px with 6px corners, Hover Slate on hover and Current Slate with Cool Near-White text for the current page. The data date and a 260px search sit at the right. On phones only the mark and the three links remain, tightening to 13px.

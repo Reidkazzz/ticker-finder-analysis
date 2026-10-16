@@ -90,7 +90,7 @@
 .v-methods li { padding: 11px 0 12px; border-bottom: 1px solid var(--line); }
 .m-top { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; font-size: 14px; }
 .m-name { font-weight: 600; }
-.m-name .tag { margin-left: 6px; height: 19px; font-size: 11.5px; vertical-align: 1px; }
+.m-name .tag { margin-left: 6px; vertical-align: 1px; }
 .m-v { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .v-methods p { margin-top: 3px; font-size: 13px; color: var(--text-2); max-width: 78ch; }
 .v-methods li.ref .m-name, .v-methods li.ref .m-v { color: var(--text-2); font-weight: 400; }
@@ -102,6 +102,10 @@
 .r-verdict details.v-how { margin: 18px -24px 0; border: 0; border-top: 1px solid var(--line); border-radius: 0; background: transparent; }
 .r-verdict details.v-how > summary { padding: 13px 24px; border-radius: 0; }
 .r-verdict details.v-how .body { padding: 0 24px 18px; }
+/* The frame clips what lies outside it, so the focus ring is drawn inside the row, following the frame's rounded
+   bottom corners while the explanation is closed. */
+.r-verdict details.v-how > summary:focus-visible { outline-offset: -2px; }
+.r-verdict details.v-how:not([open]) > summary { border-radius: 0 0 calc(var(--r-frame) - 1px) calc(var(--r-frame) - 1px); }
 .how-list { list-style: none; margin: 0; padding: 0; }
 .how-list li { padding: 11px 0; border-top: 1px solid var(--line); font-size: 13.5px; }
 .how-list li:first-child { border-top: 0; padding-top: 2px; }
@@ -165,6 +169,7 @@
 @media (max-width: 720px) {
   .r-rail {
     flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-right: calc(-1 * var(--gutter)); padding-right: 40px;
+    scroll-padding-inline: 8px 40px; /* a link brought into view by keyboard focus stops clear of the faded edge */
     border-right: 0; border-top-right-radius: 0; border-bottom-right-radius: 0;
     -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent);
   }
@@ -274,7 +279,7 @@ details.disclose.q-table { margin: 18px -24px 0; border: 0; border-top: 1px soli
 .q-table > summary { padding: 13px 24px; border-radius: 0; }
 .q-table .body { padding: 0 24px 16px; }
 .q-table .table-wrap { background: var(--surface); }
-.q-table .r-table .tag { height: 19px; font-size: 11.5px; margin-left: 6px; }
+.q-table .r-table .tag { margin-left: 6px; }
 @media (max-width: 900px) {
   .q-panel { --plot-h: 170px; }
   .qc-yoy, .qc-x { font-size: 11px; }
@@ -338,7 +343,6 @@ details.disclose.q-table { margin: 18px -24px 0; border: 0; border-top: 1px soli
 .hg.is-context { background: var(--bg-raise); }
 .hg-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .hg-head h3 { font-size: 15px; }
-.hg-head .tag { height: 20px; font-size: 11.5px; }
 .hg-hint { font-size: 13px; color: var(--text-3); margin-top: 2px; }
 .hg .r-note { margin: 12px 0 0; font-size: 12.5px; padding: 10px 12px; }
 .hb-list { list-style: none; margin: 12px 0 0; padding: 0; }
@@ -388,7 +392,6 @@ details.disclose.q-table { margin: 18px -24px 0; border: 0; border-top: 1px soli
 .ni:has(.ni-t:focus-visible) { box-shadow: inset 0 0 0 2px var(--text); }
 .ni-why { margin-top: 3px; font-size: 13.5px; color: var(--text-2); }
 .ni-src { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 5px; font-size: 12.5px; color: var(--text-3); }
-.ni-src .tag { height: 19px; font-size: 11.5px; }
 @media (max-width: 560px) {
   .ni { grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 14px 16px; }
 }

@@ -12,7 +12,6 @@
 .tier-key { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; margin: 0; font-size: 12.5px; color: var(--text-3); }
 .tier-key > div { display: inline-flex; align-items: center; gap: 7px; }
 .tier-key dt, .tier-key dd { margin: 0; }
-.tier-key .tag { height: 19px; padding: 0 6px; font-size: 11.5px; }
 
 /* ---- How purchases are counted: each term beside its meaning. ---- */
 details.how { margin-top: 18px; }
@@ -50,7 +49,7 @@ main [id] { scroll-margin-top: 0; }
 .buy-id h3 a { text-decoration: none; }
 .buy-id h3 a:focus-visible { outline-offset: 3px; }
 .buy-id .sym, .s-name .sym { font-family: var(--mono); font-weight: 600; letter-spacing: 0.01em; color: var(--text); }
-.buy-id .sym { font-size: 15px; margin-right: 10px; }
+.buy-id .sym { font-size: 15px; margin-right: 7px; } /* with the space after it, a 10px gap */
 .buy-id .nm { font-weight: 600; }
 .buy-id h3 a:hover .nm, .s-name a:hover .nm { text-decoration: underline; text-decoration-color: var(--line-3); text-underline-offset: 3px; }
 .buy-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 7px; font-size: 13px; color: var(--text-3); }
@@ -65,7 +64,7 @@ main [id] { scroll-margin-top: 0; }
 /* The screener check: its result, what it misses, then the figures it used. */
 .fit { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 8px; padding: 0 18px 14px; font-size: 13px; color: var(--text-2); }
 .fit-k { color: var(--text-3); }
-.fit .tag { height: 20px; font-size: 11.5px; padding: 0 6px; align-self: center; }
+.fit .tag { padding: 0 6px; align-self: center; }
 .fit-t a { color: var(--text); }
 .fit-figs { color: var(--text-3); }
 
@@ -133,7 +132,7 @@ table.data.stakes .s-doc { padding-right: 16px; }
 .s-name .sym { display: block; font-size: 13px; }
 .s-name .nm { display: block; color: var(--text-2); font-size: 12.5px; }
 .fit-c { display: grid; justify-items: start; gap: 4px; }
-.fit-c .tag { height: 20px; font-size: 11.5px; padding: 0 6px; }
+.fit-c .tag { padding: 0 6px; }
 a.more-in { color: var(--text); white-space: nowrap; }
 .stakes-more { margin-top: 10px; }
 

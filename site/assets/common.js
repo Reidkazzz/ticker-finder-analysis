@@ -46,9 +46,11 @@ export function price(n) {
   return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: n < 1 ? 4 : 2 });
 }
 
+// A value that rounds to zero reads "0%" or "0.0%", with no sign: toFixed would give -0.0002 as "-0.0".
 export function pct(n, digits = 1, signed = false) {
   if (n == null || Number.isNaN(n)) return "n/a";
   const v = (n * 100).toFixed(digits);
+  if (Number(v) === 0) return (0).toFixed(digits) + "%";
   return (signed && n > 0 ? "+" : "") + v + "%";
 }
 
@@ -91,6 +93,15 @@ export function relDay(iso, today = localToday()) {
 }
 
 export const signClass = (n) => (n == null ? "" : n > 0 ? "up" : n < 0 ? "down" : "");
+// A fraction as pct() shows it at `digits`: one that reads 0% is 0, so its color and words carry no direction either.
+export const asShown = (n, digits = 1) => (n == null || Number((n * 100).toFixed(digits)) !== 0 ? n : 0);
+// Today's price against the average price insiders paid, from the two prices, since the data's vs_paid is stored
+// already rounded and rounding it again can move the last digit shown. None where the data gives none, as it may for a
+// listing whose shares aren't the ones insiders report buying. The insiders page, the report and the home page agree.
+export function vsPaid(price, avgPaid, stored) {
+  if (stored == null) return null;
+  return price && avgPaid ? price / avgPaid - 1 : stored;
+}
 export const bandClass = (b) => ({ strong: "strong", fair: "fair", weak: "weak" }[b] || "");
 // The health score's bands (pipeline/report.py): 70 and over strong, 40 and over fair. Not used for the screener's score,
 // whose own scale has no bands.
@@ -157,6 +168,14 @@ document.addEventListener("keydown", (e) => {
   if (t.closest && t.closest("input, textarea, select, [contenteditable='true']")) return;
   const input = document.querySelector("#nav-search") || document.querySelector(".search-row input");
   if (input && input.offsetParent !== null) { e.preventDefault(); input.focus(); }
+});
+
+// On a phone a row of sector pills, or the report's row of section links, scrolls sideways, and the browser leaves one
+// that is partly hidden where it is. Keyboard focus brings it fully into view, clear of the row's faded edge (its
+// scroll-padding). A click does not, so nothing moves out from under the pointer before the click lands.
+document.addEventListener("focusin", (e) => {
+  const pill = e.target.closest?.(".pills.scroll .pill, .r-rail a");
+  if (pill?.matches(":focus-visible")) pill.scrollIntoView({ block: "nearest", inline: "nearest" });
 });
 
 // Ticker search: a combobox whose suggestions are picked with the arrow keys and Enter, or with a click. The list of

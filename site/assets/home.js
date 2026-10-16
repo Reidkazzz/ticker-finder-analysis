@@ -1,4 +1,4 @@
-import { attachSearch, chrome, date, displayName, esc, icon, load, longDate, meter, money, pct, price, searchMarkup, signClass, tape, times } from "./common.js";
+import { asShown, attachSearch, chrome, date, displayName, esc, icon, load, longDate, meter, money, pct, price, searchMarkup, signClass, tape, times, vsPaid } from "./common.js";
 import { debtTag, scoreLedger } from "./ledger.js";
 
 // The page has its own search box in the first screen, so the header leaves its own out.
@@ -24,7 +24,8 @@ async function topOfScreener() {
   try {
     const s = await load("screener.json");
     const checked = s.sectors.reduce((a, x) => a + (x.checked || 0), 0);
-    document.querySelector("[data-top-meta]").textContent = `${s.results.length} of ${checked.toLocaleString("en-US")} US companies pass`;
+    // Every listing in the screened sectors, foreign ones and second share classes included, so "stocks".
+    document.querySelector("[data-top-meta]").textContent = `${s.results.length} of ${checked.toLocaleString("en-US")} stocks pass`;
     document.querySelector("[data-top-all]").innerHTML = `See all ${s.results.length} companies${icon("arrow-right")}`;
     // The profit margin rule the data was built with (screener.RULES), as the screener page states it.
     const margin = s.rules?.min_net_margin;
@@ -39,7 +40,7 @@ async function topOfScreener() {
     host.innerHTML = s.results.slice(0, 5).map((r, i) => `<li>
       <a class="top-row" href="report.html?t=${encodeURIComponent(r.symbol)}">
         <span class="rank">${i + 1}</span>
-        <span class="co"><span class="sym">${esc(r.symbol)}</span><span class="nm">${esc(displayName(r.name))}</span></span>
+        <span class="co"><span class="sym">${esc(r.symbol)}</span> <span class="nm" title="${esc(displayName(r.name))}">${esc(displayName(r.name))}</span></span>
         <span class="why">${esc(times(r.ps))} sales${r.debt_status === "none" ? ", no debt" : r.debt_status === "net_cash" ? ", net cash" : ""}</span>
         <span class="score" role="img" aria-label="Score ${r.score} out of 100"><b>${r.score}</b>${tape(r.score_parts)}</span>
       </a></li>`).join("");
@@ -56,10 +57,15 @@ async function ledgerProof(s) {
   const r = s?.results?.[0];
   if (!r) { host.innerHTML = noData("The ranked list appears after the first nightly update."); return; }
   const m = await meta;
-  host.innerHTML = `<div class="proof-head"><span class="proof-title">Why ${esc(r.symbol)} ranks first</span><span>${esc(displayName(r.name))}</span></div>
+  // The data has no tiebreak, so when others share the top score the title claims only the score, not first place alone.
+  const tied = s.results.filter((x) => x !== r && x.score === r.score).map((x) => x.symbol);
+  const others = tied.length > 3 ? `${tied.slice(0, 2).join(", ")} and ${tied.length - 2} more`
+    : tied.length > 1 ? `${tied.slice(0, -1).join(", ")} and ${tied[tied.length - 1]}` : tied[0];
+  const title = tied.length ? `Why ${r.symbol} scores ${r.score}, tied for first with ${others}` : `Why ${r.symbol} ranks first`;
+  host.innerHTML = `<div class="proof-head"><span class="proof-title">${esc(title)}</span><span>${esc(displayName(r.name))}</span></div>
     <div class="ledger ledger-solo">${scoreLedger(r, { rules: s.rules, industries: s.industries, insiderDays: m?.insider_days })}</div>
-    <div class="proof-strip"><span>Debt</span>${debtTag(r)}<span>Net margin</span><b>${esc(pct(r.net_margin))}</b><span>Cash yield</span><b>${esc(pct(r.fcf_yield))}</b></div>
-    <a class="proof-foot" href="screener.html">Open it in the screener${icon("arrow-right")}</a>`;
+    <div class="proof-strip"><span class="fact"><span>Debt</span>${debtTag(r)}</span><span class="fact"><span>Net margin</span><b>${esc(pct(r.net_margin))}</b></span><span class="fact"><span>Cash yield</span><b>${esc(pct(r.fcf_yield))}</b></span></div>
+    <a class="proof-foot" href="screener.html">See the full ranking in the screener${icon("arrow-right")}</a>`;
 }
 
 // The insider claim, proved by the latest Tier 1 and 2 purchases. The feed (about 350 KB) loads when the section is
@@ -75,7 +81,9 @@ async function latestBuying() {
     const t1 = ins.companies.filter((c) => c.tier === 1).length;
     const t2 = ins.companies.filter((c) => c.tier === 2).length;
     const days = ins.window_days ?? m?.insider_days;
-    document.querySelector("[data-insider-summary]").innerHTML = `Executives, directors and big owners must report their trades to the SEC within two business days. TFA reads every filing: ${days ? `in the last ${days} days` : "recently"}, insiders bought stock on the open market in <b>${t1}</b> Tier 1 and <b>${t2}</b> Tier 2 companies.`;
+    // Counted from the same Tier 1 and 2 companies, so it can never exceed the totals before it.
+    const latest = m?.market_date ? ins.companies.filter((c) => c.tier <= 2 && c.filed === m.market_date).length : 0;
+    document.querySelector("[data-insider-summary]").innerHTML = `Executives, directors and big owners must report their trades to the SEC within two business days. TFA reads every filing: ${days ? `in the last ${days} days` : "recently"}, insiders bought stock on the open market in <b>${t1}</b> Tier 1 and <b>${t2}</b> Tier 2 companies.${latest ? ` Purchases at <b>${latest}</b> of them were filed on ${esc(date(m.market_date))}.` : ""}`;
     const rows = ins.companies.filter((c) => c.tier <= 2).slice(0, 5);
     document.querySelector("[data-latest-date]").textContent = rows.length && m?.last_filing_day ? `Filed through ${longDate(m.last_filing_day)}` : "";
     if (!rows.length) {
@@ -84,11 +92,14 @@ async function latestBuying() {
     }
     list.innerHTML = rows.map((c) => {
       const b = c.buyers[0];
-      const more = c.buyers.length > 1 ? `, and ${c.buyers.length - 1} more` : "";
+      const n = c.buyers.length - 1;
+      const more = n ? `, and ${n} more buyer${n === 1 ? "" : "s"}` : "";
+      // The symbol line carries the filed date; the buyer's name and their role each get a line of their own.
+      const vs = asShown(vsPaid(c.price, c.avg_price, c.vs_paid), 1); // as the insiders page shows it
       return `<li><a class="buy-row" href="${c.symbol ? `report.html?t=${encodeURIComponent(c.symbol)}` : "insiders.html"}">
         <span class="tier tag ${c.tier === 1 ? "tag-solid" : "tag-line"}">Tier ${c.tier}</span>
-        <span class="co"><span class="sym">${esc(c.symbol || "n/a")}</span><span class="nm">${esc(b.name)}, ${esc(roleShort(b.roles))}${esc(more)}</span></span>
-        <span class="amt"><b>${money(c.total_value)}</b><span class="${signClass(c.vs_paid)}">${c.vs_paid == null ? esc(date(c.filed)) : `${pct(c.vs_paid, 1, true)} vs. paid`}</span></span>
+        <span class="co"><span class="sym">${esc(c.symbol || "n/a")} <span class="filed">${esc(date(c.filed))}</span></span> <span class="nm" title="${esc(b.name)}">${esc(b.name)}</span> <span class="nm role" title="${esc(roleShort(b.roles) + more)}">${esc(roleShort(b.roles) + more)}</span></span>
+        <span class="amt"><b>${money(c.total_value)}</b>${vs == null ? "" : `<span class="${signClass(vs)}">${pct(vs, 1, true)} vs. paid</span>`}</span>
       </a></li>`;
     }).join("");
   } catch {
@@ -109,7 +120,8 @@ async function exampleReport(s) {
     if (!v?.verdict || v.low == null || v.high == null) continue;
     const bars = (r.health || []).flatMap((g) => g.bars).filter((b) => !b.context && b.score != null);
     const pick = ["net_margin", "net_cash", "ps"].map((k) => bars.find((b) => b.key === k)).filter(Boolean);
-    const word = { undervalued: ["Undervalued", "tag-up"], fair: ["Fair", "tag-mid"], overvalued: ["Overvalued", "tag-down"] }[v.verdict];
+    // The report's own words for each verdict (report.js VERDICT), so the example and the report it opens agree.
+    const word = { undervalued: ["Undervalued", "tag-up"], fair: ["Fairly valued", "tag-mid"], overvalued: ["Overvalued", "tag-down"] }[v.verdict];
     if (!word) continue;
     // The range bar's scale spans the range and the price with room either side, as the report's own does.
     const lo = Math.min(v.low, r.price) * 0.85, hi = Math.max(v.high, r.price) * 1.15;

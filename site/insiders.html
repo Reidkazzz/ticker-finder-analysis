@@ -71,10 +71,10 @@
         <div><dt><span class="tag">Tier 2</span></dt><dd><span data-tier-def="2-long">$1 million or more, or a single buyer growing their stake by 20% or more</span>.</dd></div>
         <div><dt><span class="tag tag-line">Smaller</span></dt><dd>Every other open-market purchase. These show when you choose All purchases.</dd></div>
         <div><dt>Real purchases only</dt><dd>Only real purchases count. Option exercises, stock awards and sales are left out, because insiders sell for many reasons but buy for one.</dd></div>
-        <div><dt>Stake change</dt><dd>A stake counts every share the buyer reports owning, in their own name or through trusts, retirement accounts and family, and "New position" means they owned none before. Under each change are the shares they owned before their first purchase in the window and the shares their latest filing reports.</dd></div>
+        <div><dt>Stake change</dt><dd>The shares bought as a percentage of what the buyer owned before their first purchase in the window, counting every share they report owning, in their own name or through trusts, retirement accounts and family. "New position" means they owned none before. Under each change are the shares they owned before and the shares their latest filing reports, written as a change from one to the other only where their purchases make up the difference.</dd></div>
         <div><dt>One entry per company</dt><dd>Each company is listed once, under the day of its newest filing. Its totals add up every purchase in the window, and each buyer links to their latest Form 4.</dd></div>
         <div><dt>Prices</dt><dd>Average price paid is what the buyers spent divided by the shares they bought. Price now is the price in the latest update, and the percentage under it is how far that is above or below the average paid.</dd></div>
-        <div data-fit-only hidden><dt>Screener check</dt><dd>Each company is also checked against the <a href="screener.html">screener's rules</a>, except those the screener leaves out (Nasdaq's Finance sector and other lenders) and those with no yearly figures. Passes means it is on the screener's list. Misses one rule names the only rule its figures miss. A rule that needs a figure its filings don't give is marked as not checked, not as missed.</dd></div>
+        <div data-fit-only hidden><dt>Screener check</dt><dd>Each company is also checked against the <a href="screener.html">screener's rules</a>, except those the screener leaves out (Nasdaq's Finance sector and other lenders) and those with no yearly figures. Passes means it is on the screener's list. Misses one rule names the only rule its figures miss. A rule that needs a figure its filings don't give is marked as not checked, not as missed. A company that misses one rule while another could not be checked is not counted as missing by one, since it may miss more.</dd></div>
       </dl>
     </div>
   </details>
@@ -90,7 +90,7 @@
 
   <section class="sec" id="stakes" aria-labelledby="stakes-h">
     <div class="sec-head"><h2 id="stakes-h">New 5%+ stakes</h2><span class="count" data-stakes-count></span></div>
-    <p class="sec-lede">Schedule 13D filings: an investor crossed 5% ownership and may push the company for changes. Newest first. The sector and screener choices above apply here; the tiers don't.</p>
+    <p class="sec-lede">Schedule 13D filings: usually an investor who has gone past 5% ownership and may push the company for changes. Stake is the largest percentage of the company's shares that any filer on the filing reports, and the few under 5% are marked. Newest first. The sector and screener choices above apply here; the tiers don't.</p>
     <div data-stakes></div>
   </section>
 </main>

@@ -1,11 +1,12 @@
 /* Home: a claim on the left, the live figures that prove it on the right, once per tool. */
 
 /* The first screen: the claim and the search, beside the screener's top five. A faint lift of light behind the proof,
-   the one ground the site paints. */
-.hero { position: relative; padding: 64px 0 72px; border-bottom: 1px solid var(--line); overflow: hidden; }
+   the one ground the site paints. The glow is drawn inside the hero's own box, so nothing clips the hero: the search
+   suggestions float over the next band, and the hero never becomes a box that scrolls. */
+.hero { position: relative; padding: 64px 0 72px; border-bottom: 1px solid var(--line); }
 .hero::before {
-  content: ""; position: absolute; inset: -20% -10% auto 45%; height: 140%; pointer-events: none;
-  background: radial-gradient(closest-side, rgba(195, 204, 218, 0.07), transparent 70%);
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(32.5% 70% at 77.5% 50%, rgba(195, 204, 218, 0.07), transparent 70%);
 }
 .hero-grid { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 520px); gap: 56px; align-items: center; }
 .hero h1 { font-size: clamp(32px, 4.2vw, 52px); line-height: 1.06; letter-spacing: -0.035em; max-width: 19ch; }
@@ -13,6 +14,8 @@
 /* Above whatever follows it, so its suggestions are never painted under the next block. */
 .hero-search { position: relative; z-index: 5; margin-top: 28px; max-width: 520px; }
 .hero-links { margin-top: 16px; }
+/* Under 900px the header drops the data date and the hero carries it (app.css .proof-date). */
+.hero-copy .proof-date { margin-top: 10px; }
 @media (max-width: 960px) {
   .hero { padding: 40px 0 48px; }
   .hero-grid { grid-template-columns: 1fr; gap: 36px; }
@@ -25,7 +28,7 @@
 .proof, .pair-proof { box-shadow: 0 24px 48px -24px rgba(0, 0, 0, 0.75), 0 2px 8px -4px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.045); }
 .proof-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; padding: 14px 18px 12px; border-bottom: 1px solid var(--line); }
 .proof-title { font-size: 14px; font-weight: 600; letter-spacing: -0.005em; color: var(--text); }
-.proof-head > span { font-size: 12.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.proof-head > span:not(.tag):not(.proof-title) { font-size: 12.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
 .proof-head .sym { font-family: var(--mono); font-weight: 600; margin-right: 4px; }
 .proof-foot { display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding: 11px 18px; border-top: 1px solid var(--line); font-size: 13px; color: var(--text-2); text-decoration: none; }
 .proof-foot:hover { color: var(--text); background: var(--surface-2); }
@@ -73,6 +76,8 @@
 .proof-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 10px 18px 14px; font-size: 13px; color: var(--text-3); }
 .proof-strip b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; margin-right: 8px; }
 .proof-strip .tag { margin-right: 8px; }
+/* A label and its value wrap as one. */
+.proof-strip .fact { display: inline-flex; align-items: center; gap: 12px; white-space: nowrap; }
 
 /* The insider proof: the latest purchases. */
 .tier-key { margin: 20px 0 0; display: grid; gap: 10px; font-size: 14px; }
@@ -85,11 +90,16 @@
 }
 .buy-row:hover { background: var(--surface-2); }
 .buy-row .co .nm { max-width: 100%; }
+/* The buyer's name on one line, their role on the next, so a long name can only cut itself. */
+.buy-row .co .role { color: var(--text-3); }
+.buy-row .sym .filed { margin-left: 4px; font-family: var(--font); font-weight: 400; font-size: 12px; letter-spacing: 0; color: var(--text-3); font-variant-numeric: tabular-nums; }
 .buy-row .amt { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; font-variant-numeric: tabular-nums; }
 .buy-row .amt b { font-weight: 600; font-size: 14px; }
 .buy-row .amt span { font-size: 12px; color: var(--text-3); }
 .buy-row .amt span.up { color: var(--up); }
 .buy-row .amt span.down { color: var(--down); }
+/* On phones who bought wraps rather than being cut off. */
+@media (max-width: 520px) { .buy-row .co .nm { white-space: normal; } }
 
 /* The report's proof: a fair-value range against the price, and three health measures. */
 .ex-range { padding: 22px 18px 8px; }
@@ -99,10 +109,13 @@
 .ex-labels { display: flex; justify-content: space-between; gap: 16px; margin-top: 12px; font-size: 13px; color: var(--text-3); }
 .ex-labels b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
 .ex-bars { margin: 8px 0 0; padding: 4px 18px; display: grid; }
-.ex-bars div { display: grid; grid-template-columns: minmax(0, 150px) minmax(0, 1fr); gap: 16px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+/* Each row only, not the meter's own divs inside it. */
+.ex-bars > div { display: grid; grid-template-columns: minmax(0, 150px) minmax(0, 1fr); gap: 16px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
 .ex-bars dt { font-size: 13.5px; color: var(--text); }
 .ex-bars dd { margin: 0; display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 12px; align-items: center; }
 .ex-val { font-size: 13px; color: var(--text-2); font-variant-numeric: tabular-nums; text-align: right; }
+/* On phones the meter drops under its label, as the report's health rows do. */
+@media (max-width: 520px) { .ex-bars > div { grid-template-columns: minmax(0, 1fr); gap: 6px; } }
 
 /* How to read the numbers */
 .method { padding: 88px 0 24px; }

@@ -156,7 +156,7 @@ p { margin: 0; }
 .proof-line dd { margin: 0; color: var(--text); font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
 /* The header shows the data's date on wide screens; below that the claim's proof line does. */
 .proof-date { display: none !important; }
-@media (max-width: 900px) { .proof-date { display: block !important; } }
+@media (max-width: 900px) { .proof-date { display: block !important; } .proof-line .proof-date { display: flex !important; } }
 .date-line { font-size: 13px; color: var(--text-3); }
 @media (max-width: 860px) {
   .claim-head { grid-template-columns: 1fr; padding: 22px 0 16px; }
@@ -220,6 +220,8 @@ p { margin: 0; }
 .suggest .s-sym { font-family: var(--mono); font-weight: 600; font-size: 13px; letter-spacing: 0.01em; }
 .suggest .s-name { color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .suggest .s-sec { color: var(--text-3); font-size: 12px; white-space: nowrap; }
+/* On the highlighted row's lighter surface Slate Label falls under 4.5:1, so the sector takes the name's color. */
+.suggest [role="option"]:hover .s-sec, .suggest [role="option"][aria-selected="true"] .s-sec { color: var(--text-2); }
 .suggest .s-empty { padding: 10px; color: var(--text-3); font-size: 14px; }
 
 /* Pills: a sector or tier choice with its count. */
@@ -237,8 +239,11 @@ p { margin: 0; }
 .pill.pill-empty:not([aria-pressed="true"]) { color: var(--text-3); border-color: var(--line); }
 .pill[disabled] { opacity: .45; cursor: default; }
 @media (max-width: 720px) {
+  /* 4px of padding holds a pill's focus ring (2px, 2px out), and the negative margins keep the pills where they were.
+     The scroll padding stops a pill brought into view clear of the faded right edge. */
   .pills.scroll {
-    flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-right: calc(-1 * var(--gutter)); padding: 2px 40px 2px 0;
+    flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: -2px calc(-1 * var(--gutter)) -2px -4px; padding: 4px 40px 4px 4px;
+    scroll-padding-inline: 4px 40px;
     -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent);
   }
   .pills.scroll::-webkit-scrollbar { display: none; }
@@ -349,7 +354,8 @@ a.sym:hover { text-decoration: underline; text-decoration-color: var(--line-3); 
 @media (prefers-reduced-motion: no-preference) { .skeleton { animation: shimmer 1.4s linear infinite; } }
 @keyframes shimmer { to { background-position: -200% 0; } }
 .empty { padding: 40px 24px; text-align: center; color: var(--text-2); font-size: 14.5px; }
-.empty h3 { color: var(--text); margin-bottom: 6px; }
+/* An empty state straight under the page's h1 titles itself with an h2, styled as the h3 one inside a section. */
+.empty h2, .empty h3 { font-size: 16px; line-height: 1.35; letter-spacing: -0.012em; font-stretch: 100%; color: var(--text); margin-bottom: 6px; }
 .empty p { max-width: 62ch; margin: 0 auto; }
 .notice { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: var(--r-frame); background: var(--surface); border: 1px solid var(--line); color: var(--text-2); font-size: 13.5px; }
 .notice > .i { font-size: 17px; color: var(--text-3); margin-top: 1px; }

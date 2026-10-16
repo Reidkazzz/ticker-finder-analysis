@@ -47,14 +47,14 @@ export function flagIcons(r, ctx) {
 function partInput(key, r, ctx) {
   switch (key) {
     case "ps": return `${times(r.ps)} price to sales`;
-    case "debt": return r.debt_status === "none" ? "No debt" : r.debt_status === "net_cash" ? `${money(r.net_cash)} more cash than debt` : `Long-term debt ${deRatio(r.lt_de)} of equity`;
+    case "debt": return r.debt_status === "none" ? (r.net_cash == null ? "No debt" : `No debt, ${money(r.net_cash)} in cash and investments`) : r.debt_status === "net_cash" ? `${money(r.net_cash)} more cash than debt` : `Long-term debt ${deRatio(r.lt_de)} of equity`;
     case "margin": return `${pct(r.net_margin)} net margin${r.one_time_note ? ", without one-time items" : ""}`;
     case "fcf": return r.fcf_yield == null ? "No cash yield" : `${pct(r.fcf_yield)} of market value in free cash`;
     case "growth": return r.revenue_growth == null ? "No prior year" : `Sales ${pct(r.revenue_growth, 1, true)} on the year`;
     case "small": return `${money(r.mcap)} market value`;
     case "out_of_favor": return r.drawdown == null ? "No 52-week high yet" : `${pct(r.drawdown, 0)} below its 52-week high`;
     case "undiscovered": return r.analysts == null ? "Coverage not checked" : `${r.analysts} analyst${r.analysts === 1 ? "" : "s"}`;
-    case "under_book": return !("pb" in r) ? "" : r.pb == null ? "Book value zero or less" : `${under(r.pb)} its book value`;
+    case "under_book": return !("pb" in r) ? "" : r.pb == null ? "Book value zero or less" : `${under(r.pb)} its book value${r.book_value != null ? ` of ${money(r.book_value)}` : ""}`;
     case "insiders_buying": return r.insiders ? `Tier ${r.insiders.tier} buying ${windowWords(ctx)}` : `No Tier 1 or 2 buying ${windowWords(ctx)}`;
     default: return "";
   }

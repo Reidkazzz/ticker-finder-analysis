@@ -1,7 +1,7 @@
 // Insider buying: open-market purchases from SEC Form 4 filings, one entry per company under the day of its newest
 // filing, then the new 5%+ stakes from Schedule 13D filings. Data: insiders.json, with meta.json for the window's dates
 // and the days still being scanned (the page still works without meta.json).
-import { chrome, date, displayName, esc, icon, load, localToday, longDate, money, pct, price, relDay, signClass, times } from "./common.js";
+import { asShown, chrome, date, displayName, esc, icon, load, localToday, longDate, money, pct, price, relDay, signClass, times, vsPaid } from "./common.js";
 import { deRatio } from "./ledger.js";
 
 chrome();
@@ -44,8 +44,9 @@ const words = (xs, and = "and") => (xs.length < 2 ? xs.join("") : `${xs.slice(0,
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : "");
 const reportHref = (sym) => `report.html?t=${encodeURIComponent(sym)}`;
 const slug = (sym) => String(sym || "").replace(/[^A-Za-z0-9]/g, "-");
-// Shares: exact under a million, then in millions to two places.
-const shares = (n) => (n == null ? "n/a" : n >= 1e6 ? `${(n / 1e6).toFixed(2)}M` : Math.round(n).toLocaleString("en-US"));
+// Shares: exact under a million, then in millions or billions to two places, cut rather than rounded up as money() does.
+const cut = (v, d) => (Math.floor(v * 10 ** d + 1e-9) / 10 ** d).toFixed(d);
+const shares = (n) => (n == null ? "n/a" : n >= 1e9 ? `${cut(n / 1e9, 2)}B` : n >= 1e6 ? `${cut(n / 1e6, 2)}M` : Math.round(n).toLocaleString("en-US"));
 // A round threshold in words ("$10 million"), anything else in the site's money format.
 const amount = (n) => (n >= 1e9 && n % 1e9 === 0 ? `$${n / 1e9} billion` : n >= 1e6 && n % 1e6 === 0 ? `$${n / 1e6} million` : money(n));
 const tier2Stake = () => data.tiers?.tier2_stake ?? 0.2;
@@ -143,8 +144,12 @@ function fitLine(f, sector, { compact = false } = {}) {
     case "unconfirmed": return line(`<span class="tag tag-mid">Not confirmed</span>`,
       `Misses no rule, but ${esc(unchecked || "one rule could not be checked")}.${f.why ? ` ${esc(f.why)}` : ""}`, fitFigures(f));
     case "fail": {
+      // A company that misses one rule while others could not be checked may miss more, so "Passes or misses by one"
+      // leaves it out (fitOk) and its tag must not read like a near miss's.
       const n = f.missed || f.misses?.length || 0;
-      return line(`<span class="tag">Misses ${n === 1 ? "one rule" : `${n} rules`}</span>`,
+      const k = f.unchecked?.length || 0;
+      const tag = n === 1 && k ? `Misses one, ${k} not checked` : `Misses ${n === 1 ? "one rule" : `${n} rules`}`;
+      return line(`<span class="tag">${tag}</span>`,
         `${esc(cap((f.misses || []).join("; ")))}${unchecked ? `; ${esc(unchecked)}` : ""}.`, fitFigures(f));
     }
     default: return "";
@@ -159,15 +164,23 @@ const TIER_TAG = {
   3: `<span class="tag tag-line">Smaller<span class="sr-only"> purchases</span></span>`,
 };
 
+// Whether the buyer's purchases make up the change in their holding, to 1% of the shares bought. The stake change is
+// the shares bought against the holding before (pipeline/insiders.build), while the latest filing's count also takes in
+// conversions, awards and sales, so a count after that the purchases don't explain would contradict the change.
+const addsUp = (b) => b.owned_before != null && b.owned_after != null && b.shares != null
+  && Math.abs(b.owned_after - b.owned_before - b.shares) <= Math.max(1, 0.01 * b.shares);
+
 function stakeCell(b) {
   const change = b.new_position ? `<b class="up">New position</b>`
     : b.stake_increase == null ? `<span class="faint">n/a</span>`
     : `<b class="${b.stake_increase >= tier2Stake() ? "up" : ""}">${pct(b.stake_increase, b.stake_increase < 0.1 ? 1 : 0, true)}</b>`;
   // Every share the buyer reported, in their own name, trusts, retirement accounts and family: before their first
-  // purchase in the window, and what their latest filing reports.
+  // purchase in the window, and what their latest filing reports: as a change where the purchases add up to it, else
+  // side by side, since that filing also counts shares gained or given up otherwise.
   const held = b.owned_before == null ? "Holdings not available"
+    : addsUp(b) ? `Held ${shares(b.owned_before)} to ${shares(b.owned_after)}`
     : b.owned_after == null ? `Held ${shares(b.owned_before)} before`
-    : `Held ${shares(b.owned_before)} to ${shares(b.owned_after)}`;
+    : `Held ${shares(b.owned_before)} before, ${shares(b.owned_after)} in latest filing`;
   return `${change}<span class="sub">${esc(held)}</span>`;
 }
 
@@ -187,10 +200,12 @@ function buyerRow(b, extra, hidden) {
 function card(c, fresh) {
   const key = slug(c.symbol || c.name);
   const name = esc(displayName(c.name));
+  // A real space between ticker and name, so a screen reader or a copy reads "CRBG Corebridge", not "CRBGCorebridge".
   const title = c.symbol
-    ? `<a href="${reportHref(c.symbol)}"><span class="sym">${esc(c.symbol)}</span><span class="nm">${name}</span></a>`
-    : `<span class="sym">Unlisted</span><span class="nm">${name}</span>`;
-  const vs = c.vs_paid == null ? null : Math.round(c.vs_paid * 1000) / 1000;
+    ? `<a href="${reportHref(c.symbol)}"><span class="sym">${esc(c.symbol)}</span> <span class="nm">${name}</span></a>`
+    : `<span class="sym">Unlisted</span> <span class="nm">${name}</span>`;
+  // Price now against the average paid (vsPaid). A change too small to show reads 0.0%, uncolored.
+  const vs = asShown(vsPaid(c.price, c.avg_price, c.vs_paid), 1);
   const open = state.open.has(key);
   const n = c.buyers.length;
   return `<article class="buy${fresh ? " fresh" : ""}" id="co-${key}" aria-labelledby="h-${key}">
@@ -229,7 +244,7 @@ function emptyFeed() {
   const tries = [state.tier !== "123" && `"All purchases"`, state.fit !== "any" && `"Any company"`, state.sector !== "All" && "another sector"].filter(Boolean);
   const which = { 1: "Tier 1", 12: "Tier 1 or 2", 123: "any" }[state.tier];
   const fit = state.fit === "pass" ? " and passed the screener" : state.fit === "near" ? " and passed the screener or missed it by one rule" : "";
-  return `<div class="panel empty"><h3>No purchases match</h3><p>No ${state.sector === "All" ? "" : `${esc(state.sector)} `}company had
+  return `<div class="panel empty"><h2>No purchases match</h2><p>No ${state.sector === "All" ? "" : `${esc(state.sector)} `}company had
     ${which} open-market insider buying ${esc(inFilings())}${fit}.${tries.length ? ` Try ${words(tries, "or")}.` : ""}</p></div>`;
 }
 
@@ -309,13 +324,16 @@ function purpose(s) {
 
 function stakeRow(s, extra) {
   const name = esc(displayName(s.name));
-  const co = s.symbol ? `<a href="${reportHref(s.symbol)}"><span class="sym">${esc(s.symbol)}</span><span class="nm">${name}</span></a>`
-    : `<span class="sym">Unlisted</span><span class="nm">${name}</span>`;
+  const co = s.symbol ? `<a href="${reportHref(s.symbol)}"><span class="sym">${esc(s.symbol)}</span> <span class="nm">${name}</span></a>`
+    : `<span class="sym">Unlisted</span> <span class="nm">${name}</span>`;
+  // The stake is the largest percentage any filer on the 13D reports. A few report less than 5%, and the row says so
+  // rather than pass for a 5%+ stake.
+  const under = s.percent != null && s.percent < 5 ? `<span class="sub">under 5%</span>` : "";
   return `<tr${extra ? ` data-extra${state.allStakes ? "" : " hidden"}` : ""}>
     <td class="txt s-filed" data-label="Filed">${esc(date(s.filed))}</td>
     <th scope="row" class="s-co"><div class="s-name">${co}</div></th>
     <td class="txt s-filer" data-label="Filer">${esc(s.filer || "Not given")}</td>
-    <td class="s-pct" data-label="Stake">${s.percent == null ? "n/a" : `${s.percent.toFixed(1)}%`}</td>
+    <td class="s-pct" data-label="Stake">${s.percent == null ? "n/a" : `${s.percent.toFixed(1)}%`}${under}</td>
     ${hasFit() ? `<td class="txt s-fit" data-label="Screener">${fitLine(s.fit, s.sector, { compact: true })}</td>` : ""}
     <td class="txt s-purpose" data-label="Stated purpose">${purpose(s)}</td>
     <td class="s-doc">${s.filing ? `<a class="doc" href="${esc(s.filing)}" target="_blank" rel="noopener">13D${icon("arrow-up-right")}<span class="sr-only">, ${esc(s.filer || "the")} filing at the SEC (opens in a new tab)</span></a>` : ""}</td>
@@ -330,11 +348,13 @@ function renderStakes() {
   document.querySelector("[data-stakes-count]").textContent = rows.length === all.length
     ? `${plural(all.length, "stake")}, ${filedWords()}` : `${rows.length} of ${all.length} stakes`;
   if (!rows.length) {
-    // When the screener choice hides every stake, say so rather than that none were filed.
-    const hidden = inSector.length === 1
-      ? `The new 5%+ stake filed ${where}${esc(fromTo())} is not in a company that ${FIT_WORDS[state.fit][0]}. Choose "Any company" to see it.`
-      : `None of the ${inSector.length} new 5%+ stakes filed ${where}${esc(fromTo())} is in a company that ${FIT_WORDS[state.fit][0]}. Choose "Any company" to see them.`;
-    stakesEl.innerHTML = `<div class="panel empty"><p>${inSector.length ? hidden : `No new 5%+ stakes were filed ${where}${esc(fromTo())}.`}</p></div>`;
+    // When the screener choice hides every stake, say so rather than that none were filed. Only "Passes" and "Passes or
+    // misses by one" can hide one, so with "Any company" the sector simply has none (and FIT_WORDS has no "any").
+    const span = `${where}${esc(fromTo())}`;
+    const msg = !inSector.length ? `No new 5%+ stakes were filed ${span}.`
+      : inSector.length === 1 ? `The new 5%+ stake filed ${span} is not in a company that ${FIT_WORDS[state.fit][0]}. Choose "Any company" to see it.`
+      : `None of the ${inSector.length} new 5%+ stakes filed ${span} is in a company that ${FIT_WORDS[state.fit][0]}. Choose "Any company" to see them.`;
+    stakesEl.innerHTML = `<div class="panel empty"><p>${msg}</p></div>`;
     return;
   }
   stakesEl.innerHTML = `<div class="table-wrap"><table class="data stakes">
@@ -508,7 +528,7 @@ function start() {
 
 function fail() {
   feed.setAttribute("aria-busy", "false");
-  feed.innerHTML = `<div class="panel empty"><h3>Insider data is not available yet</h3><p>Filings appear after the first nightly update runs. If you expected them, reload the page in a minute.</p></div>`;
+  feed.innerHTML = `<div class="panel empty"><h2>Insider data is not available yet</h2><p>Filings appear after the first nightly update runs. If you expected them, reload the page in a minute.</p></div>`;
   countEl.textContent = "";
   stakesEl.innerHTML = `<div class="panel empty"><p>New 5%+ stakes appear with the insider data.</p></div>`;
   document.querySelectorAll("[data-proof]").forEach((el) => { el.textContent = "n/a"; });

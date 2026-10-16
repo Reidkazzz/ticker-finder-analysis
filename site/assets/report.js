@@ -1,4 +1,4 @@
-import { attachSearch, chrome, date, displayName, esc, healthBand, icon, load, localToday, longDate, meter, money, pct, price, searchMarkup, signClass } from "./common.js";
+import { asShown, attachSearch, chrome, date, displayName, esc, healthBand, icon, load, localToday, longDate, meter, money, pct, price, searchMarkup, signClass, vsPaid } from "./common.js";
 import { ledger } from "./ledger.js";
 
 // The report has its own search box at the top of the page, which opens a report in place.
@@ -7,7 +7,7 @@ chrome({ search: false });
 const host = document.querySelector("[data-report]");
 const startHead = document.querySelector("[data-start]");
 const searchHost = document.getElementById("report-search");
-searchHost.innerHTML = searchMarkup("report-q", "Search another ticker or company");
+searchHost.innerHTML = searchMarkup("report-q", "Another ticker or company");
 const searchInput = searchHost.querySelector("input");
 attachSearch(searchHost.querySelector("form"), {
   onPick: (sym) => {
@@ -148,10 +148,18 @@ function valuationKind(r) {
 // A plain-English account of how the estimate is made and how well it has done, under the methods. The discount rates
 // and growth limits repeat report.py's CF_RATES, CF_SMALL_RATE, CF_RATE_BASIS, CF_GROWTH_CAP and CF_TERMINAL, and the
 // track record comes from the point-in-time backtest described in the README. `none`: the company has figures but no
-// fair value, so the explanation names the methods that would apply.
+// fair value, so the explanation names the methods that would apply, and is left out where none would.
 function howItWorks(r, none = false) {
   const kind = valuationKind(r);
   const item = (title, text) => `<li><b>${title}</b><span>${text}</span></li>`;
+  // What report.fair_value checks before using each method: value to sales needs sales that look whole, a profit
+  // without one-time items, and the debt and cash read (debt_doubt null, cash not null); the cash-flow model needs
+  // the debt and cash read. A company with a fair value is described in full.
+  const f = r.fundamentals || {};
+  const unread = f.debt_doubt != null || f.cash === null;
+  const bySales = !none || !(unread || f.sales_doubt || !(f.revenue > 0) || !(f.adj_net_income > 0));
+  const byCash = !none || !unread;
+  if (kind === "other" && !bySales && !byCash) return "";
   const peersLine = kind === "bank"
     ? "The 10 US-listed banks most like this one in return on tangible equity, return on assets, efficiency and size."
     : kind === "reit"
@@ -159,9 +167,11 @@ function howItWorks(r, none = false) {
       : "The 10 US-listed companies most like this one in profit margins, cash flow, sales growth, size and sales per dollar of assets, preferring its own industry.";
   const items = [item("Similar companies", `${r.peer_basis ? esc(r.peer_basis) : peersLine} Each estimate that starts with Peer applies their median multiple to this company's own figures: what the stock would be worth if the market priced it like them.`)];
   if (kind === "other") {
-    items.push(item("Value to sales", "What each similar company's whole business costs, its debt included and its cash taken off, per dollar of yearly sales. That multiple times this company's sales, less its debt and any other claims that come before its shares, plus its cash, gives the value of its shares."));
-    items.push(item("Cash-flow model", "Starts from free cash flow: the cash the business brings in each year after paying for its operations, its equipment and the stock it pays staff with. The cash flow grows at the company's recent sales growth, kept between 0% and 12% a year, for 5 years, then slows evenly to 2.5% a year, about the pace of inflation, by year 10 and keeps that pace after."));
-    items.push(item("The discount rate", "Money that arrives later is worth less than money today, so each future year's cash is shrunk by a discount rate: the yearly return investors want for the risk of owning the stock. For companies worth $10B or more it is 8%: about 4% from safe US government bonds plus about 4% for the extra risk of stocks, per Damodaran's January 2026 figures. Smaller companies are riskier, so the rate goes up a point for each step down in size: 9% from $2B, 10% from $300M and 11% below that. It is not moved with daily bond yields: in our tests, a rate that moved with bond yields and with how much each stock moves with the market did not make the verdicts more accurate."));
+    if (bySales) items.push(item("Value to sales", "What each similar company's whole business costs, its debt included and its cash taken off, per dollar of yearly sales. That multiple times this company's sales, less its debt and any other claims that come before its shares, plus its cash, gives the value of its shares."));
+    if (byCash) {
+      items.push(item("Cash-flow model", "Starts from free cash flow: the cash the business brings in each year after paying for its operations, its equipment and the stock it pays staff with. The cash flow grows at the company's recent sales growth, kept between 0% and 12% a year, for 5 years, then slows evenly to 2.5% a year, about the pace of inflation, by year 10 and keeps that pace after."));
+      items.push(item("The discount rate", "Money that arrives later is worth less than money today, so each future year's cash is shrunk by a discount rate: the yearly return investors want for the risk of owning the stock. For companies worth $10B or more it is 8%: about 4% from safe US government bonds plus about 4% for the extra risk of stocks, per Damodaran's January 2026 figures. Smaller companies are riskier, so the rate goes up a point for each step down in size: 9% from $2B, 10% from $300M and 11% below that. It is not moved with daily bond yields: in our tests, a rate that moved with bond yields and with how much each stock moves with the market did not make the verdicts more accurate."));
+    }
     // Only where the estimates show a price to earnings: for comparison when other estimates count, or counted when
     // it is the only one (report.fair_value, PE_COUNTS). Data written before PE_COUNTS has no "counted", and there a
     // price to earnings beside other estimates counted with them, so it gets neither item.
@@ -274,7 +284,7 @@ function verdictPanel(r, home) {
   if (!v || !VERDICT[v.verdict]) {
     // Older data has neither a reason nor coverage, so it gets the general explanation.
     // The heading already says there is no estimate, so a reason that opens by saying so starts after it.
-    const why = v?.withheld ? esc(v.withheld.replace(/^There is no fair value estimate\.\s*/, ""))
+    const why = v?.withheld ? esc(v.withheld.replace(/^(?:There is no fair value estimate|No fair value is shown)\.\s*/, ""))
       : r.coverage?.note ? esc(r.coverage.note)
       : r.fundamentals ? "None of the valuation methods for this kind of company could be worked out from its figures."
       : `There is not enough reliable data to estimate a fair value. This happens when we could not find a full year of financials in the company's SEC filings,
@@ -313,14 +323,16 @@ const isoOf = (unix) => new Date(unix * 1000).toISOString().slice(0, 10);
 // The heading and the change say the span the points actually cover: 12 months, or since the first point.
 function pricePanel(r) {
   const pts = (r.weekly || []).filter((p) => p && p[1] != null);
+  const charted = pts.length >= 4;
   const fromHigh = r.high52 && r.price ? r.price / r.high52 - 1 : null;
+  // The note on the 52-week range speaks of the chart, so it shows only with one.
   const stats = `<div class="p-side"><dl class="p-stats">
       <div><dt>52-week low</dt><dd>${price(r.low52)}</dd></div>
       <div><dt>52-week high</dt><dd>${price(r.high52)}</dd></div>
-      <div><dt>From 52-week high</dt><dd class="${signClass(fromHigh)}">${fromHigh == null ? "n/a" : pct(fromHigh, 0, true)}</dd></div>
-    </dl>
-    <p class="p-note">The 52-week low and high are from daily prices, so they can fall outside the weekly closes the chart plots.</p></div>`;
-  if (pts.length < 4) {
+      <div><dt>From 52-week high</dt><dd class="${signClass(asShown(fromHigh, 0))}">${fromHigh == null ? "n/a" : pct(fromHigh, 0, true)}</dd></div>
+    </dl>${charted ? `
+    <p class="p-note">The 52-week low and high are from daily prices, so they can fall outside the weekly closes the chart plots.</p>` : ""}</div>`;
+  if (!charted) {
     return `<section class="frame r-price" aria-labelledby="price-h">
       <div class="p-head"><h2 id="price-h">Price</h2></div>
       <p class="r-none">Too few weekly prices to draw a chart yet${pts.length ? ` (${pts.length} so far)` : ""}.</p>${stats}</section>`;
@@ -400,8 +412,10 @@ function scoreSection(r, sc, meta, home) {
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const monthYear = (iso) => (iso ? `${MON[+iso.slice(5, 7) - 1]} ${iso.slice(0, 4)}` : "");
 const shortMonth = (iso) => `${MON[+iso.slice(5, 7) - 1]} ’${iso.slice(2, 4)}`;
-// Growth on the year-ago quarter: one decimal below 100%, whole percents above.
-const growth = (g) => (g == null ? "" : pct(g, Math.abs(g) >= 1 ? 0 : 1, true));
+// Growth on the year-ago quarter: one decimal below 100%, whole percents above, in the columns, the table and the
+// sentences under the chart alike.
+const gDigits = (g) => (Math.abs(g) >= 1 ? 0 : 1);
+const growth = (g) => (g == null ? "" : pct(g, gDigits(g), true));
 // Why a quarter with revenue has no growth figure (fundamentals._quarter_series' yoy_withheld), or null where its
 // year-ago quarter isn't there.
 const WITHHELD = {
@@ -460,12 +474,13 @@ function quarterSection(r) {
   const none = f.sales_doubt ? "Quarter-by-quarter revenue isn't shown, since the sales figure in the company's SEC data looks incomplete: profit came out larger than sales."
     : qs.length ? "Quarter-by-quarter revenue isn't shown, since the company reported no revenue in these quarters."
     : "Quarter-by-quarter figures aren't available for this company. Companies based outside the US often file only yearly reports with the SEC, and a quarter is left out when its figures in the filings don't check out.";
-  const chart = plotted && shown.length ? quarterChart(qs, f.quarters_stale) : `<p class="r-none">${none}</p>`;
+  const chart = plotted && shown.length ? quarterChart(qs, f.quarters_stale ? f : null) : `<p class="r-none">${none}</p>`;
   return `<section class="sec" id="quarters" aria-labelledby="quarters-h">${head}
     <div class="frame q-panel">${chart}${quarterStats(f, plotted, gbar)}${plotted ? quarterTable(qs, !!gbar && qs.some((q) => q.gross_profit != null)) : ""}</div>
   </section>`;
 }
 
+// `stale`: the fundamentals, where the newest quarter is old (quarters_stale), else null.
 function quarterChart(qs, stale) {
   const vals = qs.filter((q) => q.revenue != null).map((q) => q.revenue);
   const t = ticks(Math.min(0, ...vals), Math.max(...vals));
@@ -481,9 +496,14 @@ function quarterChart(qs, stale) {
   const withRev = qs.filter((q) => q.revenue != null);
   const first = withRev[0], last = withRev[withRev.length - 1];
   const blanks = n - withRev.length;
-  const summary = `Revenue for the ${n} quarters to ${monthYear(qs[n - 1].end)}${withRev.length > 1
-    ? `, from ${amount(first.revenue)} in the quarter ended ${monthYear(first.end)} to ${amount(last.revenue)} in the quarter ended ${monthYear(last.end)}${last.yoy != null ? `, ${last.yoy >= 0 ? "up" : "down"} ${pct(Math.abs(last.yoy), 1)} on a year before` : ""}`
-    : `: ${amount(last.revenue)} in the quarter ended ${monthYear(last.end)}`}.${blanks ? ` ${blanks} ${blanks === 1 ? "quarter has" : "quarters have"} no figure.` : ""} The table below lists every quarter.`;
+  const summary = `${n === 1 ? `Revenue in the quarter ended ${monthYear(last.end)}: ${amount(last.revenue)}`
+    : `Revenue for the ${n} quarters to ${monthYear(qs[n - 1].end)}${withRev.length > 1
+    ? `, from ${amount(first.revenue)} in the quarter ended ${monthYear(first.end)} to ${amount(last.revenue)} in the quarter ended ${monthYear(last.end)}${last.yoy != null ? `, ${asShown(last.yoy, gDigits(last.yoy)) === 0 ? "about the same as" : `${last.yoy > 0 ? "up" : "down"} ${pct(Math.abs(last.yoy), gDigits(last.yoy))} on`} a year before` : ""}`
+    : `: ${amount(last.revenue)} in the quarter ended ${monthYear(last.end)}`}`}.${blanks ? ` ${blanks} ${blanks === 1 ? "quarter has" : "quarters have"} no figure.` : ""} The table below lists every quarter.`;
+  // The newest quarter the site has can be older than the company's latest filings, whose year end or balance sheet
+  // the notes give.
+  const newest = qs[n - 1].end;
+  const later = stale && [stale.fiscal_year_end, stale.balance_as_of].filter((d) => d && d.slice(0, 7) > newest.slice(0, 7)).sort().pop();
   const cols = qs.map((q, i) => {
     const name = quarterName(q);
     const align = i < 2 ? " left" : i >= n - 2 ? " right" : "";
@@ -498,15 +518,17 @@ function quarterChart(qs, stale) {
     const v = q.revenue;
     const bar = `--base:${base.toFixed(2)}%;--h:${Math.abs(at(v) - base).toFixed(2)}%`;
     const gm = q.gross_profit != null && v > 0 ? q.gross_profit / v : null;
-    const yoyText = q.yoy != null ? `${q.yoy >= 0 ? "Up" : "Down"} ${pct(Math.abs(q.yoy), 1)} on the same quarter a year before.`
-      : WITHHELD[q.yoy_withheld] || "No growth figure, since the same quarter a year before isn't available.";
+    // A change that reads 0% has no direction to name.
+    const yoyText = q.yoy == null ? WITHHELD[q.yoy_withheld] || "No growth figure, since the same quarter a year before isn't available."
+      : asShown(q.yoy, gDigits(q.yoy)) === 0 ? "About the same as the same quarter a year before."
+      : `${q.yoy > 0 ? "Up" : "Down"} ${pct(Math.abs(q.yoy), gDigits(q.yoy))} on the same quarter a year before.`;
     const extra = q.extra_days && q.yoy != null ? ` It ran ${Math.abs(q.extra_days)} days ${q.extra_days > 0 ? "longer" : "shorter"} than that quarter, since the company's fiscal year sometimes has an extra week, which moves growth by several points.` : "";
     const tip = `<span class="qc-tip${align}"><b>${amount(v)}</b><span>${esc(name)}</span>
       <span>${yoyText}${extra}</span>${gm != null ? `<span>Gross margin ${pct(gm, 1)}.</span>` : ""}${q.derived ? `<span>Worked out as the fiscal year's total less its first three quarters.</span>` : ""}</span>`;
     return `<div class="qc-col${q.derived ? " derived" : ""}">
       <div class="qc-area"><div class="qc-bar${v < 0 ? " neg" : ""}" style="${bar}"></div></div>${label}
       <span class="qc-val">${amount(v)}</span>
-      <span class="qc-yoy ${signClass(q.yoy)}${extra ? " adj" : ""}">${growth(q.yoy)}</span>${tip}</div>`;
+      <span class="qc-yoy ${signClass(asShown(q.yoy, gDigits(q.yoy)))}${extra ? " adj" : ""}">${growth(q.yoy)}</span>${tip}</div>`;
   }).join("");
   const grid = t.map((v) => `<span class="qc-grid${v === 0 ? " zero" : ""}" style="bottom:${at(v)}%"></span>`).join("");
   const axis = t.map((v) => `<span style="bottom:${at(v)}%">${axisLabel(v, Math.max(Math.abs(lo), hi))}</span>`).join("");
@@ -523,7 +545,7 @@ function quarterChart(qs, stale) {
       </div>
       <figcaption class="qc-cap">${esc(summary)}</figcaption>
     </figure>
-    ${stale ? `<p class="qc-stale">${icon("warning")}<span>The latest quarter in the company's SEC filings ended ${monthYear(qs[n - 1].end)}, so these figures are not current.</span></p>` : ""}
+    ${stale ? `<p class="qc-stale">${icon("warning")}<span>The newest quarter whose revenue this site could read ended ${monthYear(newest)}, so these figures are not current.${later ? ` The company's SEC filings run to at least ${monthYear(later)}.` : ""}</span></p>` : ""}
     <p class="qc-note">Quarters are the company's own fiscal quarters, labeled with the month each ended.</p>
     ${keys.length ? `<ul class="qc-keys">${keys.join("")}</ul>` : ""}`;
 }
@@ -575,7 +597,7 @@ function quarterTable(qs, gross) {
     const when = q.dates_estimated ? `ended around ${esc(monthYear(q.end))}` : `ended ${esc(fullDate(q.end))}`;
     return `<tr><th scope="row">${q.fiscal_quarter ? `Q${q.fiscal_quarter}, ` : ""}${when}${q.derived && q.revenue != null ? ` <span class="tag">Worked out</span>` : ""}</th>
       <td>${q.revenue == null ? `<span class="faint">n/a</span>` : amount(q.revenue)}</td>
-      <td class="${signClass(q.yoy)}">${q.yoy != null ? growth(q.yoy) : q.revenue != null && q.yoy_withheld ? `<span class="faint">Not compared</span>` : ""}${q.extra_days && q.yoy != null ? ` <span class="faint">(${q.extra_days > 0 ? "+" : "-"}${Math.abs(q.extra_days)} days)</span>` : ""}</td>
+      <td class="${signClass(asShown(q.yoy, gDigits(q.yoy)))}">${q.yoy != null ? growth(q.yoy) : q.revenue != null && q.yoy_withheld ? `<span class="faint">Not compared</span>` : ""}${q.extra_days && q.yoy != null ? ` <span class="faint">(${q.extra_days > 0 ? "+" : "-"}${Math.abs(q.extra_days)} days)</span>` : ""}</td>
       ${gross ? `<td>${q.gross_profit == null ? `<span class="faint">n/a</span>` : amount(q.gross_profit)}</td><td>${gm == null ? `<span class="faint">n/a</span>` : pct(gm, 1)}</td>` : ""}</tr>`;
   }).join("");
   return `<details class="disclose q-table">
@@ -594,6 +616,11 @@ function historySection(r, home) {
   const f = r.fundamentals;
   const hist = (f?.history || []).filter((h) => h && h.year != null).sort((a, b) => a.year - b.year);
   if (!hist.length) return "";
+  // One column for every year from the first to the last, so a year the data lacks shows as n/a, not as no gap.
+  const byYear = new Map(hist.map((h) => [h.year, h]));
+  const cols = [];
+  for (let y = hist[0].year; y <= hist[hist.length - 1].year; y++) cols.push(byYear.get(y) || { year: y });
+  const gaps = cols.filter((c) => !byYear.has(c.year)).map((c) => String(c.year));
   const kind = valuationKind(r);
   const has = (k) => hist.some((h) => h[k] != null);
   const ffoDiffers = has("adj_ffo") && hist.some((h) => h.adj_ffo != null && h.adj_ffo !== h.ffo);
@@ -629,16 +656,29 @@ function historySection(r, home) {
   const pos = ni.filter((h) => h.net_income > 0).length;
   const claims = [];
   if (a && b && a !== b) {
-    claims.push(b.revenue === a.revenue ? `Revenue was ${money(a.revenue)} in both fiscal ${a.year} and fiscal ${b.year}.`
-      : `Revenue ${b.revenue > a.revenue ? "rose" : "fell"} from ${money(a.revenue)} in fiscal ${a.year} to ${money(b.revenue)} in fiscal ${b.year}.`);
+    // Worded from the figures as shown, which cut digits, so two that read the same are never said to rise or fall.
+    const ma = money(a.revenue), mb = money(b.revenue);
+    claims.push(ma === mb ? `Revenue was ${b.revenue === a.revenue ? "" : "about "}${ma} in both fiscal ${a.year} and fiscal ${b.year}.`
+      : `Revenue ${b.revenue > a.revenue ? "rose" : "fell"} from ${ma} in fiscal ${a.year} to ${mb} in fiscal ${b.year}.`);
   }
-  if (ni.length > 1) {
+  // Where some columns have no net income, the count says how many years it covers.
+  const withNi = ni.length < cols.length ? `${ni.length} years with a figure` : null;
+  if (ni.length > 1 && withNi) {
+    claims.push(`Net income was positive in ${pos === ni.length ? `all ${withNi}` : `${pos === 0 ? "none" : pos} of the ${withNi}`}.`);
+  } else if (ni.length > 1) {
     claims.push(`Net income was positive in ${pos === ni.length ? `all ${ni.length}` : pos === 0 ? "none" : `${pos}`} of ${pos === ni.length || pos === 0 ? "these years" : `these ${ni.length} years`}.`);
   } else if (ni.length === 1) {
     claims.push(`Net income was ${ni[0].net_income > 0 ? "positive" : ni[0].net_income < 0 ? "negative" : "zero"} in fiscal ${ni[0].year}.`);
   }
+  // A year is labeled by the calendar year the SEC's data files it under (fundamentals._years), which for a year that
+  // doesn't end in December can be a year before the company's own name for it: Strattec's year to June 2026 is 2025.
+  const lastYear = hist[hist.length - 1].year;
+  // A 52 or 53-week year that ends in the first days of January is named for the year before, as its label is.
+  const ended = f.fiscal_year === lastYear && f.fiscal_year_end && +f.fiscal_year_end.slice(0, 4) > lastYear
+    && f.fiscal_year_end.slice(5) > "01-07" ? f.fiscal_year_end : null;
   const notes = [
-    "Fiscal years as the company reports them, from its SEC filings, oldest first.",
+    `Fiscal years from the company's SEC filings, oldest first.${ended ? ` Each is labeled by the calendar year the SEC's data files it under, which can be a year before the company's own name for it: the year labeled ${lastYear} ended ${fullDate(ended)}.` : ""}`,
+    gaps.length ? `No figures for fiscal ${andList(gaps)} could be read from the company's SEC data.` : "",
     revenueWords(f) !== "revenue" ? `Revenue here is its ${revenueWords(f).replace(/^revenue \(|\)$/g, "")}.` : "",
     has("net_income") ? "Net income is as reported, one-time items included." : "",
     has("fcf") ? `Free cash flow is cash from operations less capital spending.${kind === "bank" || kind === "financial" ? " It isn't scored for banks, insurers and other financial companies, whose cash and borrowing are part of the business itself." : ""}` : "",
@@ -655,8 +695,8 @@ function historySection(r, home) {
     </div>
     <div class="table-wrap fh-wrap scrolls"><table class="data r-table fh">
       <caption class="sr-only">Yearly figures by fiscal year, oldest first</caption>
-      <thead><tr><th scope="col"><span class="sr-only">Figure</span></th>${hist.map((h) => `<th scope="col">${esc(String(h.year))}</th>`).join("")}</tr></thead>
-      <tbody>${rows.map(([k, label]) => `<tr><th scope="row">${label}</th>${(() => { const s = scale(k); return hist.map((h) => cell(h[k], s)).join(""); })()}</tr>`).join("")}</tbody>
+      <thead><tr><th scope="col"><span class="sr-only">Figure</span></th>${cols.map((h) => `<th scope="col">${esc(String(h.year))}</th>`).join("")}</tr></thead>
+      <tbody>${rows.map(([k, label]) => `<tr><th scope="row">${label}</th>${(() => { const s = scale(k); return cols.map((h) => cell(h[k], s)).join(""); })()}</tr>`).join("")}</tbody>
     </table></div>
   </section>`;
 }
@@ -673,11 +713,14 @@ function nullReason(b) {
   return [b.value && b.value !== "n/a" ? "Not scored" : "Not enough data", note];
 }
 
-function healthBar(b) {
+// The insider bar's amount is written from the total the insider section states, cut like money() there, since the
+// pipeline's own text rounds to the nearest $0.1M and can read larger ($1.0M for $999K).
+function healthBar(b, r) {
   const none = b.score == null;
   const [lead, rest] = none ? nullReason(b) : [null, b.note];
+  const value = b.key === "insiders" && r?.insiders?.total_value != null ? money(r.insiders.total_value) : b.value;
   return `<li class="hb${none ? " is-none" : ""}">
-    <div class="hb-top"><span class="hb-l">${esc(b.label)}</span><span class="hb-v">${esc(b.value)}</span></div>
+    <div class="hb-top"><span class="hb-l">${esc(b.label)}</span><span class="hb-v">${esc(value)}</span></div>
     ${meter(b.score, b.band, lead || "Not enough data", b.label)}
     ${rest ? `<p class="hb-n">${esc(rest)}</p>` : ""}
   </li>`;
@@ -714,7 +757,7 @@ function healthSection(r, home) {
         <div class="hg-head"><h3 id="hg-${i}">${esc(g.name)}</h3>${ctx ? `<span class="tag tag-line">Not counted</span>` : ""}</div>
         <p class="hg-hint">${esc(g.hint)}</p>
         ${g === noteGroup ? noteBox(r.fundamentals.one_time_note) : ""}
-        <ul class="hb-list">${g.bars.map(healthBar).join("")}</ul>
+        <ul class="hb-list">${g.bars.map((b) => healthBar(b, r)).join("")}</ul>
       </section>`;
     }).join("")}</div>
   </section>`;
@@ -722,8 +765,10 @@ function healthSection(r, home) {
 
 // ---- Similar companies ----
 
-// A valuation multiple, or n/a where it doesn't apply (the note under the table says why).
-const mult = (x) => (x == null ? "n/a" : `${x >= 100 ? Math.round(x).toLocaleString("en-US") : x.toFixed(1)}x`);
+// A valuation multiple, or n/a where it doesn't apply (the note under the table says why). One under 0.1x gets two
+// decimals, and one under 0.01x says so, so a cheap company never reads 0.0x.
+const mult = (x) => (x == null ? "n/a" : x > 0 && x < 0.01 ? "under 0.01x"
+  : `${x >= 100 ? Math.round(x).toLocaleString("en-US") : x.toFixed(x > 0 && x < 0.1 ? 2 : 1)}x`);
 
 // Reports written before peers were chosen by their numbers carry only peer_group and peer_count, which the
 // notes at the bottom still describe.
@@ -747,8 +792,8 @@ function peersSection(r) {
       <caption class="sr-only">${esc(r.symbol)} beside its ${list.length} similar companies, with the median of each multiple</caption>
       <thead><tr><th scope="col">Company</th>${cols.map(([, label]) => `<th scope="col">${esc(label)}</th>`).join("")}</tr></thead>
       <tbody>
-        <tr class="self"><th scope="row"><span class="co"><span class="sym">${esc(r.symbol)}</span><span class="nm">This company</span></span></th>${figures(pm.company)}</tr>
-        ${list.map((p) => `<tr><th scope="row"><a class="co peer-link" href="?t=${encodeURIComponent(p.symbol)}" data-sym="${esc(p.symbol)}"><span class="sym">${esc(p.symbol)}</span><span class="nm">${esc(displayName(p.name))}</span></a></th>${figures(p)}</tr>`).join("")}
+        <tr class="self"><th scope="row"><span class="co"><span class="sym">${esc(r.symbol)}</span> <span class="nm">This company</span></span></th>${figures(pm.company)}</tr>
+        ${list.map((p) => `<tr><th scope="row"><a class="co peer-link" href="?t=${encodeURIComponent(p.symbol)}" data-sym="${esc(p.symbol)}"><span class="sym">${esc(p.symbol)}</span> <span class="nm">${esc(displayName(p.name))}</span></a></th>${figures(p)}</tr>`).join("")}
       </tbody>
       <tfoot><tr><th scope="row"><span class="co"><span class="sym-plain">Median</span><span class="nm">of the ${list.length} companies above</span></span></th>${figures(pm.median)}</tr></tfoot>
     </table></div>
@@ -772,8 +817,18 @@ function shares(n) {
   return a >= 1e9 ? `${cut(a / 1e9, 2)}B` : a >= 1e6 ? `${cut(a / 1e6, 2)}M` : a >= 1e4 ? `${cut(a / 1e3, 1)}K` : Math.round(a).toLocaleString("en-US");
 }
 
+// Whether the shares bought account for the whole change from the holding before to the one the latest filing reports.
+// They need not: that filing can also count shares gained or given up otherwise (converted at a listing, granted,
+// sold), which the stake change, the shares bought over the holding before, leaves out.
+const adds = (b) => b.owned_before != null && b.owned_after != null && b.shares != null
+  && Math.abs(b.owned_after - b.owned_before - b.shares) <= Math.max(1, 0.01 * b.shares);
+
+// Under the change, the holding before and after where the purchases add up to the difference, else the two side by side.
 function stakeCell(b) {
-  const held = b.owned_after != null ? `<small>${b.new_position || !b.owned_before ? "" : `${shares(b.owned_before)} to `}${shares(b.owned_after)} shares</small>` : "";
+  const held = b.new_position || !b.owned_before ? (b.owned_after != null ? `<small>${shares(b.owned_after)} shares</small>` : "")
+    : adds(b) ? `<small>${shares(b.owned_before)} to ${shares(b.owned_after)} shares</small>`
+    : b.owned_after == null ? `<small>${shares(b.owned_before)} shares before</small>`
+    : `<small>${shares(b.owned_before)} shares before, ${shares(b.owned_after)} in latest filing</small>`;
   const td = `<td data-label="Stake change">`;
   if (b.new_position) return `${td}New position${held}</td>`;
   if (b.stake_increase == null) return `${td}<span class="faint">n/a</span>${held}</td>`;
@@ -791,7 +846,8 @@ function insiderSection(r) {
   if (!c) return "";
   const days = r.insider_window || 30;
   const tier = TIERS[c.tier] || TIERS[3];
-  const vs = c.avg_price && r.price ? r.price / c.avg_price - 1 : null;
+  // As the insiders page works it out (vsPaid): where the data gives no comparison, the sentence goes.
+  const vs = vsPaid(r.price, c.avg_price, c.vs_paid);
   const summary = c.total_value != null
     ? ` Insiders bought ${money(c.total_value)} of its stock${c.avg_price ? `, paying ${price(c.avg_price)} a share on average` : ""}.${vs != null
       ? ` Today's price of ${price(r.price)} is ${Math.abs(vs) < 0.0005 ? "about the same as that" : `<span class="${signClass(vs)}">${pct(Math.abs(vs), Math.abs(vs) < 0.1 ? 1 : 0)} ${vs < 0 ? "below" : "above"}</span> that`}.` : ""}`
@@ -812,7 +868,7 @@ function insiderSection(r) {
         <td class="c-doc">${b.filing ? `<a class="doc" href="${esc(b.filing)}" target="_blank" rel="noopener">Filing${icon("arrow-up-right")}<span class="sr-only"> by ${esc(b.name)} at the SEC (opens in a new tab)</span></a>` : ""}</td>
       </tr>`).join("")}</tbody>
     </table></div>
-    <p class="r-fine">${esc(tier[2](days))} Stake change is how much the buyer's holding grew, counting every account they reported. <a href="insiders.html">See all insider buying</a></p>
+    <p class="r-fine">${esc(tier[2](days))} Stake change is the shares bought as a percentage of what the buyer held before, counting every account they reported. <a href="insiders.html">See all insider buying</a></p>
   </section>`;
 }
 
@@ -823,9 +879,12 @@ function newsSection(r) {
   const o = n.overall || { label: "none", text: "" };
   const items = n.items || [];
   const toneTag = (label) => (label ? `<span class="tag${NEWS_TAG[label] ? ` ${NEWS_TAG[label]}` : ""}">${esc(cap(label))}</span>` : "<span></span>");
+  // How headlines are labeled, only where there are some.
+  const lede = [o.text, items.length ? "Each headline is labeled by the words it uses, with the reason shown. Read the story before acting on a label." : ""]
+    .filter(Boolean).map(esc).join(" ");
   return `<section class="sec" id="news" aria-labelledby="news-h">
     <div class="sec-head"><h2 id="news-h">Recent news</h2><span class="tag${NEWS_TAG[o.label] ? ` ${NEWS_TAG[o.label]}` : ""}">${o.label === "none" ? "No news" : `Overall: ${esc(cap(o.label))}`}</span></div>
-    <p class="sec-lede">${o.text ? `${esc(o.text)} ` : ""}Each headline is labeled by the words it uses, with the reason shown. Read the story before acting on a label.</p>
+    ${lede ? `<p class="sec-lede">${lede}</p>` : ""}
     ${items.length ? `<ul class="frame news">${items.map((i) => {
       const press = /^press release/i.test(i.source || "");
       const src = press ? (i.source || "").replace(/^press release\s*\(?([^)]*)\)?\s*$/i, (m, s) => cap(s || "")) : i.source;
@@ -922,7 +981,7 @@ function settle(y, focus) {
 function setMode(start) {
   startHead.hidden = !start;
   searchHost.classList.toggle("is-start", start);
-  searchInput.placeholder = start ? "Ticker or company, e.g. AAPL" : "Search another ticker or company";
+  searchInput.placeholder = start ? "Ticker or company, e.g. AAPL" : "Another ticker or company";
 }
 
 async function start({ y = 0, focus = false, initial = false } = {}) {
@@ -940,7 +999,7 @@ async function start({ y = 0, focus = false, initial = false } = {}) {
   try {
     const u = await load("universe.json");
     popular = [...u].sort((a, b) => (b[3] || 0) - (a[3] || 0)).slice(0, 8)
-      .map((r) => `<li><a class="chip" href="?t=${encodeURIComponent(r[0])}" data-sym="${esc(r[0])}"><span class="sym">${esc(r[0])}</span><span class="nm">${esc(displayName(r[1]))}</span></a></li>`).join("");
+      .map((r) => `<li><a class="chip" href="?t=${encodeURIComponent(r[0])}" data-sym="${esc(r[0])}"><span class="sym">${esc(r[0])}</span> <span class="nm">${esc(displayName(r[1]))}</span></a></li>`).join("");
   } catch {}
   if (id !== seq || !popular) return;
   host.innerHTML = `<section class="r-pop" aria-labelledby="pop-h"><h2 id="pop-h">Largest by market value</h2><ul class="r-chips">${popular}</ul></section>`;

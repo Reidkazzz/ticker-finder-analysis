@@ -60,11 +60,15 @@
 
 /* Where the table fits its box, the column names stay under the page's header while the list scrolls past. */
 .table-wrap:not(.scrolls) .screen-table thead th { position: sticky; top: var(--nav-h); z-index: 2; }
+/* A row's controls reached by keyboard from above stop clear of those names (52px), not under them. A phone hides them. */
+@media (min-width: 721px) { .table-wrap:not(.scrolls) .screen-table tbody :is(a, button) { scroll-margin-top: 56px; } }
 /* Where it doesn't, the rank and company stay in view while the figures scroll sideways, the right edge fading. */
 .table-wrap.scrolls .screen-table .c-rank { position: sticky; left: 0; z-index: 1; }
 .table-wrap.scrolls .screen-table .c-co { position: sticky; left: 40px; z-index: 1; border-right: 1px solid var(--line); }
 .table-wrap.scrolls .screen-table thead .c-rank, .table-wrap.scrolls .screen-table thead .c-co { background: var(--bg-raise); }
 .table-wrap.more-right { -webkit-mask-image: linear-gradient(to left, transparent, #000 36px); mask-image: linear-gradient(to left, transparent, #000 36px); }
+/* An opened row's ledger doesn't scroll, so its words stop short of that fade, wherever the table is scrolled to. */
+.table-wrap.scrolls .screen-table .ledger { padding-right: 36px; }
 .table-note { font-size: 12.5px; color: var(--text-3); margin-top: 10px; }
 
 /* An opened row: its ledger (app.css) on the raised ground, kept to the box's width while the table scrolls sideways,
@@ -78,8 +82,9 @@
 
 /* ---- On a phone each company is a block: rank, company and score, its flags, then its figures, labelled. ---- */
 @media (max-width: 720px) {
-  .screen-table, .screen-table tbody { display: block; }
-  .screen-table thead { display: none; }
+  /* Only the table's own sections: an opened row's ledger tables keep their table layout and their hidden headers. */
+  .screen-table, .screen-table > tbody { display: block; }
+  .screen-table > thead { display: none; }
   .screen-table tr.row {
     display: grid; grid-template-columns: 22px repeat(4, minmax(0, 1fr)); column-gap: 10px; row-gap: 10px;
     padding: 12px 12px 14px 10px; border-bottom: 1px solid var(--line); background: var(--surface);
@@ -156,6 +161,15 @@ table.data.list .co .nm { max-width: 240px; }
 table.data.list td.ind-cell { min-width: 200px; max-width: 300px; white-space: normal; }
 .ind-cell span { display: block; color: var(--text-3); font-size: 12px; }
 .cell-sub { display: block; font-size: 11.5px; color: var(--text-3); }
+/* A small label over a figure may wrap, so a list fits its box where it can (the giants' sales period at 768px). On a
+   phone the lists scroll sideways anyway, and a wrapped label would only make tall rows. */
+@media (min-width: 721px) { table.data.list .cell-sub { white-space: normal; } }
+/* "Show all" puts keyboard focus on the first row it reveals. Its ring is drawn on the row's own cells, inside them, so
+   neither the scrolling box nor the pinned first cell can cover it. */
+table.data.list tr[data-extra]:focus-visible { outline: none; }
+table.data.list tr[data-extra]:focus-visible > td { box-shadow: inset 0 2px 0 var(--text), inset 0 -2px 0 var(--text); }
+table.data.list tr[data-extra]:focus-visible > td:first-child { box-shadow: inset 2px 0 0 var(--text), inset 0 2px 0 var(--text), inset 0 -2px 0 var(--text); }
+table.data.list tr[data-extra]:focus-visible > td:last-child { box-shadow: inset -2px 0 0 var(--text), inset 0 2px 0 var(--text), inset 0 -2px 0 var(--text); }
 .list-more { margin-top: 10px; }
 .list-note { font-size: 12.5px; color: var(--text-3); margin-top: 10px; max-width: 96ch; }
 .notice.unverified { margin-top: 12px; }
