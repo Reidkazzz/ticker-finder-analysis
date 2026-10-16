@@ -11,6 +11,7 @@ import email.utils
 import html
 import re
 import threading
+import time
 import urllib.parse
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
@@ -558,18 +559,45 @@ def _ny_date(when):
     return local.strftime("%Y-%m-%d")
 
 
-def _feed(url, source):
-    """A feed's items, or none where it can't be fetched or read (counted in FAILED, which build reports)."""
+def _feed(url, source, retries=4):
+    """A feed's items, or none where it can't be fetched or read (counted in FAILED, which build reports). Google News
+    is asked no more once GOOGLE_GIVE_UP searches in a row have failed (counted in SKIPPED)."""
+    global _google_streak, _google_start
+    google = source == "Google News"
+    if google and _google_start is None:
+        with _failed_lock:
+            _google_start = _google_start or time.monotonic()
+    if google and (_google_streak >= GOOGLE_GIVE_UP or time.monotonic() - _google_start > GOOGLE_MINUTES * 60):
+        with _failed_lock:
+            SKIPPED[source] += 1
+        return []
     try:
-        return _parse_rss(web_get(url), source)
+        items = _parse_rss(web_get(url, retries=retries), source)
     except Exception:
         with _failed_lock:
             FAILED[source] += 1
+            if google:
+                _google_streak += 1
         return []
+    if google:
+        with _failed_lock:
+            _google_streak = 0
+    return items
 
 
 FAILED = collections.Counter()  # feeds that couldn't be fetched or read this run, by source
+SKIPPED = collections.Counter()  # feeds not asked for this run after repeated failures, by source
 _failed_lock = threading.Lock()
+# Google News can answer a run of searches from one address with errors ("too many requests") rather than results, which
+# a cloud runner's shared address may meet sooner than a home one. Each search is tried once rather than four times
+# with waits between, and after GOOGLE_GIVE_UP failures in a row the run asks Google no more, so a refusing Google
+# costs a minute or two: 5,400 searches each retried for 10 seconds over six workers would take about two and a half
+# hours, past the run's time limit. Searches that answer, but slowly, are capped too: after GOOGLE_MINUTES of them the
+# run asks Google no more (the run of October 15, 2026 spent over two hours on headlines and hit its 170-minute limit).
+GOOGLE_GIVE_UP = 25
+GOOGLE_MINUTES = 15
+_google_streak = 0
+_google_start = None
 
 
 def headlines(sym, name, max_items=10, max_age_days=90, press=()):
@@ -578,7 +606,7 @@ def headlines(sym, name, max_items=10, max_age_days=90, press=()):
     yahoo = _feed(f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={sym.replace('.', '-')}&region=US&lang=en-US",
                   "Yahoo Finance")
     q = urllib.parse.quote(f'"{sym}" {name.split(",")[0]} stock')
-    google = _feed(f"https://news.google.com/rss/search?q={q}&hl=en-US&gl=US&ceid=US:en", "Google News")
+    google = _feed(f"https://news.google.com/rss/search?q={q}&hl=en-US&gl=US&ceid=US:en", "Google News", retries=1)
     key = _name_key(name)
     now = dt.datetime.now(dt.timezone.utc)
     by_date = lambda xs: sorted(xs, key=lambda x: x["date"] or now - dt.timedelta(days=999), reverse=True)
