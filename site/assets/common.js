@@ -1,4 +1,4 @@
-// Shared helpers: data loading, number formatting, header, footer and ticker search.
+// Shared helpers: data loading, number formatting, icons, the score tape, header, footer and ticker search.
 
 const cache = new Map();
 export async function load(name) {
@@ -16,6 +16,17 @@ export async function load(name) {
 
 export const esc = (s) =>
   String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+// An icon from the sprite (assets/icons.svg), sized by the text around it and hidden from screen readers.
+export const icon = (name, cls = "") =>
+  `<svg class="i${cls ? ` ${cls}` : ""}" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-${name}"></use></svg>`;
+
+// The site's name and its mark: a score tape, two parts earned and one not.
+export const BRAND = "TFA";
+export const BRAND_LONG = "Ticker Finder Analysis";
+export const markSvg = (cls = "brand-mark") => `<svg class="${cls}" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+  <rect width="32" height="32" rx="7" fill="#e8ecf2"/><rect x="5.5" y="13" width="10" height="6" rx="1.5" fill="#090d14"/>
+  <rect x="17" y="13" width="5.5" height="6" rx="1.5" fill="#090d14"/><rect x="24" y="13" width="2.5" height="6" rx="1.25" fill="#090d14" fill-opacity=".32"/></svg>`;
 
 // Rounds down, so $9,999,999 reads $9.9M and never looks like it crossed a $10M threshold.
 export function money(n, { digits } = {}) {
@@ -49,7 +60,7 @@ export const times = (n) => (n == null ? "n/a" : `${n.toFixed(2)}x`);
 // and short joining words are lower case after the first ("Bank of America"). The original is kept for tooltips.
 const SMALL_WORDS = new Set(["of", "and", "the", "for", "in", "on", "de", "du", "la"]);
 export function displayName(name) {
-  const s = String(name ?? "");
+  const s = String(name ?? "").replace(/\s{2,}/g, " ");
   if (s !== s.toUpperCase() || (s.match(/\b[A-Z]{4,}\b/g) || []).length < 3) return s;
   return s.replace(/[A-Z0-9][A-Z0-9'’&.-]*/g, (w, at) => {
     if (/[\d&.-]/.test(w.replace(/\.$/, "")) || w.length <= 3 && !/^(INC|CO|LTD|THE|AND|OF|FOR|DE)\.?$/.test(w)) return w;
@@ -63,6 +74,7 @@ export function date(iso, opts = { month: "short", day: "numeric" }) {
   const d = new Date(iso.length === 10 ? iso + "T12:00:00" : iso);
   return d.toLocaleDateString("en-US", opts);
 }
+export const longDate = (iso) => date(iso, { month: "short", day: "numeric", year: "numeric" });
 
 // The viewer's own calendar date. Data is built late in the evening, so "today" must mean the day it is read.
 export function localToday() {
@@ -80,12 +92,25 @@ export function relDay(iso, today = localToday()) {
 
 export const signClass = (n) => (n == null ? "" : n > 0 ? "up" : n < 0 ? "down" : "");
 export const bandClass = (b) => ({ strong: "strong", fair: "fair", weak: "weak" }[b] || "");
+// The health score's bands (pipeline/report.py): 70 and over strong, 40 and over fair. Not used for the screener's score,
+// whose own scale has no bands.
+export const healthBand = (s) => (s == null ? null : s >= 70 ? "strong" : s >= 40 ? "fair" : "weak");
 
-export function meter(score, band) {
-  if (score == null) return `<div class="meter"><span class="faint" style="font-size:13px">Not enough data</span></div>`;
-  return `<div class="meter" role="img" aria-label="Score ${score} out of 100">
+// `label` names the measure for screen readers ("Net profit margin: score 38 out of 100").
+export function meter(score, band, empty = "Not enough data", label = "") {
+  if (score == null) return `<div class="meter"><span class="meter-none">${esc(empty)}</span></div>`;
+  return `<div class="meter" role="img" aria-label="${label ? `${esc(label)}: score` : "Score"} ${score} out of 100">
     <div class="meter-track"><div class="meter-fill ${bandClass(band)}" style="width:${score}%"></div></div>
     <span class="meter-val">${score}</span></div>`;
+}
+
+// A screener score as its tape: one slot per part, as wide as the part's maximum and filled to the points it earned,
+// in the order the pipeline lists them (screener.SCORE_LABELS). The parts add up to the score.
+export function tape(parts, cls = "") {
+  if (!Array.isArray(parts) || !parts.length) return "";
+  const cols = parts.map((p) => `${Math.max(p.max, 0.0001)}fr`).join(" ");
+  return `<div class="tape${cls ? ` ${cls}` : ""}" style="grid-template-columns:${cols}" aria-hidden="true">${parts.map((p) =>
+    `<span style="--f:${p.max ? Math.max(0, Math.min(1, p.points / p.max)).toFixed(3) : 0}"></span>`).join("")}</div>`;
 }
 
 const NAV = [
@@ -94,21 +119,25 @@ const NAV = [
   ["report.html", "Ticker report"],
 ];
 
-export function chrome() {
-  const here = location.pathname.split("/").pop() || "index.html";
+// The page's header and footer. `search: false` leaves the header's search out (a page with its own search box).
+export function chrome({ search = true } = {}) {
+  const here = location.pathname.split("/").pop().replace(/\.html$/, "") || "index";
   const nav = document.querySelector("[data-nav]");
   if (nav) {
-    nav.innerHTML = `<div class="wrap">
-      <a class="brand" href="./"><span class="brand-mark" aria-hidden="true"><span></span></span><span class="brand-name">Ticker Finder</span></a>
+    nav.innerHTML = `<a class="skip" href="#main">Skip to content</a><div class="wrap">
+      <a class="brand" href="./" aria-label="${BRAND}, ${BRAND_LONG}, home">${markSvg()}<span class="brand-name">${BRAND}</span><span class="brand-long">${BRAND_LONG}</span></a>
       <nav class="nav-links" aria-label="Tools">${NAV.map(([h, l]) =>
-        `<a href="${h}"${h === here ? ' aria-current="page"' : ""}>${l}</a>`).join("")}</nav>
-      <span class="nav-meta" data-updated></span></div>`;
+        `<a href="${h}"${h.replace(/\.html$/, "") === here ? ' aria-current="page"' : ""}>${l}</a>`).join("")}</nav>
+      <div class="nav-end"><span class="nav-meta" data-updated></span>${search ? searchMarkup("nav-search", "Search a ticker", { compact: true }) : ""}</div></div>`;
+    const form = nav.querySelector("form");
+    if (form) attachSearch(form);
   }
   const foot = document.querySelector("[data-foot]");
   if (foot) {
     foot.innerHTML = `<div class="wrap">
       <div>
-        <p>Ticker Finder is an educational research tool. Nothing here is investment advice, a recommendation, or a price target.
+        <div class="foot-brand">${markSvg()}${BRAND} <span class="faint" style="font-weight:400">${BRAND_LONG}</span></div>
+        <p>${BRAND} is an educational research tool. Nothing here is investment advice, a recommendation, or a price target.
         Scores and fair-value ranges are estimates built from public filings and can be wrong. Do your own research.</p>
         <p>Data: SEC EDGAR filings and financial statements, Nasdaq listings, Yahoo Finance prices, and headlines from Yahoo Finance, Google News and companies' press releases.
         Refreshed every weekday evening after the SEC's 10pm filing cutoff.</p>
@@ -117,75 +146,109 @@ export function chrome() {
     </div>`;
   }
   load("meta.json").then((m) => {
-    const el = document.querySelector("[data-updated]");
-    if (el) el.textContent = `Updated ${date(m.market_date, { month: "short", day: "numeric", year: "numeric" })}`;
+    document.querySelectorAll("[data-updated]").forEach((el) => { el.textContent = `Data as of ${longDate(m.market_date)}`; });
   }).catch(() => {});
 }
 
-// Ticker search with keyboard-navigable suggestions.
+// "/" anywhere outside a text field jumps to the header's search.
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
+  const t = e.target;
+  if (t.closest && t.closest("input, textarea, select, [contenteditable='true']")) return;
+  const input = document.querySelector("#nav-search") || document.querySelector(".search-row input");
+  if (input && input.offsetParent !== null) { e.preventDefault(); input.focus(); }
+});
+
+// Ticker search: a combobox whose suggestions are picked with the arrow keys and Enter, or with a click. The list of
+// stocks (universe.json, about 400 KB) loads when the box is first used, and suggestions update once it arrives.
+let searchSeq = 0;
 export async function attachSearch(form, { onPick } = {}) {
   const input = form.querySelector("input");
   const list = form.querySelector(".suggest");
-  let rows = [];
+  const id = `suggest-${++searchSeq}`;
+  list.id = id;
+  input.setAttribute("role", "combobox");
+  input.setAttribute("aria-autocomplete", "list");
+  input.setAttribute("aria-expanded", "false");
+  input.setAttribute("aria-controls", id);
+  let rows = null;
+  let loading = null;
   let active = -1;
   let matches = [];
-  load("universe.json").then((u) => (rows = u)).catch(() => {});
+  const ensure = () => (loading ||= load("universe.json").then((u) => { rows = u; render(); return u; }).catch(() => { loading = null; return null; }));
 
   const go = (sym) => (onPick ? onPick(sym) : (location.href = `report.html?t=${encodeURIComponent(sym)}`));
+  const close = () => { list.classList.remove("open"); input.setAttribute("aria-expanded", "false"); input.removeAttribute("aria-activedescendant"); };
+  const open = () => { list.classList.add("open"); input.setAttribute("aria-expanded", "true"); };
 
-  function render() {
-    const q = input.value.trim().toUpperCase();
-    if (!q) { list.classList.remove("open"); return; }
+  function find(q) {
     const ql = q.toLowerCase();
     const exact = [], starts = [], named = [];
-    for (const r of rows) {
+    for (const r of rows || []) {
       if (r[0] === q) exact.push(r);
       else if (r[0].startsWith(q)) starts.push(r);
       else if (r[1].toLowerCase().includes(ql)) named.push(r);
     }
     const byCap = (a, b) => (b[3] || 0) - (a[3] || 0);
-    matches = [...exact, ...starts.sort(byCap), ...named.sort(byCap)].slice(0, 8);
+    return [...exact, ...starts.sort(byCap), ...named.sort(byCap)].slice(0, 8);
+  }
+  function render() {
+    const q = input.value.trim().toUpperCase();
+    if (!q || document.activeElement !== input) { close(); return; }
+    if (!rows) {
+      list.innerHTML = `<div class="s-empty">Loading the list of stocks…</div>`;
+      open();
+      return;
+    }
+    matches = find(q);
     active = matches.length ? 0 : -1;
     list.innerHTML = matches.length
-      ? matches.map((r, i) => `<button type="button" role="option" data-sym="${esc(r[0])}" aria-selected="${i === active}">
-          <span class="s-sym">${esc(r[0])}</span><span class="s-name">${esc(displayName(r[1]))}</span><span class="s-sec">${esc(r[2])}</span></button>`).join("")
+      ? matches.map((r, i) => `<div role="option" id="${id}-${i}" data-sym="${esc(r[0])}" aria-selected="${i === active}">
+          <span class="s-sym">${esc(r[0])}</span><span class="s-name">${esc(displayName(r[1]))}</span><span class="s-sec">${esc(r[2])}</span></div>`).join("")
       : `<div class="s-empty">No US-listed stock matches "${esc(input.value.trim())}".</div>`;
-    list.classList.add("open");
+    open();
+    highlight();
   }
   function highlight() {
-    [...list.querySelectorAll("button")].forEach((b, i) => b.setAttribute("aria-selected", i === active));
+    [...list.querySelectorAll("[role=option]")].forEach((b, i) => b.setAttribute("aria-selected", i === active));
+    if (active >= 0) {
+      input.setAttribute("aria-activedescendant", `${id}-${active}`);
+      list.querySelector(`#${id}-${active}`)?.scrollIntoView({ block: "nearest" });
+    } else input.removeAttribute("aria-activedescendant");
   }
-  input.addEventListener("input", render);
-  input.addEventListener("focus", render);
+  input.addEventListener("focus", () => { ensure(); render(); });
+  input.addEventListener("input", () => { ensure(); render(); });
+  input.addEventListener("blur", () => setTimeout(close, 120));
   input.addEventListener("keydown", (e) => {
-    if (!list.classList.contains("open")) return;
+    if (e.key === "Escape") { if (list.classList.contains("open")) { close(); e.preventDefault(); } else input.blur(); return; }
+    if (!list.classList.contains("open") || !matches.length) return;
     if (e.key === "ArrowDown") { active = Math.min(active + 1, matches.length - 1); highlight(); e.preventDefault(); }
     if (e.key === "ArrowUp") { active = Math.max(active - 1, 0); highlight(); e.preventDefault(); }
-    if (e.key === "Escape") list.classList.remove("open");
   });
   list.addEventListener("mousedown", (e) => {
-    const b = e.target.closest("button[data-sym]");
-    if (b) { e.preventDefault(); go(b.dataset.sym); list.classList.remove("open"); }
+    const b = e.target.closest("[data-sym]");
+    if (b) { e.preventDefault(); close(); go(b.dataset.sym); }
   });
-  document.addEventListener("click", (e) => { if (!form.contains(e.target)) list.classList.remove("open"); });
-  form.addEventListener("submit", (e) => {
+  form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const q = input.value.trim().toUpperCase();
     if (!q) { input.focus(); return; }
+    // Before the list arrives, wait for it, so "apple" finds AAPL rather than a ticker named APPLE.
+    if (!rows) { await ensure(); matches = rows ? find(q) : []; active = matches.length ? 0 : -1; }
     const pick = matches[active]?.[0] || q;
-    list.classList.remove("open");
+    close();
     go(pick);
   });
 }
 
-export function searchMarkup(id, placeholder = "Ticker or company, e.g. AAPL") {
-  return `<form class="search-row" role="search" autocomplete="off">
+export function searchMarkup(id, placeholder = "Ticker or company, e.g. AAPL", { compact = false } = {}) {
+  return `<form class="${compact ? "nav-search" : "search-row"}" role="search" autocomplete="off">
     <div class="field">
-      <label class="sr-only" for="${id}">Search for a stock</label>
-      <i class="ph ph-magnifying-glass" aria-hidden="true"></i>
-      <input class="input" id="${id}" name="q" placeholder="${placeholder}" spellcheck="false" autocapitalize="characters">
-      <div class="suggest" role="listbox"></div>
+      <label class="sr-only" for="${id}">Search for a stock by ticker or company name</label>
+      ${icon("search")}
+      <input class="input" id="${id}" name="q" placeholder="${placeholder}" spellcheck="false" autocapitalize="characters">${compact ? `<kbd aria-hidden="true">/</kbd>` : ""}
+      <div class="suggest" role="listbox" aria-label="Matching stocks"></div>
     </div>
-    <button class="btn btn-primary" type="submit">Analyze</button>
+    ${compact ? "" : `<button class="btn btn-primary" type="submit">Analyze</button>`}
   </form>`;
 }

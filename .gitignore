@@ -5,3 +5,9 @@ __pycache__/
 *.pyc
 .DS_Store
 .claude/
+# Design working files: review screenshots, reference images and direction rounds (DESIGN.md is the record)
+.impeccable/review/
+.impeccable/ref/
+.impeccable/questions/
+.impeccable/direction-round*.json
+.impeccable/brief-body.md
