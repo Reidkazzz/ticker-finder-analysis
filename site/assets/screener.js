@@ -214,7 +214,7 @@ function row(r, i) {
   return `<tr class="row" data-sym="${sym}">
     <td class="c-rank">${i + 1}</td>
     <td class="txt c-co"><button class="row-toggle" type="button" aria-expanded="${state.open === r.symbol}" aria-controls="${detailId(r.symbol)}">
-      ${icon("caret-right", "caret")}<span class="co"><span class="sym">${sym}</span><span class="nm" title="${esc(r.name)}">${esc(displayName(r.name))}</span></span></button></td>
+      ${icon("caret-right", "caret")}<span class="co"><span class="sym">${sym}</span> <span class="nm" title="${esc(r.name)}">${esc(displayName(r.name))}</span></span></button></td>
     <td class="txt c-score"><div class="score" role="img" aria-label="Score ${esc(String(r.score))} out of 100"><b>${esc(String(r.score))}</b>${tape(r.score_parts)}</div></td>
     <td class="txt c-flags">${flags(r)}</td>
     ${labelled("mcap", "Value", money(r.mcap))}
@@ -237,11 +237,11 @@ function renderTable() {
   countEl.innerHTML = state.sector === "All"
     ? `<b>${rows.length}</b> ${rows.length === 1 ? "company" : "companies"} passed every check${which}`
     : sec?.excluded ? `${esc(state.sector)} is not screened`
-    : `<b>${rows.length}</b> of ${sec?.checked ?? 0} ${esc(state.sector)} companies passed every check${which}`;
+    : `<b>${rows.length}</b> of ${sec?.checked ?? 0} ${esc(state.sector)} stocks passed every check${which}`;
 
   if (sec?.excluded) {
     const see = Array.isArray(data.financials_list) ? ` <a href="#financials">See the banks and insurers under book value below.</a>` : "";
-    host.innerHTML = `<div class="panel empty"><h3>${esc(state.sector)} companies are not screened</h3><p>${esc(sec.excluded)}${see}</p></div>`;
+    host.innerHTML = `<div class="panel empty"><h2>${esc(state.sector)} companies are not screened</h2><p>${esc(sec.excluded)}${see}</p></div>`;
     return;
   }
 
@@ -249,10 +249,10 @@ function renderTable() {
     const passing = state.sector === "All" ? "the companies that pass" : `the ${esc(state.sector)} companies that pass`;
     const notYet = insiderPending ? ` (${insiderPending} filing day${insiderPending === 1 ? " is" : "s are"} not scanned yet)` : "";
     host.innerHTML = state.insider !== "any"
-      ? `<div class="panel empty"><h3>No ${state.sector === "All" ? "" : `${esc(state.sector)} `}company on the list ${INSIDER_WORDS[state.insider][0]}</h3>
+      ? `<div class="panel empty"><h2>No ${state.sector === "All" ? "" : `${esc(state.sector)} `}company on the list ${INSIDER_WORDS[state.insider][0]}</h2>
         <p>None of ${passing} today had Tier 1 or 2 insider buying ${esc(window_())}${state.insider === "below" ? " at an average price above today's price" : ""}${notYet}.
         Try "Any company"${state.sector === "All" ? "" : " or another sector"}.</p></div>`
-      : `<div class="panel empty"><h3>No ${esc(state.sector)} company passes today</h3>
+      : `<div class="panel empty"><h2>No ${esc(state.sector)} company passes today</h2>
       <p>That is normal. The checks are strict on purpose, and some sectors rarely have cheap, debt-light, profitable small caps.
       Try another sector or come back after the next update.</p></div>${unverifiedNote()}`;
     return;
@@ -319,13 +319,28 @@ host.addEventListener("click", (e) => {
 // Each is hidden in the page and shown only when the data has it, so a screener.json from before these lists leaves
 // them out. A long list shows its first SHOWN rows and a button for the rest.
 const SHOWN = 15;
-const coCell = (r) => `<td class="txt co-cell"><div class="co"><a class="sym" href="report.html?t=${encodeURIComponent(r.symbol)}">${esc(r.symbol)}</a><span class="nm" title="${esc(r.name)}">${esc(displayName(r.name))}</span></div></td>`;
+const coCell = (r) => `<td class="txt co-cell"><div class="co"><a class="sym" href="report.html?t=${encodeURIComponent(r.symbol)}">${esc(r.symbol)}</a> <span class="nm" title="${esc(r.name)}">${esc(displayName(r.name))}</span></div></td>`;
 const asOf = (iso) => (iso ? longDate(iso) : "n/a");
+
+// A list wider than its box scrolls sideways too, its right edge fading while there is more to see. Each list keeps its
+// own frame, so the lists share this observer rather than the ranked table's one. It also watches the table, which
+// "Show all" can widen.
+const listRo = window.ResizeObserver ? new ResizeObserver((es) => es.forEach((e) => fade(e.target.closest(".list-wrap")))) : null;
+function fade(wrap) {
+  wrap.classList.toggle("more-right", wrap.scrollLeft + wrap.clientWidth < wrap.scrollWidth - 1);
+}
 
 function section(key, body, count) {
   const el = document.querySelector(`[data-section="${key}"]`);
   el.hidden = false;
   el.querySelector("[data-body]").innerHTML = body;
+  const wrap = el.querySelector(".list-wrap");
+  if (wrap) {
+    wrap.addEventListener("scroll", () => fade(wrap), { passive: true });
+    listRo?.observe(wrap);
+    listRo?.observe(wrap.querySelector("table"));
+    fade(wrap);
+  }
   const c = el.querySelector("[data-sec-count]");
   if (c && count != null) c.textContent = typeof count === "number" ? `${count} ${count === 1 ? "company" : "companies"}` : `${count} industries`;
   const more = el.querySelector("[data-more]");
@@ -336,7 +351,15 @@ function section(key, body, count) {
       extra.forEach((tr) => { tr.hidden = !opening; });
       more.setAttribute("aria-expanded", String(opening));
       more.textContent = opening ? "Show fewer" : more.dataset.label;
-      if (opening) extra[0]?.querySelector("a")?.focus(); // keep keyboard focus in the list, at the first row it revealed
+      if (opening) {
+        // Keep keyboard focus in the list, at the first row it revealed: on its link, or on the row itself where it has
+        // none (the industries), since the button has moved far down the page.
+        const first = extra[0], link = first?.querySelector("a");
+        if (link) link.focus();
+        else if (first) { first.tabIndex = -1; first.focus(); }
+      } else {
+        more.scrollIntoView({ block: "nearest" }); // a long list closing above the button would leave it far up the page
+      }
     };
   }
   index[key] = count;
@@ -362,18 +385,21 @@ function renderIndustries() {
   if (!Array.isArray(data.industries)) return;
   const out = data.industries.filter((x) => x.out_of_favor);
   const market = data.market_median_ps;
-  const lead = `<p class="list-note">${data.industries.length} industries measured${market != null ? `. The whole market's median price to sales is ${times(market)}; an industry's median shown in green is under it` : ""}.</p>`;
+  // The marking is named only where a table shows it. Each count goes as a string, which section() counts in industries.
+  const lead = (marked) => `<p class="list-note">${data.industries.length} industries measured${market != null ? `. The whole market's median price to sales is ${times(market)}${marked ? `; an industry whose median is under it is marked "under market"` : ""}` : ""}.</p>`;
   if (!data.industries.length) {
-    section("industries", `<div class="panel empty"><h3>Industries could not be measured today</h3><p>Too few companies had a year of prices loaded to measure any industry.</p></div>`, 0);
+    section("industries", `<div class="panel empty"><h3>Industries could not be measured today</h3><p>Too few companies had a year of prices loaded to measure any industry.</p></div>`, "0");
     return;
   }
   if (!out.length) {
-    section("industries", `<div class="panel empty"><h3>No industry is out of favor today</h3><p>In every industry measured, the median company trades less than ${ofDrawdown()} below its 52-week high.</p></div>${lead}`, 0);
+    section("industries", `<div class="panel empty"><h3>No industry is out of favor today</h3><p>In every industry measured, the median company trades less than ${ofDrawdown()} below its 52-week high.</p></div>${lead(false)}`, `0 of ${data.industries.length}`);
     return;
   }
+  // An industry cheaper than the whole market says so in words, not only in green.
+  const cheap = (x) => x.median_ps != null && market != null && x.median_ps < market;
   section("industries", `${listTable("Industries out of favor", ["Industry", "Companies", "Median below high", "Median price / sales"], out, (x) => `
     <td class="txt ind-cell"><b>${esc(x.industry)}</b><span>${esc(x.sector)}</span></td><td>${x.count}</td><td>${pct(x.median_drawdown, 0)}</td>
-    <td${x.median_ps != null && market != null ? ` class="${x.median_ps < market ? "up" : ""}"` : ""}>${times(x.median_ps)}</td>`)}${lead}`, `${out.length} of ${data.industries.length}`);
+    <td${cheap(x) ? ` class="up"` : ""}>${cheap(x) ? `<span class="cell-sub">under market</span>` : ""}${times(x.median_ps)}</td>`)}${lead(true)}`, `${out.length} of ${data.industries.length}`);
 }
 
 function runway(r) {
@@ -382,7 +408,7 @@ function runway(r) {
     return r.runway_years < 1 ? `${n} month${n === 1 ? "" : "s"}` : `${r.runway_years.toFixed(1)} years`;
   }
   return r.runway_note === "not_burning" ? `<span class="faint">Not burning cash</span>`
-    : r.runway_note === "stale" ? `<span class="faint" title="Its latest fiscal year of figures (${esc(String(r.fiscal_year ?? ""))}) is over a year older than its balance sheet, so its cash burn is out of date">Out of date</span>`
+    : r.runway_note === "stale" ? `<span class="faint" title="Its latest fiscal year of figures (${esc(String(r.fiscal_year ?? ""))}) ended more than 15 months before its balance sheet, so its cash burn is out of date">Out of date</span>`
     : `<span class="faint" title="Its free cash flow could not be read from its filings">Unknown</span>`;
 }
 
@@ -394,8 +420,10 @@ function renderNetCash() {
     section("net_cash", `<div class="panel empty"><h3>No company is worth less than its net cash today</h3><p>None of the US companies checked has a market value under its cash and short-term investments minus all debt, preferred stock and outside stakes in its subsidiaries.</p></div>${note}`, 0);
     return;
   }
+  // Each list's ratio is worked out from its figures, which are stored to the dollar. The stored ratio is rounded to 4
+  // places, which can lift one just under 1 to 1.00 (a price to book of 0.99996), so under() couldn't cut it to 0.99x.
   section("net_cash", listTable("Companies worth less than their net cash", ["Company", "Market value", "Net cash", "Value / net cash", "Free cash flow", "Cash runway", "Balance sheet"], rows, (r) => `
-    ${coCell(r)}<td>${money(r.mcap)}</td><td>${money(r.net_cash)}</td><td>${under(r.mcap_to_net_cash)}</td>
+    ${coCell(r)}<td>${money(r.mcap)}</td><td>${money(r.net_cash)}</td><td>${under(r.mcap / r.net_cash)}</td>
     <td class="${r.fcf != null && r.fcf < 0 ? "down" : ""}">${money(r.fcf)}</td><td>${runway(r)}</td><td>${esc(asOf(r.balance_as_of))}</td>`,
   `<p class="list-note">Cheapest against net cash first. Free cash flow is for the latest fiscal year; cash and debt are from the balance sheet dated on the right. "Not burning cash" means free cash flow was zero or more in its latest fiscal year.</p>${note}`), rows.length);
 }
@@ -408,10 +436,11 @@ function renderFinancials() {
     section("financials", `<div class="panel empty"><h3>No profitable bank or insurer trades under book value today</h3></div>${note}`, 0);
     return;
   }
+  // Price to book from its figures, as for net cash above.
   section("financials", listTable("Profitable banks and insurers under book value", ["Company", "Kind", "Market value", "Book used", "Price / book", "Profit last year", "Return on equity"], rows, (r) => `
     ${coCell(r)}<td class="txt">${esc(r.kind === "bank" ? "Bank" : r.industry || "Financial")}</td><td>${money(r.mcap)}</td>
     <td>${r.book_basis === "tangible" ? "Tangible" : "Book"}, ${money(r.book)}</td>
-    <td>${under(r.price_to_book)}</td><td>${money(r.net_income)}</td><td>${pct(r.roe)}</td>`,
+    <td>${under(r.mcap / r.book)}</td><td>${money(r.net_income)}</td><td>${pct(r.roe)}</td>`,
   `<p class="list-note">Lowest price to book first. A bank is measured on tangible book value (equity less preferred stock, goodwill and other intangible assets), any other on book value (equity less preferred stock). Profit and return on equity leave out one-time items and are what is left to common shareholders, after preferred dividends.</p>${note}`, [1]), rows.length);
 }
 
@@ -472,6 +501,8 @@ function explainRules() {
   const stated = Object.keys(STATED_WEIGHTS).every((k) => w[k] === STATED_WEIGHTS[k]) && Object.keys(w).length === Object.keys(STATED_WEIGHTS).length;
   const help = document.querySelector("[data-score-help]");
   help.hidden = !stated;
+  // The note on which flags also earn points names the newer flags and the stated parts, so it needs both.
+  document.querySelector("[data-flag-points]").hidden = !stated || !fresh;
   if (stated) {
     help.querySelector("[data-tape-key]").innerHTML = tape(Object.entries(STATED_WEIGHTS).map(([key, max]) => ({ key, max, points: max })), "tape-lg");
   }
@@ -481,10 +512,11 @@ function explainRules() {
 const STATED_WEIGHTS = { ps: 15, debt: 20, margin: 15, fcf: 10, growth: 10, small: 5, out_of_favor: 5, undiscovered: 5, under_book: 10, insiders_buying: 5 };
 
 function renderProof(meta) {
-  // The claim carries its own proof: how many of the companies checked passed all eight rules.
+  // The claim carries its own proof: how many of the stocks checked passed all eight rules. The pipeline counts one per
+  // listing, so a company with two share classes is checked twice: "stocks", not "companies".
   const checked = data.sectors.reduce((a, s) => a + (s.checked || 0), 0);
   const n = data.results.length;
-  if (checked) document.querySelector("[data-claim]").textContent = `${n.toLocaleString("en-US")} of ${checked.toLocaleString("en-US")} companies pass all eight quality checks`;
+  if (checked) document.querySelector("[data-claim]").textContent = `${n.toLocaleString("en-US")} of ${checked.toLocaleString("en-US")} stocks pass all eight quality checks`;
   document.querySelector("[data-proof-date]").textContent = meta?.market_date ? `Data as of ${longDate(meta.market_date)}` : "";
 }
 
@@ -526,5 +558,5 @@ Promise.all([load("screener.json"), load("meta.json").catch(() => null)]).then((
   if (location.hash) document.getElementById(decodeURIComponent(location.hash.slice(1)))?.scrollIntoView({ block: "start", behavior: "instant" });
 }).catch(() => {
   host.setAttribute("aria-busy", "false");
-  host.innerHTML = `<div class="panel empty"><h3>Screener data is not available yet</h3><p>Results appear after the first nightly update runs. If you expected them, reload the page in a minute.</p></div>`;
+  host.innerHTML = `<div class="panel empty"><h2>Screener data is not available yet</h2><p>Results appear after the first nightly update runs. If you expected them, reload the page in a minute.</p></div>`;
 });
