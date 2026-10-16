@@ -398,6 +398,9 @@ def main():
         heads = news.all_headlines([(s, uni[s]["name"]) for s in symbols], press=by_symbol)
         if news.FAILED:
             step("  Feeds that could not be read: " + ", ".join(f"{n} from {src}" for src, n in news.FAILED.items()))
+        if news.SKIPPED:
+            step("  Feeds not asked for after repeated failures: "
+                 + ", ".join(f"{n} from {src}" for src, n in news.SKIPPED.items()))
 
     step("Matching each company with similar companies")
     table = report.peer_table(uni, metrics, sic)

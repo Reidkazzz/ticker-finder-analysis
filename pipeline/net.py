@@ -145,9 +145,9 @@ def sec_json(url):
     return json.loads(sec_get(url))
 
 
-def web_get(url, opener=None, headers=None):
+def web_get(url, opener=None, headers=None, retries=4):
     _web_limiter.wait()
-    return _fetch(url, {"User-Agent": WEB_UA, "Accept": "*/*", **(headers or {})}, opener=opener)
+    return _fetch(url, {"User-Agent": WEB_UA, "Accept": "*/*", **(headers or {})}, opener=opener, retries=retries)
 
 
 def web_json(url, opener=None, headers=None):
