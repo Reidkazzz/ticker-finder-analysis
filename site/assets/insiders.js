@@ -167,6 +167,9 @@ const TIER_TAG = {
 // Whether the buyer's purchases make up the change in their holding, to 1% of the shares bought. The stake change is
 // the shares bought against the holding before (pipeline/insiders.build), while the latest filing's count also takes in
 // conversions, awards and sales, so a count after that the purchases don't explain would contradict the change.
+// Two share counts as a pair: shortened, or exact where shortening would make them read the same ("2.82M to 2.82M").
+const sharePair = (a, b) => (shares(a) === shares(b) ? [a, b].map((n) => Math.round(n).toLocaleString("en-US")) : [shares(a), shares(b)]);
+
 const addsUp = (b) => b.owned_before != null && b.owned_after != null && b.shares != null
   && Math.abs(b.owned_after - b.owned_before - b.shares) <= Math.max(1, 0.01 * b.shares);
 
@@ -178,7 +181,7 @@ function stakeCell(b) {
   // purchase in the window, and what their latest filing reports: as a change where the purchases add up to it, else
   // side by side, since that filing also counts shares gained or given up otherwise.
   const held = b.owned_before == null ? "Holdings not available"
-    : addsUp(b) ? `Held ${shares(b.owned_before)} to ${shares(b.owned_after)}`
+    : addsUp(b) ? `Held ${sharePair(b.owned_before, b.owned_after).join(" to ")}`
     : b.owned_after == null ? `Held ${shares(b.owned_before)} before`
     : `Held ${shares(b.owned_before)} before, ${shares(b.owned_after)} in latest filing`;
   return `${change}<span class="sub">${esc(held)}</span>`;
