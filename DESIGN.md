@@ -284,7 +284,9 @@ Archivo loads from Google Fonts as a variable face on two axes (width 75 to 100,
 
 Content sits in one centered column (1240px) with a 24px gutter that drops to 16px under 640px. A sticky 56px header carries the mark, the three tools, the data date and a ticker search; its ground is Navy-Black at 86% with a 12px backdrop blur and a hairline below. Under 900px the data date leaves the header and joins the page's claim; under 760px the search goes and the tool links take the right edge.
 
-Pages open with a claim block: the h1 across the top, the lede below it on the left, and on the right, bottom-aligned with the lede, a row of live figures (value above, Slate Label name below). Under 860px it stacks. On the screener the ranked table begins inside the first viewport at 1280x800 with at least eight rows. The home page alternates claim and proof side by side (0.9fr to 1.1fr, 64px apart), the proof switching sides each band, stacking under 960px.
+On the screener the claim block holds the h1 with the screen in four figures beside it (a stat strip: one frame split by hairline seams, each value at 22px over its Slate Label name), the lede across the full width under both; under 1180px the strip drops below the lede, and on phones it is a 2 by 2 grid with the data date under it. A screening panel (one frame) follows: a 38px filter field, the quick filters as pills with their counts and the Sort menu on one line, the sector pills under them; the count of companies and the flag legend share the line under the panel. At 1280x800 eight ranked rows still show above the fold.
+
+Other pages open with a claim block: the h1 across the top, the lede below it on the left, and on the right, bottom-aligned with the lede, a row of live figures (value above, Slate Label name below). Under 860px it stacks. On the screener the ranked table begins inside the first viewport at 1280x800 with at least eight rows. The home page alternates claim and proof side by side (0.9fr to 1.1fr, 64px apart), the proof switching sides each band, stacking under 960px.
 
 Vertical rhythm is generous between sections and tight inside them: 72px between sections (64px on the report), 88px home bands (56px under 960px), 112px before the footer, and more space above a heading than below it (12px to its content). Inside frames, rows inset 18px from the edge; panels pad 20px (16px on phones).
 
@@ -366,6 +368,8 @@ Opening a screener row unfolds its ledger in place on Raised Ground: three colum
 A health measure from 1 to 100: a 4px track in Tape Track with a fill in Sign Emerald (strong), Pale Steel (fair) or Sign Red (weak), and its value at 13px tabular beside it.
 
 ### Disclosure
+On the screener, "How the list is made" is four disclosures (the eight rules, how the score works, flags, data sources), each title over a one-line note in Slate Label; opened, its lists run in two columns from 861px, indented to the title. A link to one opens it.
+
 A Frame Slate summary line (14px semibold, a lead icon in Slate Label, a caret at the right that turns 180 degrees) that opens to the full explanation; Hover Slate on hover.
 
 ### Motion

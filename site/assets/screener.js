@@ -11,9 +11,11 @@ const state = {
   sector: params.get("sector") || "All",
   insider: INSIDER_FILTERS.includes(params.get("insider")) ? params.get("insider") : "any",
   sort: SORT_NAMES.includes(params.get("sort")) ? params.get("sort") : "score",
+  q: (params.get("q") || "").trim(), // the panel's filter by ticker or company name
   open: null,
 };
 const host = document.querySelector("[data-results]");
+const filterEl = document.querySelector("[data-filter]");
 const countEl = document.querySelector("[data-count]");
 const sortEl = document.querySelector("[data-sort]");
 const resetEl = document.querySelector("[data-reset]");
@@ -70,6 +72,13 @@ const INSIDER_WORDS = {
   below: ["trades below what Tier 1 or 2 insiders paid", "trade below what Tier 1 or 2 insiders paid"],
 };
 
+// The panel's filter: a ticker that starts with what is typed, or a company name that contains it.
+const queryOk = (r) => {
+  if (!state.q) return true;
+  const q = state.q.toLowerCase();
+  return r.symbol.toLowerCase().startsWith(q) || displayName(r.name).toLowerCase().includes(q) || String(r.name).toLowerCase().includes(q);
+};
+
 function setParam(key, value) {
   const u = new URL(location);
   value == null ? u.searchParams.delete(key) : u.searchParams.set(key, value);
@@ -77,7 +86,7 @@ function setParam(key, value) {
 }
 
 function paintReset() {
-  resetEl.hidden = state.sector === "All" && state.insider === "any" && state.sort === "score";
+  resetEl.hidden = state.sector === "All" && state.insider === "any" && state.sort === "score" && !state.q;
 }
 
 function renderSectors() {
@@ -100,6 +109,7 @@ function renderSectors() {
     state.open = null;
     setParam("sector", state.sector === "All" ? null : state.sector);
     renderSectors();
+    paintQuick();
     renderTable();
     // The pills are drawn again, so keyboard focus goes back to the one chosen rather than to the page.
     el.querySelector(`[data-sector="${CSS.escape(state.sector)}"]`)?.focus();
@@ -108,6 +118,19 @@ function renderSectors() {
   const on = el.querySelector('[aria-pressed="true"]');
   if (on && el.scrollWidth > el.clientWidth) el.scrollLeft = Math.max(0, on.offsetLeft - el.offsetLeft - 16);
   paintReset();
+}
+
+// Each quick filter's count: the companies it would show in the sector chosen, before the panel's text filter.
+function paintQuick() {
+  if (!hasInsiders()) return;
+  const inSector = data.results.filter((r) => state.sector === "All" || r.sector === state.sector);
+  const n = { any: inSector.length, buying: inSector.filter((r) => r.flags.includes("insiders_buying")).length,
+    below: inSector.filter((r) => r.flags.includes("below_insider_price")).length };
+  document.querySelectorAll("[data-insider-filter] [data-insider]").forEach((b) => {
+    const k = b.dataset.insider;
+    b.classList.toggle("pill-empty", !n[k]);
+    b.querySelector("[data-quick-count]").innerHTML = `<span class="sr-only">, </span>${n[k]}<span class="sr-only"> ${n[k] === 1 ? "company" : "companies"}</span>`;
+  });
 }
 
 function renderInsiderFilter() {
@@ -121,6 +144,7 @@ function renderInsiderFilter() {
   const el = row.querySelector("[data-insider-filter]");
   const paint = () => el.querySelectorAll("[data-insider]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.insider === state.insider));
   paint();
+  paintQuick();
   el.onclick = (e) => {
     const b = e.target.closest("[data-insider]");
     if (!b) return;
@@ -231,13 +255,18 @@ function row(r, i) {
 
 function renderTable() {
   host.setAttribute("aria-busy", "false");
-  const rows = data.results.filter((r) => (state.sector === "All" || r.sector === state.sector) && insiderOk(r)).sort(SORTS[state.sort]);
+  // The list the sector and the quick filter leave, then the rows the panel's text filter keeps of it.
+  const listed = data.results.filter((r) => (state.sector === "All" || r.sector === state.sector) && insiderOk(r)).sort(SORTS[state.sort]);
+  const rows = listed.filter(queryOk);
   const sec = data.sectors.find((s) => s.name === state.sector);
-  const which = state.insider === "any" ? "" : ` and ${INSIDER_WORDS[state.insider][rows.length === 1 ? 0 : 1]}`;
-  countEl.innerHTML = state.sector === "All"
-    ? `<b>${rows.length}</b> ${rows.length === 1 ? "company" : "companies"} passed every check${which}`
-    : sec?.excluded ? `${esc(state.sector)} is not screened`
+  const which = state.insider === "any" ? "" : ` and ${INSIDER_WORDS[state.insider][listed.length === 1 ? 0 : 1]}`;
+  countEl.innerHTML = sec?.excluded ? `${esc(state.sector)} is not screened`
+    : state.q ? `<b>${rows.length}</b> of the ${listed.length} ${state.sector === "All" ? (listed.length === 1 ? "company" : "companies")
+      : `${esc(state.sector)} ${listed.length === 1 ? "stock" : "stocks"}`} that passed every check${which} ${rows.length === 1 ? "matches" : "match"} "${esc(state.q)}"`
+    : state.sector === "All" ? `<b>${rows.length}</b> ${rows.length === 1 ? "company" : "companies"} passed every check${which}`
     : `<b>${rows.length}</b> of ${sec?.checked ?? 0} ${esc(state.sector)} stocks passed every check${which}`;
+  // The flag icons' legend sits on the count's line, beside the table it explains.
+  document.querySelector("[data-result-meta]").innerHTML = rows.length && !sec?.excluded ? flagLegend() : "";
 
   if (sec?.excluded) {
     const see = Array.isArray(data.financials_list) ? ` <a href="#financials">See the banks and insurers under book value below.</a>` : "";
@@ -245,6 +274,15 @@ function renderTable() {
     return;
   }
 
+  if (listed.length && !rows.length) {
+    // Only the text filter empties the list: say so, and point to the report, which covers every listed stock.
+    const ticker = /^[A-Za-z][A-Za-z.]{0,5}$/.test(state.q) ? state.q.toUpperCase() : null;
+    host.innerHTML = `<div class="panel empty"><h2>No company on this list matches "${esc(state.q)}"</h2>
+      <p>The filter looks at the tickers and company names of the ${listed.length} ${listed.length === 1 ? "company" : "companies"} on it.${ticker
+        ? ` To see how ${esc(ticker)} looks against everything else, <a href="report.html?t=${encodeURIComponent(ticker)}">open its report</a>.` : ""}</p>
+      <p class="empty-act"><button class="btn btn-ghost btn-sm" type="button" data-clear-filter>Clear the filter</button></p></div>`;
+    return;
+  }
   if (!rows.length) {
     const passing = state.sector === "All" ? "the companies that pass" : `the ${esc(state.sector)} companies that pass`;
     const notYet = insiderPending ? ` (${insiderPending} filing day${insiderPending === 1 ? " is" : "s are"} not scanned yet)` : "";
@@ -258,7 +296,7 @@ function renderTable() {
     return;
   }
   const cols = COLUMNS().length;
-  host.innerHTML = `${flagLegend()}<div class="table-wrap"><table class="data screen-table">
+  host.innerHTML = `<div class="table-wrap"><table class="data screen-table">
     <caption class="sr-only">Companies that passed every check, ${esc(sortEl.selectedOptions[0]?.textContent || "best score")} first. Open a company to see its score and rules.</caption>
     ${head()}
     <tbody>${rows.map((r, i) => row(r, i) + (state.open === r.symbol ? detailRow(r, cols) : "")).join("")}</tbody></table></div>
@@ -517,15 +555,55 @@ function renderProof(meta) {
   const checked = data.sectors.reduce((a, s) => a + (s.checked || 0), 0);
   const n = data.results.length;
   if (checked) document.querySelector("[data-claim]").textContent = `${n.toLocaleString("en-US")} of ${checked.toLocaleString("en-US")} stocks pass all eight quality checks`;
-  document.querySelector("[data-proof-date]").textContent = meta?.market_date ? `Data as of ${longDate(meta.market_date)}` : "";
+  document.querySelector("[data-proof-date]").textContent = meta?.market_date ? longDate(meta.market_date) : "n/a";
+  // The screen at a glance, from the data: its market value limit (screener.RULES) and today's top score.
+  const cap = data.rules?.max_mcap;
+  if (cap) document.querySelector('[data-stat="mcap"]').textContent = `Under ${cap % 1e9 === 0 ? `$${cap / 1e9}B` : money(cap)}`;
+  const top = Math.max(...data.results.map((r) => r.score));
+  document.querySelector('[data-stat="top"]').textContent = n ? String(top) : "None";
+  const src = document.querySelector("[data-sources-date]");
+  if (src && meta?.market_date) {
+    src.textContent = `The latest update read SEC filings through ${longDate(meta.last_filing_day || meta.market_date)}, with prices from ${longDate(meta.market_date)}.`;
+  }
 }
+
+// The panel's text filter narrows the table as it is typed, and stays in the page's address (?q=) like the rest.
+filterEl.value = state.q;
+let typing;
+filterEl.addEventListener("input", () => {
+  clearTimeout(typing);
+  typing = setTimeout(() => {
+    state.q = filterEl.value.trim();
+    state.open = null;
+    setParam("q", state.q || null);
+    paintReset();
+    if (data) renderTable();
+  }, 120);
+});
+filterEl.addEventListener("keydown", (e) => { if (e.key === "Escape" && filterEl.value) { e.preventDefault(); clearFilter(); } });
+function clearFilter() {
+  filterEl.value = "";
+  state.q = "";
+  setParam("q", null);
+  paintReset();
+  if (data) renderTable();
+}
+host.addEventListener("click", (e) => { if (e.target.closest("[data-clear-filter]")) { clearFilter(); filterEl.focus(); } });
+
+// A link into "How the list is made" (screener.html#scoring, or to anything inside a section) opens its section.
+function openTarget() {
+  const el = location.hash ? document.getElementById(decodeURIComponent(location.hash.slice(1))) : null;
+  for (let d = el?.closest("details"); d; d = d.parentElement?.closest("details")) d.open = true;
+}
+window.addEventListener("hashchange", openTarget);
 
 sortEl.addEventListener("change", (e) => setSort(e.target.value));
 resetEl.addEventListener("click", () => {
-  state.sector = "All"; state.insider = "any"; state.open = null;
-  ["sector", "insider", "sort"].forEach((k) => setParam(k, null));
+  state.sector = "All"; state.insider = "any"; state.open = null; state.q = ""; filterEl.value = "";
+  ["sector", "insider", "sort", "q"].forEach((k) => setParam(k, null));
   document.querySelectorAll("[data-insider]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.insider === "any"));
   renderSectors();
+  paintQuick();
   setSort("score");
   document.querySelector("[data-sectors] [aria-pressed='true']")?.focus();
 });
@@ -554,7 +632,9 @@ Promise.all([load("screener.json"), load("meta.json").catch(() => null)]).then((
   renderFinancials();
   renderGiants();
   renderIndex();
-  // A link to a list further down (screener.html#giants) lands on it once the lists are drawn.
+  // A link to a list further down (screener.html#giants) lands on it once the lists are drawn, and a link into the
+  // explanation opens its section first.
+  openTarget();
   if (location.hash) document.getElementById(decodeURIComponent(location.hash.slice(1)))?.scrollIntoView({ block: "start", behavior: "instant" });
 }).catch(() => {
   host.setAttribute("aria-busy", "false");
