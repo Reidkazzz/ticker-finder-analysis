@@ -432,3 +432,51 @@ details.disclose.q-table { margin: 18px -24px 0; border: 0; border-top: 1px soli
   .r-where { flex-direction: column; align-items: flex-start; gap: 2px; }
   .r-where > span + span::before { display: none; }
 }
+
+/* ---- Financials as small charts: one card per figure, three to a row, bars in the accent from zero (red below it),
+   the latest value and its change on the one before over an axis of round steps. ---- */
+.sec-head .fc-toggle { margin-left: auto; }
+.fc-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
+@media (max-width: 1000px) { .fc-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 620px) { .fc-grid { grid-template-columns: minmax(0, 1fr); } }
+.fc { margin: 0; padding: 14px 16px 12px; border: 1px solid var(--line); border-radius: var(--r-frame); background: var(--surface); min-width: 0; --plot-h: 132px; }
+.fc-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.fc-t { font-size: 14px; font-weight: 600; color: var(--text); }
+.fc-p { font-size: 12px; color: var(--text-3); text-align: right; }
+.fc-now { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; margin: 6px 0 12px; font-size: 12.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.fc-now b { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; color: var(--text); }
+.fc-now b.down { color: var(--down); }
+.fc-chg { margin-left: auto; }
+.fc-chg .up { color: var(--up); }
+.fc-chg .down { color: var(--down); }
+.fc-chart { display: grid; grid-template-columns: 46px minmax(0, 1fr); }
+.fc-axis { position: relative; height: var(--plot-h); font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.fc-axis span { position: absolute; right: 8px; transform: translateY(50%); white-space: nowrap; }
+.fc-plot { position: relative; min-width: 0; }
+.fc-grids { position: absolute; left: 0; right: 0; top: 0; height: var(--plot-h); pointer-events: none; }
+.fc-line { position: absolute; left: 0; right: 0; height: 1px; background: var(--line); }
+.fc-line.zero { background: var(--line-3); }
+.fc-cols { position: relative; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); }
+.fc-col { display: grid; grid-template-rows: var(--plot-h) auto; justify-items: center; min-width: 0; }
+.fc-area { position: relative; width: 100%; height: 100%; }
+.fc-bar {
+  position: absolute; left: 18%; right: 18%; bottom: var(--base); height: var(--h); min-height: 1px;
+  border-radius: 3px 3px 0 0; background: var(--score); transition: background .15s;
+}
+.fc-cols[style*="--n:4"] .fc-bar, .fc-cols[style*="--n:3"] .fc-bar, .fc-cols[style*="--n:2"] .fc-bar { left: 26%; right: 26%; }
+.fc-bar.neg { bottom: auto; top: calc(100% - var(--base)); border-radius: 0 0 3px 3px; background: var(--down); }
+.fc-col.hollow .fc-bar { background: transparent; box-shadow: inset 0 0 0 1px var(--score); }
+.fc-col:hover .fc-bar { background: var(--accent-text); }
+.fc-col:hover .fc-bar.neg { background: #ec8c87; }
+.fc-na { position: absolute; left: 0; right: 0; bottom: calc(var(--base, 0%) + 6px); text-align: center; font-size: 10.5px; color: var(--text-3); }
+.fc-x { margin-top: 6px; font-size: 11px; line-height: 1.25; color: var(--text-3); text-align: center; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.fc-x small { display: block; font-size: 10.5px; color: var(--text-3); }
+.fc-more { grid-column: 1 / -1; font-size: 12.5px; color: var(--text-3); }
+/* Every figure as a table, under the charts' notes: the table runs the frame's width, its hairline on top. */
+.fh-details { margin-top: 16px; }
+.fh-details .fh-bar { display: none; } /* the charts above draw these figures */
+.fh-details .fh-wrap { border: 0; border-top: 1px solid var(--line); border-radius: 0 0 var(--r-frame) var(--r-frame); }
+
+/* The price chart's span, under its heading. */
+.p-spans { margin: 10px 0 2px; }
+.p-spans .seg-btn:disabled { color: var(--text-3); opacity: .5; cursor: default; }
