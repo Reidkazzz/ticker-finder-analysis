@@ -16,42 +16,54 @@
 <body>
 <header class="nav" data-nav></header>
 <main class="wrap" id="main">
-  <section class="claim-head">
+  <section class="claim-head screen-head">
     <div>
       <h1 data-claim>Small US companies that pass eight quality checks</h1>
-      <p class="lede">Small US companies that are cheap against their sales, profitable and light on debt, ranked by a 100-point score. Open any row to see how it adds up.</p>
+      <p class="lede">Cheap against sales, profitable and light on debt, ranked by a 100-point score. A high score is a screening result, not a forecast.</p>
     </div>
-    <p class="proof-date date-line" data-proof-date>&nbsp;</p>
-    
+    <dl class="stat-strip" aria-label="The screen at a glance">
+      <div><dt>all must pass</dt><dd>8 checks</dd></div>
+      <div><dt>score, itemized</dt><dd>0 to 100</dd></div>
+      <div><dt>market value</dt><dd data-stat="mcap">Under $3B</dd></div>
+      <div><dt>top score</dt><dd data-stat="top">&nbsp;</dd></div>
+      <div class="proof-date"><dt>data as of</dt><dd data-proof-date>&nbsp;</dd></div>
+    </dl>
   </section>
 
-  <div class="screen-toolbar">
-    <div class="pills scroll sector-pills" role="group" aria-label="Sector" data-sectors></div>
-    <div class="screen-bar">
-      <p class="result-count" data-count aria-live="polite">&nbsp;</p>
-      <div class="screen-controls">
-        <div class="seg-field" data-insider-only hidden>
-          <span class="seg-label" id="insider-label">Show</span>
-          <div class="seg" role="group" aria-labelledby="insider-label" data-insider-filter>
-            <button class="seg-btn" type="button" data-insider="any" aria-pressed="true">Any company</button>
-            <button class="seg-btn" type="button" data-insider="buying" aria-pressed="false">Insiders buying</button>
-            <button class="seg-btn" type="button" data-insider="below" aria-pressed="false">Below insiders' price</button>
-          </div>
-        </div>
-        <label class="label-inline">Sort by
-          <select class="select" data-sort>
-            <option value="score">Best score</option>
-            <option value="ps">Cheapest vs. sales</option>
-            <option value="pb" data-needs-pb>Cheapest vs. book value</option>
-            <option value="net_margin">Highest profit margin</option>
-            <option value="fcf_yield">Most cash generated</option>
-            <option value="drawdown">Furthest below high</option>
-            <option value="mcap">Smallest company</option>
-          </select>
-        </label>
-        <button class="btn btn-ghost btn-sm reset" type="button" data-reset hidden>Reset</button>
+  <div class="screen-panel" role="group" aria-label="Narrow the list">
+    <div class="panel-top">
+      <div class="field table-search">
+        <label class="sr-only" for="list-filter">Filter the list by ticker or company name</label>
+        <svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-search"></use></svg>
+        <input class="input" id="list-filter" type="search" placeholder="Filter by ticker or company" autocomplete="off" spellcheck="false" data-filter>
       </div>
+      <div class="seg-field quick" data-insider-only hidden>
+        <span class="seg-label" id="insider-label">Quick filters</span>
+        <div class="pills quick-pills" role="group" aria-labelledby="insider-label" data-insider-filter>
+          <button class="pill" type="button" data-insider="any" aria-pressed="true">All qualifying<span class="count" data-quick-count="any"></span></button>
+          <button class="pill" type="button" data-insider="buying" aria-pressed="false">Insiders buying<span class="count" data-quick-count="buying"></span></button>
+          <button class="pill" type="button" data-insider="below" aria-pressed="false">Below insiders' price<span class="count" data-quick-count="below"></span></button>
+        </div>
+      </div>
+      <label class="label-inline sort-field">Sort by
+        <select class="select" data-sort>
+          <option value="score">Best score</option>
+          <option value="ps">Cheapest vs. sales</option>
+          <option value="pb" data-needs-pb>Cheapest vs. book value</option>
+          <option value="net_margin">Highest profit margin</option>
+          <option value="fcf_yield">Most cash generated</option>
+          <option value="drawdown">Furthest below high</option>
+          <option value="mcap">Smallest company</option>
+        </select>
+      </label>
+      <button class="btn btn-ghost btn-sm reset" type="button" data-reset hidden>Reset</button>
     </div>
+    <div class="pills scroll sector-pills" role="group" aria-label="Sector" data-sectors></div>
+  </div>
+
+  <div class="screen-bar">
+    <p class="result-count" data-count aria-live="polite">&nbsp;</p>
+    <div class="result-meta" data-result-meta></div>
   </div>
 
   <div data-results aria-busy="true">
@@ -66,54 +78,69 @@
 
   <section class="sec method" id="how" aria-labelledby="how-h">
     <div class="sec-head"><h2 id="how-h">How the list is made</h2><span class="count">Rules decide who is on it, points decide the order</span></div>
-    <div class="method-grid">
-      <div class="method-col">
-        <h3>Must pass every rule</h3>
-        <p class="method-lede">A company that fails one is not on the list.</p>
-        <ul class="rule-list">
-          <li><svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-check"></use></svg><div><b>Price to sales under <span data-rule="max_ps">2</span></b><span>You pay less than $<span data-rule="max_ps">2</span> for each $1 of yearly sales.</span></div></li>
-          <li><svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-check"></use></svg><div><b>Market value under <span data-rule="max_mcap">$3 billion</span></b><span>Smaller companies get less attention, so mispricings last longer. Under <span data-rule="bonus_mcap">$2 billion</span> earns extra points.</span></div></li>
-          <li><svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-check"></use></svg><div><b>Long-term debt under <span data-rule="max_lt_de">half</span> of equity</b><span>Top marks go to companies with more cash than debt, and the best case is no debt at all. A company whose debt can't be read reliably from its filings can't pass this check. If the debt that could be read is already over the limit, it fails. Otherwise, if it passes all the other checks, a note under the results names it.</span></div></li>
-          <li><svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-check"></use></svg><div><b>Net profit margin of <span data-margin-pct>3%</span> or more</b><span>At least <span data-margin-cents>3 cents</span> of profit on every sales dollar, not counting one-time items. <span data-thin-margin>That lets in thin-margin businesses such as retailers and distributors, while higher margins still earn more points. </span>One-time gains, such as selling a business, are taken out, one-time charges, such as a write-down or a loss on paying off debt early, are added back, and an unusual tax bill is replaced by a normal one. Gains, charges and tax credits that come most years count as part of the business.</span></div></li>
-          <li><svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-check"></use></svg><div><b>Based and incorporated in the US</b><span>Rules out foreign listings (ADRs) and companies registered offshore, such as in the Cayman Islands.</span></div></li>
-          <li><svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-check"></use></svg><div><b>Positive equity and free cash flow</b><span>It owns more than it owes, and it brings in more cash than it spends.</span></div></li>
-          <li><svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-check"></use></svg><div><b>Profitable in <span data-rule="min_profitable_years">2</span> of the last 3 years</b><span>One good year can be luck. Two out of three is a pattern. One-time items don't count here either.</span></div></li>
-          <li><svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-check"></use></svg><div><b>Sales not shrinking more than <span data-rule="min_revenue_growth">5%</span></b><span>Keeps out value traps: stocks that look cheap because the business is dying.</span></div></li>
-        </ul>
-        <p class="method-foot">Figures come from each company's latest fiscal year and latest balance sheet filed with the SEC. Prices are from the last close. Banks, insurers and the other companies Nasdaq files under Finance are not screened; see <a href="#financials">the banks and insurers under book value</a>.</p>
-      </div>
-      <div class="method-col" data-score-help>
-        <h3>Ranked by 100 points</h3>
-        <p class="method-lede">The score orders companies that already passed. Each part earns points up to its maximum.</p>
-        <div class="tape-key" data-tape-key aria-hidden="true"></div>
-        <ul class="points-list">
-          <li><span class="pk">Cheap vs. sales</span><span class="pmax">15</span><span class="pdesc">Full points at a price to sales of 0, falling evenly to none at the limit of 2.</span></li>
-          <li><span class="pk">Debt</span><span class="pmax">20</span><span class="pdesc">20 for no debt at all, 14 for more cash than debt, and up to 8 for low debt, falling to none at the limit.</span></li>
-          <li><span class="pk">Profit margin</span><span class="pmax">15</span><span class="pdesc">Full points at a margin of 30% or more, without one-time items.</span></li>
-          <li><span class="pk">Cash generation</span><span class="pmax">10</span><span class="pdesc">Full points when a year's free cash flow is 15% or more of the market value.</span></li>
-          <li><span class="pk">Sales growth</span><span class="pmax">10</span><span class="pdesc">Full points for sales up 20% or more on the year before.</span></li>
-          <li><span class="pk">Under $2 billion</span><span class="pmax">5</span><span class="pdesc">For the smallest companies on the list.</span></li>
-          <li><span class="pk">Out of favor</span><span class="pmax">5</span><span class="pdesc">Full points at 50% or more below the 52-week high.</span></li>
-          <li><span class="pk">Few analysts</span><span class="pmax">5</span><span class="pdesc">5 when no analyst covers it, 3 for one or two.</span></li>
-          <li><span class="pk">Under book value</span><span class="pmax">10</span><span class="pdesc">Full points when the market value is under book value, falling evenly to none at twice book value.</span></li>
-          <li><span class="pk">Insiders buying</span><span class="pmax">5</span><span class="pdesc">For Tier 1 or 2 insider buying.</span></li>
-        </ul>
-        <p class="method-foot">A high score means a company clears the rules by a wide margin. It is not a forecast and doesn't mean the stock will do well.</p>
-      </div>
-      <div class="method-col">
-        <h3>Flags, for context</h3>
-        <p class="method-lede">Worth knowing. None of them keeps a company off the list.</p>
-        <ul class="rule-list flag-rules">
-          <li><span class="flag flag-mid"><svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-trend-down"></use></svg></span><div><b>Out of favor</b><span>The price is <span data-rule="out_of_favor_drawdown">25%</span> or more below its 52-week high.</span></div></li>
-          <li data-new-flag><span class="flag flag-mid"><svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-factory"></use></svg></span><div><b>Industry out of favor</b><span>Its whole industry has slumped: the typical (median) company in it trades <span data-rule="out_of_favor_drawdown">25%</span> or more below its 52-week high. The industries are listed under the results.</span></div></li>
-          <li><span class="flag"><svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-binoculars"></use></svg></span><div><b>Undiscovered</b><span>Two or fewer Wall Street analysts publish estimates on it.</span></div></li>
-          <li data-new-flag><span class="flag flag-up"><svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-scales"></use></svg></span><div><b>Under book value</b><span>The whole company is worth less on the market than its book value: shareholders' equity less preferred stock, what shareholders would keep if everything were sold at the value on its balance sheet and every debt paid.</span></div></li>
-          <li data-new-flag><span class="flag flag-up"><svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-user-plus"></use></svg></span><div><b>Insiders buying</b><span>In the last <span data-window>30</span> days, its executives, directors or big owners bought its stock on the open market with their own money: $1 million or more, or a single buyer growing their stake by 20% or more (Tier 1 or 2 on the <a href="insiders.html">insider buying</a> page).</span></div></li>
-          <li data-new-flag><span class="flag flag-up"><svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-tag"></use></svg></span><div><b>Below insiders' price</b><span>Insiders are buying, and today's price is under the average price they paid. You can buy for less than they did.</span></div></li>
-          <li data-new-flag><span class="flag flag-down"><svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-warning"></use></svg></span><div><b>Above upper band, wait for a pullback</b><span>The price has risen unusually fast: it is above the average of its last 20 weekly closing prices plus two standard deviations of them (the upper Bollinger band). Many traders take that as a sign to wait for the price to pull back rather than buy after the run-up.</span></div></li>
-        </ul>
-        <p class="method-foot" data-flag-points>Out of favor and Under book value also earn score points on a sliding scale, so a company can earn some of those points without the flag, and an Out of favor flag doesn't always mean full points. Insiders buying earns its points exactly when its flag shows, and Few analysts gives points to exactly the companies flagged Undiscovered.</p>
-      </div>
+    <div class="method-stack">
+      <details class="disclose method-part" id="rules">
+        <summary><svg class="i lead-i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-list-checks"></use></svg><span class="sum-t">The eight rules every company must pass<span class="sum-note">A company that fails one is not on the list.</span></span><svg class="i caret" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-caret-down"></use></svg></summary>
+        <div class="body">
+            <ul class="rule-list">
+              <li><svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-check"></use></svg><div><b>Price to sales under <span data-rule="max_ps">2</span></b><span>You pay less than $<span data-rule="max_ps">2</span> for each $1 of yearly sales.</span></div></li>
+              <li><svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-check"></use></svg><div><b>Market value under <span data-rule="max_mcap">$3 billion</span></b><span>Smaller companies get less attention, so mispricings last longer. Under <span data-rule="bonus_mcap">$2 billion</span> earns extra points.</span></div></li>
+              <li><svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-check"></use></svg><div><b>Long-term debt under <span data-rule="max_lt_de">half</span> of equity</b><span>Top marks go to companies with more cash than debt, and the best case is no debt at all. A company whose debt can't be read reliably from its filings can't pass this check. If the debt that could be read is already over the limit, it fails. Otherwise, if it passes all the other checks, a note under the results names it.</span></div></li>
+              <li><svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-check"></use></svg><div><b>Net profit margin of <span data-margin-pct>3%</span> or more</b><span>At least <span data-margin-cents>3 cents</span> of profit on every sales dollar, not counting one-time items. <span data-thin-margin>That lets in thin-margin businesses such as retailers and distributors, while higher margins still earn more points. </span>One-time gains, such as selling a business, are taken out, one-time charges, such as a write-down or a loss on paying off debt early, are added back, and an unusual tax bill is replaced by a normal one. Gains, charges and tax credits that come most years count as part of the business.</span></div></li>
+              <li><svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-check"></use></svg><div><b>Based and incorporated in the US</b><span>Rules out foreign listings (ADRs) and companies registered offshore, such as in the Cayman Islands.</span></div></li>
+              <li><svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-check"></use></svg><div><b>Positive equity and free cash flow</b><span>It owns more than it owes, and it brings in more cash than it spends.</span></div></li>
+              <li><svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-check"></use></svg><div><b>Profitable in <span data-rule="min_profitable_years">2</span> of the last 3 years</b><span>One good year can be luck. Two out of three is a pattern. One-time items don't count here either.</span></div></li>
+              <li><svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-check"></use></svg><div><b>Sales not shrinking more than <span data-rule="min_revenue_growth">5%</span></b><span>Keeps out value traps: stocks that look cheap because the business is dying.</span></div></li>
+            </ul>
+            <p class="method-foot">Figures come from each company's latest fiscal year and latest balance sheet filed with the SEC. Prices are from the last close. Banks, insurers and the other companies Nasdaq files under Finance are not screened; see <a href="#financials">the banks and insurers under book value</a>.</p>
+        </div>
+      </details>
+      <details class="disclose method-part" id="scoring" data-score-help>
+        <summary><svg class="i lead-i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-chart-bar"></use></svg><span class="sum-t">How the 100-point score works<span class="sum-note">The score orders companies that already passed. Each part earns points up to its maximum.</span></span><svg class="i caret" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-caret-down"></use></svg></summary>
+        <div class="body">
+            <div class="tape-key" data-tape-key aria-hidden="true"></div>
+            <ul class="points-list">
+              <li><span class="pk">Cheap vs. sales</span><span class="pmax">15</span><span class="pdesc">Full points at a price to sales of 0, falling evenly to none at the limit of 2.</span></li>
+              <li><span class="pk">Debt</span><span class="pmax">20</span><span class="pdesc">20 for no debt at all, 14 for more cash than debt, and up to 8 for low debt, falling to none at the limit.</span></li>
+              <li><span class="pk">Profit margin</span><span class="pmax">15</span><span class="pdesc">Full points at a margin of 30% or more, without one-time items.</span></li>
+              <li><span class="pk">Cash generation</span><span class="pmax">10</span><span class="pdesc">Full points when a year's free cash flow is 15% or more of the market value.</span></li>
+              <li><span class="pk">Sales growth</span><span class="pmax">10</span><span class="pdesc">Full points for sales up 20% or more on the year before.</span></li>
+              <li><span class="pk">Under $2 billion</span><span class="pmax">5</span><span class="pdesc">For the smallest companies on the list.</span></li>
+              <li><span class="pk">Out of favor</span><span class="pmax">5</span><span class="pdesc">Full points at 50% or more below the 52-week high.</span></li>
+              <li><span class="pk">Few analysts</span><span class="pmax">5</span><span class="pdesc">5 when no analyst covers it, 3 for one or two.</span></li>
+              <li><span class="pk">Under book value</span><span class="pmax">10</span><span class="pdesc">Full points when the market value is under book value, falling evenly to none at twice book value.</span></li>
+              <li><span class="pk">Insiders buying</span><span class="pmax">5</span><span class="pdesc">For Tier 1 or 2 insider buying.</span></li>
+            </ul>
+            <p class="method-foot">A high score means a company clears the rules by a wide margin. It is not a forecast and doesn't mean the stock will do well.</p>
+        </div>
+      </details>
+      <details class="disclose method-part" id="flags">
+        <summary><svg class="i lead-i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-tag"></use></svg><span class="sum-t">Flags, for context<span class="sum-note">Worth knowing. None of them keeps a company off the list.</span></span><svg class="i caret" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-caret-down"></use></svg></summary>
+        <div class="body">
+            <ul class="rule-list flag-rules">
+              <li><span class="flag flag-mid"><svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-trend-down"></use></svg></span><div><b>Out of favor</b><span>The price is <span data-rule="out_of_favor_drawdown">25%</span> or more below its 52-week high.</span></div></li>
+              <li data-new-flag><span class="flag flag-mid"><svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-factory"></use></svg></span><div><b>Industry out of favor</b><span>Its whole industry has slumped: the typical (median) company in it trades <span data-rule="out_of_favor_drawdown">25%</span> or more below its 52-week high. The industries are listed under the results.</span></div></li>
+              <li><span class="flag"><svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-binoculars"></use></svg></span><div><b>Undiscovered</b><span>Two or fewer Wall Street analysts publish estimates on it.</span></div></li>
+              <li data-new-flag><span class="flag flag-up"><svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-scales"></use></svg></span><div><b>Under book value</b><span>The whole company is worth less on the market than its book value: shareholders' equity less preferred stock, what shareholders would keep if everything were sold at the value on its balance sheet and every debt paid.</span></div></li>
+              <li data-new-flag><span class="flag flag-up"><svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-user-plus"></use></svg></span><div><b>Insiders buying</b><span>In the last <span data-window>30</span> days, its executives, directors or big owners bought its stock on the open market with their own money: $1 million or more, or a single buyer growing their stake by 20% or more (Tier 1 or 2 on the <a href="insiders.html">insider buying</a> page).</span></div></li>
+              <li data-new-flag><span class="flag flag-up"><svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-tag"></use></svg></span><div><b>Below insiders' price</b><span>Insiders are buying, and today's price is under the average price they paid. You can buy for less than they did.</span></div></li>
+              <li data-new-flag><span class="flag flag-down"><svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-warning"></use></svg></span><div><b>Above upper band, wait for a pullback</b><span>The price has risen unusually fast: it is above the average of its last 20 weekly closing prices plus two standard deviations of them (the upper Bollinger band). Many traders take that as a sign to wait for the price to pull back rather than buy after the run-up.</span></div></li>
+            </ul>
+            <p class="method-foot" data-flag-points>Out of favor and Under book value also earn score points on a sliding scale, so a company can earn some of those points without the flag, and an Out of favor flag doesn't always mean full points. Insiders buying earns its points exactly when its flag shows, and Few analysts gives points to exactly the companies flagged Undiscovered.</p>
+        </div>
+      </details>
+      <details class="disclose method-part" id="sources">
+        <summary><svg class="i lead-i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-file"></use></svg><span class="sum-t">Data sources and updates<span class="sum-note">Where each figure comes from, and when it is refreshed</span></span><svg class="i caret" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-caret-down"></use></svg></summary>
+        <div class="body">
+          <ul class="rule-list sources">
+            <li><svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-file"></use></svg><div><b>Financial statements</b><span>Each company's own filings with the SEC, read from the SEC's XBRL data: its latest fiscal year and its latest balance sheet.</span></div></li>
+            <li><svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-list-checks"></use></svg><div><b>Listings, sectors, industries and market values</b><span>Nasdaq's public stock screener.</span></div></li>
+            <li><svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-chart-bar"></use></svg><div><b>Prices, the 52-week range, stock splits and analyst counts</b><span>Yahoo Finance's public data.</span></div></li>
+            <li><svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-user-plus"></use></svg><div><b>Insider purchases and new 5%+ stakes</b><span>Form 4 and Schedule 13D filings, from the SEC's daily index of filings.</span></div></li>
+            <li><svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-calendar-check"></use></svg><div><b>Updated every weekday evening</b><span>After the SEC stops taking filings for the day, at 10pm New York time. <span data-sources-date>The date in the header is the trading day the prices are from.</span></span></div></li>
+          </ul>
+        </div>
+      </details>
     </div>
   </section>
 

@@ -1,20 +1,53 @@
 /* Tool pages: the screener and the insider buying page. */
 
-/* ---- Screener toolbar: the sector pills, then one bar with the count on the left and the filter and sort on the right. ---- */
-.screen-toolbar { display: grid; gap: 14px; margin-bottom: 14px; }
-.screen-bar {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px 20px;
-  padding-top: 14px; border-top: 1px solid var(--line);
+/* ---- The screener's head: the claim with the screen in four figures beside it (value above, name below, one frame
+   split by hairline seams), the lede under both. On a phone the data date joins the figures (app.css .proof-date).
+   ---- */
+.claim-head.screen-head { align-items: center; gap: 10px 40px; padding: 20px 0 14px; }
+.screen-head h1 { grid-column: 1; grid-row: 1; }
+.screen-head .lede { grid-column: 1 / -1; grid-row: 2; max-width: none; }
+.claim-head.screen-head .stat-strip { grid-column: 2; grid-row: 1; }
+@media (max-width: 1180px) { .claim-head.screen-head .stat-strip { grid-column: 1 / -1; grid-row: 3; justify-self: start; } }
+.stat-strip {
+  display: grid; grid-auto-flow: column; grid-auto-columns: auto; gap: 1px; margin: 0; overflow: hidden;
+  border: 1px solid var(--line); border-radius: var(--r-frame); background: var(--line);
 }
+.stat-strip > div { display: flex; flex-direction: column; gap: 3px; padding: 11px 16px 12px; background: var(--surface); min-width: 0; }
+.stat-strip dt { order: 2; font-size: 12.5px; color: var(--text-3); line-height: 1.3; }
+.stat-strip dd { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+@media (max-width: 900px) { .stat-strip .proof-date { display: flex !important; } }
+@media (max-width: 860px) { .claim-head.screen-head .stat-strip { justify-self: stretch; grid-auto-columns: minmax(0, 1fr); } }
+@media (max-width: 560px) {
+  .stat-strip { grid-auto-flow: row; grid-template-columns: 1fr 1fr; }
+  .stat-strip > div:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .stat-strip dd { font-size: 17px; }
+}
+
+/* ---- The screening panel: a filter for the list, the quick filters and the sort on one line, the sectors under them.
+   ---- */
+.screen-panel {
+  display: grid; gap: 10px; padding: 12px 14px; margin-bottom: 10px;
+  border: 1px solid var(--line); border-radius: var(--r-frame); background: var(--surface);
+}
+.panel-top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
+.table-search { flex: 1 1 240px; min-width: 200px; max-width: 360px; }
+.table-search .input { height: 38px; }
+.table-search .input::-webkit-search-cancel-button { filter: invert(0.6); cursor: pointer; }
+.quick { gap: 10px; }
+.quick-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.sort-field { margin-left: auto; }
+.screen-bar { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; margin: 0 0 10px; }
 .result-count { color: var(--text-2); font-size: 14px; }
 .result-count b { color: var(--text); font-weight: 600; }
-.screen-controls { display: flex; align-items: center; justify-content: flex-end; gap: 10px 18px; flex-wrap: wrap; }
+.result-meta .flag-legend { margin: 0; }
 @media (max-width: 1000px) {
-  .screen-bar { grid-template-columns: 1fr; }
-  .screen-controls { justify-content: flex-start; }
+  .table-search { max-width: none; flex-basis: 100%; }
+  .sort-field { margin-left: 0; }
 }
 @media (max-width: 720px) {
-  .screen-controls, .seg-field { width: 100%; }
+  .screen-panel { padding: 12px; }
+  .seg-field { width: 100%; }
+  .quick { flex-direction: column; align-items: flex-start; gap: 6px; }
   .seg-field { flex-direction: column; align-items: flex-start; gap: 6px; }
   .seg { width: 100%; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
   .seg-btn { min-width: 0; height: auto; min-height: 34px; padding: 4px 6px; white-space: normal; line-height: 1.2; }
@@ -126,13 +159,19 @@
 .index-rail .count { font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; }
 
 /* ---- How the list is made: what must pass, what earns points, what is only worth knowing. ---- */
-.method-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: var(--r-frame); background: var(--surface); }
-.method-col { padding: 20px 22px 22px; border-left: 1px solid var(--line); min-width: 0; }
-.method-col:first-child { border-left: 0; }
-.method-col h3 { font-size: 15px; }
+/* How the list is made: four disclosures, each titled with what it explains and a line on what it says. */
+.method-stack { display: grid; gap: 8px; }
+.method-part > summary .sum-t { display: flex; flex-direction: column; gap: 2px; font-size: 14.5px; }
+.method-part > summary .sum-note { font-weight: 400; font-size: 12.5px; color: var(--text-3); }
+details.method-part .body { padding: 2px 18px 18px 44px; }
+/* Each list in two columns on a wide screen, every item under a seam, so a line stays readable at the frame's width. */
+.method-part .rule-list li, .method-part .rule-list li:first-child { border-top: 1px solid var(--line); }
+@media (min-width: 861px) { .method-part .rule-list, .method-part .points-list { display: grid; grid-template-columns: 1fr 1fr; column-gap: 40px; } }
 .method-lede { font-size: 13px; color: var(--text-3); margin: 3px 0 12px; }
 .method-foot { font-size: 12.5px; color: var(--text-3); margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
 .method-foot a { color: var(--text-2); }
+.method .rule-list.sources li > .i { color: var(--text-3); } /* sources, not passed rules: no check-mark green */
+@media (max-width: 720px) { details.method-part .body { padding: 2px 14px 16px; } }
 .method .rule-list li { font-size: 13px; }
 .method .rule-list li > .i { color: var(--up); }
 .method .rule-list b { font-size: 13.5px; }
@@ -143,11 +182,6 @@
 .points-list .pk { font-weight: 600; font-size: 13.5px; }
 .points-list .pmax { font-variant-numeric: tabular-nums; font-weight: 600; }
 .points-list .pdesc { grid-column: 1 / -1; color: var(--text-2); }
-@media (max-width: 1000px) {
-  .method-grid { grid-template-columns: 1fr; }
-  .method-col { border-left: 0; border-top: 1px solid var(--line); }
-  .method-col:first-child { border-top: 0; }
-}
 
 /* ---- The lists under the ranked one ---- */
 details.list-rules { margin-bottom: 14px; }
