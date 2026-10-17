@@ -223,6 +223,11 @@ p { margin: 0; }
 /* On the highlighted row's lighter surface Slate Label falls under 4.5:1, so the sector takes the name's color. */
 .suggest [role="option"]:hover .s-sec, .suggest [role="option"][aria-selected="true"] .s-sec { color: var(--text-2); }
 .suggest .s-empty { padding: 10px; color: var(--text-3); font-size: 14px; }
+/* On a phone the sector moves under the name, so a long name isn't cut to a few letters. */
+@media (max-width: 520px) {
+  .suggest [role="option"] { grid-template-columns: 56px minmax(0, 1fr); row-gap: 1px; }
+  .suggest .s-sec { grid-column: 2; }
+}
 
 /* Pills: a sector or tier choice with its count. */
 .pills { position: relative; display: flex; gap: 6px; flex-wrap: wrap; }

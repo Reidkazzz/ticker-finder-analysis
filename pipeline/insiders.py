@@ -426,6 +426,9 @@ _ENTITY = re.compile(
 
 
 _GEN = {"JR", "JR.", "SR", "SR.", "II", "III", "IV"}
+_ROMAN = re.compile(r"^(?=[IVX])X{0,3}(IX|IV|V?I{0,3})$")
+# Short forms of ordinary words, which are cased as words although they have no vowel.
+_ABBREVIATIONS = {"MGMT", "MGT", "INTL", "SVCS", "MFG", "GRP", "HLDGS", "PTNRS", "CTR", "ST", "ST."}
 _PARTICLES = {"DI", "DE", "DA", "DEL", "DELLA", "DOS", "DU", "VAN", "VON", "DER", "LA", "ST", "ST."}
 
 
@@ -446,7 +449,13 @@ def _pretty(name):
             n += 1
         parts = parts[n:] + parts[:n] + gen
     if name.isupper():
-        parts = [p.title() if len(p) > 1 and p.upper() not in _GEN - {"JR", "JR.", "SR", "SR."} else p for p in parts]
+        # A firm's initials and its fund number stay in capitals: 'SVLSF VI, LLC', not 'Svlsf Vi, LLC'. A word with no
+        # vowel can only be initials; a person's name is cased whole.
+        entity = bool(_ENTITY.search(name))
+        keep = lambda p: entity and p.upper().rstrip(",") not in _ABBREVIATIONS and (
+            _ROMAN.match(re.sub(r"[^A-Z]", "", p)) or not re.search(r"[AEIOUY]", p))
+        parts = [p.title() if len(p) > 1 and p.upper() not in _GEN - {"JR", "JR.", "SR", "SR."} and not keep(p) else p
+                 for p in parts]
     t = " ".join(parts) + (" and others" if et_al else "")
     if not name.isupper():
         return t

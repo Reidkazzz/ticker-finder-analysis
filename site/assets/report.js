@@ -678,7 +678,9 @@ function historySection(r, home) {
     && f.fiscal_year_end.slice(5) > "01-07" ? f.fiscal_year_end : null;
   const notes = [
     `Fiscal years from the company's SEC filings, oldest first.${ended ? ` Each is labeled by the calendar year the SEC's data files it under, which can be a year before the company's own name for it: the year labeled ${lastYear} ended ${fullDate(ended)}.` : ""}`,
-    gaps.length ? `No figures for fiscal ${andList(gaps)} could be read from the company's SEC data.` : "",
+    // The SEC's yearly data files each year under one calendar year, and can leave a label with none for the company
+    // (a 52 or 53-week year ending near June 30), though its quarters may still show that year above.
+    gaps.length ? `The SEC's yearly data files no year of this company's under ${andList(gaps)}, so ${gaps.length > 1 ? "those columns are" : "that column is"} n/a.` : "",
     revenueWords(f) !== "revenue" ? `Revenue here is its ${revenueWords(f).replace(/^revenue \(|\)$/g, "")}.` : "",
     has("net_income") ? "Net income is as reported, one-time items included." : "",
     has("fcf") ? `Free cash flow is cash from operations less capital spending.${kind === "bank" || kind === "financial" ? " It isn't scored for banks, insurers and other financial companies, whose cash and borrowing are part of the business itself." : ""}` : "",
@@ -817,6 +819,9 @@ function shares(n) {
   return a >= 1e9 ? `${cut(a / 1e9, 2)}B` : a >= 1e6 ? `${cut(a / 1e6, 2)}M` : a >= 1e4 ? `${cut(a / 1e3, 1)}K` : Math.round(a).toLocaleString("en-US");
 }
 
+// Two share counts as a pair: shortened, or exact where shortening would make them read the same ("2.82M to 2.82M").
+const sharePair = (a, b) => (shares(a) === shares(b) ? [a, b].map((n) => Math.round(Math.abs(n)).toLocaleString("en-US")) : [shares(a), shares(b)]);
+
 // Whether the shares bought account for the whole change from the holding before to the one the latest filing reports.
 // They need not: that filing can also count shares gained or given up otherwise (converted at a listing, granted,
 // sold), which the stake change, the shares bought over the holding before, leaves out.
@@ -826,7 +831,7 @@ const adds = (b) => b.owned_before != null && b.owned_after != null && b.shares 
 // Under the change, the holding before and after where the purchases add up to the difference, else the two side by side.
 function stakeCell(b) {
   const held = b.new_position || !b.owned_before ? (b.owned_after != null ? `<small>${shares(b.owned_after)} shares</small>` : "")
-    : adds(b) ? `<small>${shares(b.owned_before)} to ${shares(b.owned_after)} shares</small>`
+    : adds(b) ? `<small>${sharePair(b.owned_before, b.owned_after).join(" to ")} shares</small>`
     : b.owned_after == null ? `<small>${shares(b.owned_before)} shares before</small>`
     : `<small>${shares(b.owned_before)} shares before, ${shares(b.owned_after)} in latest filing</small>`;
   const td = `<td data-label="Stake change">`;
