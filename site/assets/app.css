@@ -30,6 +30,11 @@
   /* A middle reading (a fair verdict, a mixed health band) is neutral: no third hue. */
   --mid: #c3ccda;
   --mid-dim: rgba(195, 204, 218, 0.1);
+  /* Ink: the one hue that is not a sign. It marks what identifies a company in a dense table (its ticker) and its
+     size (market value), never a reading for or against it. */
+  --ink: #7fb0ff;
+  --ink-dim: rgba(127, 176, 255, 0.1);
+  --ink-line: rgba(127, 176, 255, 0.24);
   /* The score tape: a part's earned points in the scale's light step, the rest of its slot in the track. */
   --tape: #c3ccda;
   --tape-track: #2b364b;

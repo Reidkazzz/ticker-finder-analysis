@@ -25,6 +25,9 @@ colors:
   mid-dim: "rgba(195, 204, 218, 0.1)"
   tape: "#c3ccda"
   tape-track: "#2b364b"
+  ink: "#7fb0ff"
+  ink-dim: "rgba(127, 176, 255, 0.1)"
+  ink-line: "rgba(127, 176, 255, 0.24)"
 typography:
   display:
     fontFamily: "Archivo, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif"
@@ -210,7 +213,7 @@ Density is high by default. Tables run at 13.5px with nine-pixel cell padding, a
 The world refuses the dark fintech dashboard: rounded cards on drop shadows, neon accents, glows and decorative charts. Its one signature is the 100-point score tape, ten segments each as wide as its part's maximum and filled to the points it earned. The brand mark is the same tape in miniature: two parts earned, one not.
 
 **Key Characteristics:**
-- One cool neutral scale from Navy-Black (#090d14) to Cool Near-White (#e8ecf2); no accent hue.
+- One cool neutral scale from Navy-Black (#090d14) to Cool Near-White (#e8ecf2), and one ink hue for what identifies a company in the screener's table.
 - Color is a sign: emerald for up or in favor, muted red for down or against, pale steel for a middle reading.
 - Archivo at two weights (400, 600) with tabular figures; h1 and h2 set at 92% width with negative tracking.
 - Flat frames: a 1px hairline border, an 8px corner, no shadow.
@@ -220,7 +223,7 @@ The world refuses the dark fintech dashboard: rounded cards on drop shadows, neo
 
 ## Colors
 
-One cool, faintly blue neutral scale carries the entire interface; two sign colors are the only hues, and they speak only about direction.
+One cool, faintly blue neutral scale carries the entire interface; two sign colors speak only about direction, and one ink blue marks what identifies a company in a dense table.
 
 ### Primary
 - **Inverse Near-White** (#e8ecf2, hover #ffffff, text on it #090d14): the primary action ("Analyze", "Open the NATR report"), the pressed sector pill, the Tier 1 tag, the skip link and the brand mark's tile. The primary is the lightest step of the neutral scale turned into a surface; it is never tinted.
@@ -228,6 +231,9 @@ One cool, faintly blue neutral scale carries the entire interface; two sign colo
 ### Secondary (the sign pair)
 - **Sign Emerald** (#3fbf8c; tag ground at 12%): a figure that is up, or a reading in the company's favor. Positive changes, "Undervalued", "Healthy", "Passes", a rising price line, a strong health meter, and the check marks beside rules a company passed.
 - **Sign Red** (#e2706a; tag ground at 12%): a figure that is down, or a reading against the company. Negative changes, "Overvalued", "Weak", a falling price line, negative revenue bars, a weak health meter, and the icon of the one warning flag (above the upper band).
+
+### Ink
+- **Ticker Ink** (#7fb0ff; ground at 10%, edge at 24%): the screener table's ticker chips and its market value figures, so the eye finds a company and its size in a dense grid. Ink never says anything for or against a company: it is not a sign, not a middle reading and not an action.
 
 ### Neutral
 - **Navy-Black Ground** (#090d14): the page, the sticky feed-day headings, text on the inverse primary, and the browser theme color.
@@ -248,7 +254,7 @@ One cool, faintly blue neutral scale carries the entire interface; two sign colo
 ### Named Rules
 **The Sign-Only Rule.** Emerald and red state direction and nothing else: a figure's sign, or a word that is itself a reading for or against the company. Flags, category tags (tier, source), the score tape and every structural element stay on the neutral scale, the icon or the word carrying the meaning.
 
-**The No Third Hue Rule.** A middle reading is Pale Steel (#c3ccda), never amber, yellow or blue. Amber was retired from this system because a third hue turns "fair" into a warning.
+**The No Third Hue Rule.** A middle reading is Pale Steel (#c3ccda), never amber, yellow or blue. Amber was retired from this system because a third hue turns "fair" into a warning. Ticker Ink is the one other hue, and it only identifies: tickers and a company's size in the screener's table.
 
 **The Inverse Primary Rule.** The primary action is Inverse Near-White with Navy-Black text. There is no brand hue to put on a button, a link or a focus ring; focus is a 2px Cool Near-White outline.
 
@@ -270,7 +276,7 @@ Archivo loads from Google Fonts as a variable face on two axes (width 75 to 100,
 - **Body** (400, 15px, 1.55): running text. The lede is 16px in Fog at 64ch; section ledes are 14.5px at 76ch.
 - **Data** (400, 13.5px, tabular): table cells; ledger tables run 13px.
 - **Label** (400, 12.5px, 1.4): notes, captions, counts and frame-head meta in Slate Label; column heads are 12px, and the labels on phone blocks 11px to 11.5px.
-- **Ticker** (600, 13px, +0.01em): every ticker, stacked above its company name in Fog at 12.5px.
+- **Ticker** (600, 13px, +0.01em): every ticker, stacked above its company name in Fog at 12.5px, except in the screener's ranked table, where it is a 12px chip in Ticker Ink beside the name.
 - **Figure** (600, tabular, tracking -0.01em to -0.035em): proof-line values at 15px, insider purchase figures at 17px, ledger totals and stat values at 22px, the report's price at 30px, the health score at 44px.
 
 ### Named Rules
@@ -284,7 +290,7 @@ Archivo loads from Google Fonts as a variable face on two axes (width 75 to 100,
 
 Content sits in one centered column (1240px) with a 24px gutter that drops to 16px under 640px. A sticky 56px header carries the mark, the three tools, the data date and a ticker search; its ground is Navy-Black at 86% with a 12px backdrop blur and a hairline below. Under 900px the data date leaves the header and joins the page's claim; under 760px the search goes and the tool links take the right edge.
 
-On the screener the claim block holds the h1 with the screen in four figures beside it (a stat strip: one frame split by hairline seams, each value at 22px over its Slate Label name), the lede across the full width under both; under 1180px the strip drops below the lede, and on phones it is a 2 by 2 grid with the data date under it. A screening panel (one frame) follows: a 38px filter field, the quick filters as pills with their counts and the Sort menu on one line, the sector pills under them; the count of companies and the flag legend share the line under the panel. At 1280x800 eight ranked rows still show above the fold.
+On the screener the claim block holds the h1 with the screen in four figures beside it (a stat strip: one frame split by hairline seams, each value at 22px over its Slate Label name), the lede across the full width under both; under 1180px the strip drops below the lede, and on phones it is a 2 by 2 grid with the data date under it. A filter panel (one frame) follows: a 38px filter field, the four groups of dropdowns and All filters as a segmented control (each group's count of filters in use as a small solid number) and the count of matches on one line; the group's dropdowns under it, four to a row (two under 860px, one under 480px), each labelled above and outlined in Fog when in use; then the filters in use as chips (the text filter's too) with a Clear filters button, a line that goes while nothing is in use. Each choice in a dropdown counts what the list would show if it were picked. On phones the dropdowns open from a Show filters button and the five group buttons wrap onto two lines. The results are one frame: a Raised Ground bar with the column views (a segmented control) and the Sort menu, the count with the flag legend, the table, and a Raised Ground status line of neutral tags saying what the figures are. With no filter in use, eight ranked rows show above the fold at 1280x800 in every view, and every view fits the frame at 1280 wide; the chips line costs a row while filters are in use.
 
 Other pages open with a claim block: the h1 across the top, the lede below it on the left, and on the right, bottom-aligned with the lede, a row of live figures (value above, Slate Label name below). Under 860px it stacks. On the screener the ranked table begins inside the first viewport at 1280x800 with at least eight rows. The home page alternates claim and proof side by side (0.9fr to 1.1fr, 64px apart), the proof switching sides each band, stacking under 960px.
 
@@ -354,7 +360,7 @@ Context, not verdicts. A 22px tile (4px corner, Hover Slate, Control Edge inset 
 A single sticky bar: mark and "TFA" (the long name in Slate Label until 1100px), three tool links in Fog at 14px with 6px corners, Hover Slate on hover and Current Slate with Cool Near-White text for the current page. The data date and a 260px search sit at the right. On phones only the mark and the three links remain, tightening to 13px.
 
 ### Tables
-Header row on Raised Ground with 12px Slate Label names, regular weight, right-aligned over figures and left-aligned over text; a sort arrow appears on hover and stays on the sorted column, hanging left of a right-aligned name so it takes no width. Cells are 13.5px, 9px by 12px, separated by Hairline Seams; totals sit under a Strong Seam in semibold. Hovered rows go to Hover Slate.
+Header row on Raised Ground with 12px Slate Label names, regular weight, right-aligned over figures and left-aligned over text; a sort arrow appears on hover and stays on the sorted column, hanging left of a right-aligned name so it takes no width. Cells are 13.5px, 9px by 12px, separated by Hairline Seams; totals sit under a Strong Seam in semibold. Hovered rows go to Hover Slate. The screener's ranked table is denser: one-line column names with a Hairline Seam between them (the Score view's part names take two lines, and its score drops the tape, since each part shows), cells padded 6px top and bottom and 8px at the sides for rows about 39px tall, the ticker as a 21px chip in Ticker Ink beside the company name on one line, market value in Ticker Ink, and margins, cash yield, growth, free cash flow and cash less debt in their sign's color.
 
 ### Score Tape (signature)
 The score as a numeral (15px semibold, tabular) beside an 8px tape: ten slots in a grid, each slot's width proportional to its part's maximum points, 2px apart, filled in Pale Steel to the share of points earned over a Tape Track ground. The large tape is 10px. The score is never colored by value.
@@ -380,7 +386,7 @@ A Frame Slate summary line (14px semibold, a lead icon in Slate Label, a caret a
 ### Do:
 - **Do** put the figure that proves a claim beside it: a row of live counts by the h1, a top-five frame by the home hero, a ledger by "why it ranks first".
 - **Do** keep color to direction: Sign Emerald (#3fbf8c) for up or in favor, Sign Red (#e2706a) for down or against, each on a 12% tint of itself when it is a tag.
-- **Do** set every figure in tabular numerals, right-aligned, and every ticker in Archivo 600 at +0.01em over the company name in Fog.
+- **Do** set every figure in tabular numerals, right-aligned, and every ticker in Archivo 600 at +0.01em over the company name in Fog (beside it, as a Ticker Ink chip, in the screener's ranked table).
 - **Do** separate with 1px seams (#1c2433) and group with one frame (Frame Slate, 8px corner) rather than with shadows or extra containers.
 - **Do** step interaction states up the neutral scale: Hover Slate, then Current Slate, then Pressed Slate.
 - **Do** tell flags apart by icon on neutral tiles, with a legend and screen-reader names.
