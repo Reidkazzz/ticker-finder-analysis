@@ -278,7 +278,7 @@ p { margin: 0; }
   font-size: 13px; cursor: pointer; white-space: nowrap; transition: color .15s, border-color .15s, background .15s;
 }
 .pill:hover { color: var(--text); border-color: var(--line-3); }
-.pill[aria-pressed="true"] { background: var(--accent-dim); color: var(--text); border-color: var(--accent-line); }
+.pill[aria-pressed="true"] { background: var(--accent-dim); color: var(--text); border-color: var(--accent-text); }
 .pill .count { font-variant-numeric: tabular-nums; font-size: 12px; color: var(--text-3); }
 .pill[aria-pressed="true"] .count { color: var(--accent-text); }
 .pill.pill-empty:not([aria-pressed="true"]) { color: var(--text-3); border-color: var(--line); }
@@ -303,7 +303,7 @@ p { margin: 0; }
   font-size: 13px; cursor: pointer; white-space: nowrap; transition: color .15s, background .15s;
 }
 .seg-btn:hover { color: var(--text); background: var(--surface-2); }
-.seg-btn[aria-pressed="true"] { background: var(--accent-dim); color: var(--text); box-shadow: inset 0 0 0 1px var(--accent-line); }
+.seg-btn[aria-pressed="true"] { background: var(--accent-dim); color: var(--text); box-shadow: inset 0 0 0 1px var(--accent-text); }
 .label-inline { display: inline-flex; align-items: center; gap: 8px; }
 .select {
   height: 32px; padding: 0 30px 0 11px; border-radius: var(--r-ctl); background-color: transparent;

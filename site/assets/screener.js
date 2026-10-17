@@ -435,7 +435,7 @@ function row(r, i, cols) {
       case "flags": return `<td class="txt c-flags">${flags(r)}</td>`;
       default: {
         const tip = c.tip ? c.tip(r) : "";
-        return `<td class="c-${c.k}${c.cls ? c.cls(r) : ""}"${c.label ? ` data-label="${esc(c.label)}"` : ""}${tip ? ` title="${esc(tip)}"` : ""}>${c.cell(r)}</td>`;
+        return `<td class="c-${c.k}${c.txt ? " txt" : ""}${c.cls ? c.cls(r) : ""}"${c.label ? ` data-label="${esc(c.label)}"` : ""}${tip ? ` title="${esc(tip)}"` : ""}>${c.cell(r)}</td>`;
       }
     }
   }).join("")}</tr>`;
@@ -862,13 +862,13 @@ document.querySelector("[data-presets]").addEventListener("click", (e) => {
   refresh();
   document.querySelector(`[data-preset="${p.id}"]`)?.focus();
 });
-// Under 1360px the sidebar folds into a panel over the list, opened by its button.
+// Under 1440px the sidebar folds into a panel over the list, opened by its button.
 const toggleEl = document.querySelector("[data-builder-toggle]");
 toggleEl.addEventListener("click", () => {
   const open = !builder.classList.contains("open");
   builder.classList.toggle("open", open);
   toggleEl.setAttribute("aria-expanded", String(open));
-  toggleEl.querySelector("[data-toggle-word]").textContent = open ? "Hide" : "Show";
+  toggleEl.querySelector("[data-toggle-word]").textContent = open ? "Hide filters" : "Show filters";
 });
 document.querySelector("[data-views]").addEventListener("click", (e) => {
   const b = e.target.closest("[data-view]");
