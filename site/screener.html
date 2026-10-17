@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Screener | TFA</title>
 <meta name="description" content="Small US companies that pass eight quality checks, ranked by a transparent 100-point score built from SEC filings.">
-<meta name="theme-color" content="#090d14">
+<meta name="theme-color" content="#0a0a0c">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -13,84 +13,87 @@
 <link rel="stylesheet" href="assets/app.css">
 <link rel="stylesheet" href="assets/pages.css">
 </head>
-<body>
+<body class="wide-page">
 <header class="nav" data-nav></header>
 <main class="wrap" id="main">
-  <section class="claim-head screen-head">
-    <div>
-      <h1 data-claim>Small US companies that pass eight quality checks</h1>
-      <p class="lede">Cheap against sales, profitable and light on debt, ranked by a 100-point score. A high score is a screening result, not a forecast.</p>
+  <header class="tool-head">
+    <div class="tool-title">
+      <h1>Stock screener</h1>
+      <p class="lede">Small US companies that pass eight quality checks: cheap against sales, profitable and light on debt. Each is ranked by a 100-point score that is itemized on its row. A high score is a screening result, not a forecast or a recommendation.</p>
+      <p class="source-line" data-source-line>&nbsp;</p>
     </div>
     <dl class="stat-strip" aria-label="The screen at a glance">
-      <div><dt>all must pass</dt><dd>8 checks</dd></div>
-      <div><dt>score, itemized</dt><dd>0 to 100</dd></div>
-      <div><dt>market value</dt><dd data-stat="mcap">Under $3B</dd></div>
-      <div><dt>top score</dt><dd data-stat="top">&nbsp;</dd></div>
-      <div class="proof-date"><dt>data as of</dt><dd data-proof-date>&nbsp;</dd></div>
+      <div><dt>pass all 8 checks</dt><dd data-stat="pass">&nbsp;</dd></div>
+      <div><dt>top score of 100</dt><dd data-stat="top">&nbsp;</dd></div>
+      <div><dt>market value limit</dt><dd data-stat="mcap">Under $3B</dd></div>
     </dl>
+  </header>
+
+  <section class="presets" aria-labelledby="presets-h">
+    <h2 class="presets-label" id="presets-h">Quick screens</h2>
+    <div class="pills scroll presets-row" role="group" aria-labelledby="presets-h" data-presets></div>
+    <p class="preset-note" data-preset-note aria-live="polite">&nbsp;</p>
   </section>
 
-  <section class="builder" aria-label="Filters" data-builder>
-    <div class="builder-top">
+  <div class="screen-app">
+    <aside class="filters-side" aria-labelledby="filters-h" data-builder>
+      <div class="side-head">
+        <h2 id="filters-h">Filters<span class="count" data-active-count></span></h2>
+        <button class="btn btn-ghost btn-sm reset" type="button" data-reset hidden>Clear all</button>
+        <button class="btn btn-ghost btn-sm side-toggle" type="button" aria-expanded="false" aria-controls="side-body" data-builder-toggle><span data-toggle-word>Show filters</span></button>
+      </div>
       <div class="field table-search">
         <label class="sr-only" for="list-filter">Filter the list by ticker or company name</label>
         <svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-search"></use></svg>
-        <input class="input" id="list-filter" type="search" placeholder="Filter by ticker or company" autocomplete="off" spellcheck="false" data-filter>
+        <input class="input" id="list-filter" type="search" placeholder="Ticker or company" autocomplete="off" spellcheck="false" data-filter>
       </div>
-      <button class="btn btn-ghost btn-sm builder-toggle" type="button" aria-expanded="false" aria-controls="builder-groups builder-fields" data-builder-toggle><span data-toggle-word>Show filters</span><span class="count" data-active-count></span></button>
-      <div class="builder-groups" id="builder-groups" role="group" aria-label="Which filters to show" data-groups>
-        <button class="group-btn" type="button" data-group="descriptive" aria-pressed="true">Descriptive<span class="count" data-group-count></span></button>
-        <button class="group-btn" type="button" data-group="valuation" aria-pressed="false">Valuation<span class="count" data-group-count></span></button>
-        <button class="group-btn" type="button" data-group="financial" aria-pressed="false">Financial<span class="count" data-group-count></span></button>
-        <button class="group-btn" type="button" data-group="signals" aria-pressed="false">Signals<span class="count" data-group-count></span></button>
-        <button class="group-btn" type="button" data-group="all" aria-pressed="false">All filters<span class="count" data-group-count></span></button>
-      </div>
-      <p class="builder-matches" aria-hidden="true" data-matches>&nbsp;</p>
-    </div>
-    <div class="builder-fields" id="builder-fields" data-fields></div>
-    <div class="builder-foot" hidden>
-      <ul class="chips" aria-label="Filters in use" data-chips hidden></ul>
-      <button class="btn btn-ghost btn-sm reset" type="button" data-reset hidden>Clear filters</button>
-    </div>
-  </section>
+      <div class="side-body" id="side-body" data-fields></div>
+    </aside>
 
-  <section class="grid-card" aria-label="Companies that passed every check">
-    <div class="grid-bar">
-      <div class="seg views" role="group" aria-label="Columns to show" data-views>
-        <button class="seg-btn" type="button" data-view="overview" aria-pressed="true">Overview</button>
-        <button class="seg-btn" type="button" data-view="valuation" aria-pressed="false">Valuation</button>
-        <button class="seg-btn" type="button" data-view="financials" aria-pressed="false">Financials</button>
-        <button class="seg-btn" type="button" data-view="price" aria-pressed="false">Price</button>
-        <button class="seg-btn" type="button" data-view="score" aria-pressed="false">Score</button>
+    <section class="results" aria-labelledby="count-h">
+      <div class="results-bar">
+        <p class="result-count" id="count-h" data-count aria-live="polite">&nbsp;</p>
+        <div class="results-tools">
+          <div class="seg views" role="group" aria-label="Columns to show" data-views>
+            <button class="seg-btn" type="button" data-view="overview" aria-pressed="true">Overview</button>
+            <button class="seg-btn" type="button" data-view="valuation" aria-pressed="false">Valuation</button>
+            <button class="seg-btn" type="button" data-view="financials" aria-pressed="false">Financials</button>
+            <button class="seg-btn" type="button" data-view="trading" aria-pressed="false">Trading</button>
+            <button class="seg-btn" type="button" data-view="signals" aria-pressed="false">Signals</button>
+            <button class="seg-btn" type="button" data-view="score" aria-pressed="false">Score</button>
+          </div>
+          <label class="label-inline sort-field">Sort by
+            <select class="select" data-sort>
+              <option value="score">Best score</option>
+              <option value="ps">Cheapest vs. sales</option>
+              <option value="pb">Cheapest vs. book value</option>
+              <option value="net_margin">Highest profit margin</option>
+              <option value="fcf_yield">Most cash generated</option>
+              <option value="revenue_growth">Fastest sales growth</option>
+              <option value="day_change">Biggest gain on the day</option>
+              <option value="volume">Most shares traded</option>
+              <option value="drawdown">Furthest below high</option>
+              <option value="analysts">Fewest analysts</option>
+              <option value="mcap">Smallest company</option>
+            </select>
+          </label>
+        </div>
       </div>
-      <label class="label-inline sort-field">Sort by
-        <select class="select" data-sort>
-          <option value="score">Best score</option>
-          <option value="ps">Cheapest vs. sales</option>
-          <option value="pb" data-needs-pb>Cheapest vs. book value</option>
-          <option value="net_margin">Highest profit margin</option>
-          <option value="fcf_yield">Most cash generated</option>
-          <option value="revenue_growth">Fastest sales growth</option>
-          <option value="drawdown">Furthest below high</option>
-          <option value="analysts">Fewest analysts</option>
-          <option value="mcap">Smallest company</option>
-        </select>
-      </label>
-    </div>
-    <div class="grid-sub">
-      <p class="result-count" data-count aria-live="polite">&nbsp;</p>
-      <div class="result-meta" data-result-meta></div>
-    </div>
-    <div data-results aria-busy="true">
-      <div class="skeleton" style="height:40px;margin-bottom:2px"></div>
-      <div class="skeleton" style="height:36px;margin-bottom:2px"></div>
-      <div class="skeleton" style="height:36px;margin-bottom:2px"></div>
-      <div class="skeleton" style="height:36px;margin-bottom:2px"></div>
-      <div class="skeleton" style="height:36px"></div>
-    </div>
-    <ul class="grid-status" aria-label="About these figures" data-status hidden></ul>
-  </section>
-  <div class="grid-after" data-after></div>
+      <ul class="chips" aria-label="Filters in use" data-chips hidden></ul>
+      <div class="grid-card">
+        <div class="result-meta" data-result-meta hidden></div>
+        <div data-results aria-busy="true">
+          <div class="skeleton" style="height:38px;margin-bottom:2px"></div>
+          <div class="skeleton" style="height:36px;margin-bottom:2px"></div>
+          <div class="skeleton" style="height:36px;margin-bottom:2px"></div>
+          <div class="skeleton" style="height:36px;margin-bottom:2px"></div>
+          <div class="skeleton" style="height:36px"></div>
+        </div>
+        <ul class="grid-status" aria-label="About these figures" data-status hidden></ul>
+      </div>
+      <div class="grid-after" data-after></div>
+    </section>
+  </div>
 
   <nav class="index-rail" aria-label="On this page" data-index hidden></nav>
 

@@ -1,5 +1,7 @@
 """Price history, 52-week range and analyst coverage from Yahoo Finance's public endpoints."""
 import datetime as dt
+import time
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 
 from .net import cookie_opener, web_get, web_json
@@ -23,13 +25,52 @@ def price_history(sym):
     price = meta.get("regularMarketPrice")
     if not price:
         return None
+    change, volume = meta.get("regularMarketChangePercent"), meta.get("regularMarketVolume")
+    # A session still trading (a run started in market hours) has no close yet: its price is live, so it gets no session
+    # day, change or volume, and no page calls it a close. The quote's trading period is that session's, or the next
+    # one's once the last has closed (before its start).
+    t = meta.get("regularMarketTime")
+    period = (meta.get("currentTradingPeriod") or {}).get("regular") or {}
+    start, end, now = period.get("start"), period.get("end"), time.time()
+    closed = bool(t) and (not (start and end) or t >= end or now >= end or now < start)
+    if not closed:
+        t, change, volume = None, None, None
     return {
         "price": price,
         "high52": meta.get("fiftyTwoWeekHigh"),
         "low52": meta.get("fiftyTwoWeekLow"),
         "weekly": points,
         "splits": _splits(res),
+        # The price's own session, from the same quote: when it closed (Unix time), its change on the close before it
+        # (Yahoo gives a percentage) and the shares traded in it.
+        "price_time": t,
+        "day_change": change / 100 if isinstance(change, (int, float)) else None,
+        "volume": int(volume) if isinstance(volume, (int, float)) and volume >= 0 else None,
     }
+
+
+def session_day(p):
+    """The day (YYYY-MM-DD) of a price's session, from its close time. A US session closes at 4pm New York time,
+    8pm or 9pm UTC, so the UTC date is the trading day."""
+    t = (p or {}).get("price_time")
+    try:
+        return dt.datetime.fromtimestamp(int(t), dt.timezone.utc).date().isoformat() if t else None
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None
+
+
+def price_day(prices):
+    """The trading day most prices are from: the day the pages name as the prices' close."""
+    days = Counter(d for d in map(session_day, prices.values()) if d)
+    return days.most_common(1)[0][0] if days else None
+
+
+def day_move(p, day):
+    """A price's change on the close before it and its volume, or (None, None) where its session isn't `day`, so a page
+    never shows another day's change beside the day it names (a stock that didn't trade that day)."""
+    if not p or not day or session_day(p) != day:
+        return None, None
+    return p.get("day_change"), p.get("volume")
 
 
 def _splits(res):

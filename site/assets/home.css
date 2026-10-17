@@ -14,8 +14,8 @@
 /* Above whatever follows it, so its suggestions are never painted under the next block. */
 .hero-search { position: relative; z-index: 5; margin-top: 28px; max-width: 520px; }
 .hero-links { margin-top: 16px; }
-/* Under 900px the header drops the data date and the hero carries it (app.css .proof-date). */
-.hero-copy .proof-date { margin-top: 10px; }
+/* Where the figures come from and when (common.js), under the hero's links. */
+.hero-copy .source-line { margin-top: 18px; }
 @media (max-width: 960px) {
   .hero { padding: 40px 0 48px; }
   .hero-grid { grid-template-columns: 1fr; gap: 36px; }

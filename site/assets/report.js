@@ -1,4 +1,4 @@
-import { asShown, attachSearch, chrome, date, displayName, esc, healthBand, icon, load, localToday, longDate, meter, money, pct, price, searchMarkup, signClass, vsPaid } from "./common.js";
+import { asShown, attachSearch, chrome, closeWords, date, displayName, esc, healthBand, icon, load, localToday, longDate, meter, money, paintDataStatus, pct, price, searchMarkup, signClass, vsPaid } from "./common.js";
 import { ledger } from "./ledger.js";
 
 // The report has its own search box at the top of the page, which opens a report in place.
@@ -38,6 +38,7 @@ try { history.replaceState({ ...(history.state || {}), id: entry }, ""); } catch
 const scrolls = new Map();
 let restoring = true; // scroll events while a report is swapped in don't count as the reader's position
 let current; // the symbol shown, or null on the start page
+let shown = null; // the report shown, whose price chart its span buttons redraw
 addEventListener("scroll", () => { if (!restoring) scrolls.set(entry, scrollY); }, { passive: true });
 addEventListener("pagehide", () => {
   try { history.replaceState({ ...(history.state || {}), id: entry, y: scrollY }, ""); } catch {}
@@ -84,6 +85,22 @@ host.addEventListener("click", (e) => {
   if (link) {
     e.preventDefault();
     go(link.dataset.sym);
+    return;
+  }
+  // The charts' period: by fiscal year or by quarter.
+  const fc = e.target.closest("[data-fc]");
+  if (fc) {
+    const sec = fc.closest("section");
+    sec.querySelectorAll("[data-fc]").forEach((b) => b.setAttribute("aria-pressed", String(b === fc)));
+    sec.querySelectorAll("[data-fc-grid]").forEach((g) => { g.hidden = g.dataset.fcGrid !== fc.dataset.fc; });
+    return;
+  }
+  // The price chart's span: redrawn from the same weekly closes.
+  const span = e.target.closest("[data-span]");
+  if (span && shown) {
+    const panel = span.closest(".r-price");
+    panel.outerHTML = pricePanel(shown, span.dataset.span);
+    host.querySelector(`.r-price [data-span="${span.dataset.span}"]`)?.focus();
   }
 });
 
@@ -319,11 +336,19 @@ function verdictPanel(r, home) {
 let chartSeq = 0;
 const isoOf = (unix) => new Date(unix * 1000).toISOString().slice(0, 10);
 
+// The price chart's spans, back from its last point: [key, button, days back (null: since January 1), words].
+const SPANS = [["3m", "3M", 91, "3 months"], ["6m", "6M", 182, "6 months"], ["ytd", "YTD", null, "this year"], ["1y", "1Y", 366, "12 months"]];
 // Weekly closes as a line, spaced by week (the last point is the latest price, a few days after the last weekly close).
-// The heading and the change say the span the points actually cover: 12 months, or since the first point.
-function pricePanel(r) {
-  const pts = (r.weekly || []).filter((p) => p && p[1] != null);
-  const charted = pts.length >= 4;
+// The heading and the change say the span the points actually cover: the span chosen, or since the first point where
+// the stock has fewer weeks of prices than that. A span with fewer than two points can't be chosen.
+function pricePanel(r, span = "1y") {
+  const all = (r.weekly || []).filter((p) => p && p[1] != null);
+  const charted = all.length >= 4;
+  const endT = all.length ? all[all.length - 1][0] : 0;
+  const startOf = ([, , d]) => (d == null ? Date.UTC(new Date(endT * 1000).getUTCFullYear(), 0, 1) / 1000 : endT - d * 86400);
+  const inSpan = (s) => all.filter((p) => p[0] >= startOf(s));
+  const spec = SPANS.find((s) => s[0] === span) || SPANS[3];
+  const pts = spec[0] === "1y" ? all : inSpan(spec);
   const fromHigh = r.high52 && r.price ? r.price / r.high52 - 1 : null;
   // The note on the 52-week range speaks of the chart, so it shows only with one.
   const stats = `<div class="p-side"><dl class="p-stats">
@@ -347,13 +372,19 @@ function pricePanel(r) {
   const change = last / first - 1;
   const tone = last >= first ? "up" : "down";
   const d0 = isoOf(pts[0][0]), d1 = isoOf(pts[pts.length - 1][0]);
-  const year = (pts[pts.length - 1][0] - pts[0][0]) / 86400 >= 350;
-  const title = year ? "Price, last 12 months" : `Price since ${fullDate(d0)}`;
-  const over = year ? "over 12 months" : `since ${date(d0)}`;
+  // The span is whole when its first point falls within a week of where it begins (a year: 350 days of points).
+  const whole = spec[0] === "1y" ? (pts[pts.length - 1][0] - pts[0][0]) / 86400 >= 350 : pts[0][0] - startOf(spec) <= 7 * 86400;
+  const title = !whole ? `Price since ${fullDate(d0)}` : spec[0] === "ytd" ? "Price this year" : `Price, last ${spec[3]}`;
+  const over = !whole ? `since ${date(d0)}` : spec[0] === "ytd" ? "this year" : `over ${spec[3]}`;
+  const spans = `<div class="seg p-spans" role="group" aria-label="Span of the chart">${SPANS.map((s) => {
+    const n = s[0] === "1y" ? all.length : inSpan(s).length;
+    return `<button class="seg-btn" type="button" data-span="${s[0]}" aria-pressed="${s[0] === spec[0]}"${n < 2 ? " disabled" : ""}>${s[1]}</button>`;
+  }).join("")}</div>`;
   const id = `pc-fade-${++chartSeq}`;
   const lastY = y(last);
   return `<section class="frame r-price" aria-labelledby="price-h">
-    <div class="p-head"><h2 id="price-h">${title}</h2><span class="p-chg ${signClass(change)}">${pct(change, 1, true)} <span class="p-over">${over}</span></span></div>
+    <div class="p-head"><h2 id="price-h">${title}</h2><span class="p-chg ${signClass(asShown(change, 1))}">${pct(change, 1, true)} <span class="p-over">${over}</span></span></div>
+    ${spans}
     <figure class="pc">
       <div class="pc-plot" role="img" aria-label="${esc(`Weekly closing price from ${fullDate(d0)} to ${fullDate(d1)}: ${price(first)} to ${price(last)}, ${pct(change, 1, true)}`)}">
         <svg class="pc-svg ${tone}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true" focusable="false">
@@ -688,19 +719,112 @@ function historySection(r, home) {
     missing.length ? `No ${andList(missing)} figures for these years.` : "",
   ].filter(Boolean);
   const yearsLabel = hist.length > 1 ? `Fiscal ${hist[0].year} to ${hist[hist.length - 1].year}` : `Fiscal ${hist[0].year}`;
-  return `<section class="sec r-split" id="history" aria-labelledby="history-h">
-    <div class="r-split-text">
-      <div class="sec-head"><h2 id="history-h">Financial history</h2><span class="count">${yearsLabel}</span></div>
-      ${claims.length ? `<p class="sec-lede">${claims.join(" ")}</p>` : ""}
-      <ul class="r-fine-list">${notes.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>
-      ${home === "history" ? noteBox(f.one_time_note) : ""}
-    </div>
-    <div class="table-wrap fh-wrap scrolls"><table class="data r-table fh">
-      <caption class="sr-only">Yearly figures by fiscal year, oldest first</caption>
-      <thead><tr><th scope="col"><span class="sr-only">Figure</span></th>${cols.map((h) => `<th scope="col">${esc(String(h.year))}</th>`).join("")}</tr></thead>
-      <tbody>${rows.map(([k, label]) => `<tr><th scope="row">${label}</th>${(() => { const s = scale(k); return cols.map((h) => cell(h[k], s)).join(""); })()}</tr>`).join("")}</tbody>
-    </table></div>
+  // The figures as small charts, by fiscal year and, where the filings give quarters, by quarter; the table under them
+  // holds every figure.
+  const years = yearCharts(f, cols, has);
+  const quarters = quarterCharts(r);
+  const toggle = years.length && quarters.length ? `<div class="seg fc-toggle" role="group" aria-label="Charts by">
+      <button class="seg-btn" type="button" data-fc="year" aria-pressed="true">By fiscal year</button>
+      <button class="seg-btn" type="button" data-fc="quarter" aria-pressed="false">By quarter</button></div>` : "";
+  const grids = `${years.length ? `<div class="fc-grid" data-fc-grid="year">${years.join("")}</div>` : ""}
+    ${quarters.length ? `<div class="fc-grid" data-fc-grid="quarter"${years.length ? " hidden" : ""}>${quarters.join("")}
+      <p class="fc-more">${(f.quarters || []).some((q) => q.derived && q.revenue != null) ? "A hollow bar is a fourth quarter worked out as the fiscal year's total less its first three quarters, since companies rarely report it on its own. " : ""}Net income and free cash flow are charted by fiscal year only, the way this site reads them from the filings.</p></div>` : ""}`;
+  return `<section class="sec" id="history" aria-labelledby="history-h">
+    <div class="sec-head"><h2 id="history-h">Financials</h2><span class="count">${yearsLabel}</span>${toggle}</div>
+    ${claims.length ? `<p class="sec-lede">${claims.join(" ")}</p>` : ""}
+    ${grids}
+    <ul class="r-fine-list">${notes.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>
+    ${home === "history" ? noteBox(f.one_time_note) : ""}
+    <details class="disclose fh-details"${years.length ? "" : " open"}>
+      <summary>${icon("list-checks", "lead-i")}Every figure by fiscal year, as a table${icon("caret-down", "caret")}</summary>
+      <div class="table-wrap fh-wrap scrolls"><table class="data r-table fh">
+        <caption class="sr-only">Yearly figures by fiscal year, oldest first</caption>
+        <thead><tr><th scope="col"><span class="sr-only">Figure</span></th>${cols.map((h) => `<th scope="col">${esc(String(h.year))}</th>`).join("")}</tr></thead>
+        <tbody>${rows.map(([k, label]) => `<tr><th scope="row">${label}</th>${(() => { const s = scale(k); return cols.map((h) => cell(h[k], s)).join(""); })()}</tr>`).join("")}</tbody>
+      </table></div>
+    </details>
   </section>`;
+}
+
+// ---- Small charts: one figure across fiscal years or quarters ----
+
+// A card with one figure's bars from zero (red below it), its latest value and the change on the one before, an axis of
+// round steps and a label under each bar. `pts`: [{ x, x2, v, name, hollow }], oldest first, v null where there is no
+// figure. `share`: the figure is a share of sales (a margin), so its change is in percentage points. The bars are a
+// picture of the table under the cards, which holds the same figures for keyboards and screen readers.
+function chartCard({ title, period, pts, share = false }) {
+  const withV = pts.filter((p) => p.v != null);
+  if (withV.length < 2) return "";
+  const t = ticks(Math.min(0, ...withV.map((p) => p.v)), Math.max(0, ...withV.map((p) => p.v)));
+  const lo = t[0], hi = t[t.length - 1];
+  const at = (v) => ((v - lo) / (hi - lo)) * 100;
+  const base = at(0);
+  const fmt = (v) => (share ? pct(v, 1) : money(v));
+  const axis = (v) => (share ? `${+(v * 100).toFixed(1)}%` : axisLabel(v, Math.max(Math.abs(lo), hi)));
+  // The latest figure against the one before it: growth where the one before was above zero, points for a margin.
+  const last = withV[withV.length - 1], prev = withV[withV.length - 2];
+  let change = "";
+  if (share) {
+    const d = Math.round(last.v * 1000) / 10 - Math.round(prev.v * 1000) / 10;
+    change = `<span class="${signClass(d)}">${d > 0 ? "+" : ""}${d.toFixed(1)} pts</span> vs ${esc(prev.short)}`;
+  } else if (prev.v > 0) {
+    const g = last.v / prev.v - 1;
+    change = `<span class="${signClass(asShown(g, 1))}">${pct(g, 1, true)}</span> vs ${esc(prev.short)}`;
+  }
+  const cols = pts.map((p) => {
+    const label = `<span class="fc-x">${esc(p.x)}${p.x2 ? `<small>${esc(p.x2)}</small>` : ""}</span>`;
+    if (p.v == null) return `<div class="fc-col blank" title="${esc(`${p.name}: no figure`)}"><div class="fc-area"><span class="fc-na">n/a</span></div>${label}</div>`;
+    const bar = `--base:${base.toFixed(2)}%;--h:${Math.abs(at(p.v) - base).toFixed(2)}%`;
+    return `<div class="fc-col${p.hollow ? " hollow" : ""}" title="${esc(`${p.name}: ${fmt(p.v)}`)}"><div class="fc-area"><div class="fc-bar${p.v < 0 ? " neg" : ""}" style="${bar}"></div></div>${label}</div>`;
+  }).join("");
+  const grid = t.map((v) => `<span class="fc-line${v === 0 ? " zero" : ""}" style="bottom:${at(v)}%"></span>`).join("");
+  const ax = t.map((v) => `<span style="bottom:${at(v)}%">${axis(v)}</span>`).join("");
+  const said = `${title}, ${period.toLowerCase()}: ${withV.map((p) => `${p.name} ${fmt(p.v)}`).join(", ")}`;
+  return `<figure class="fc">
+    <figcaption class="fc-head"><span class="fc-t">${esc(title)}</span><span class="fc-p">${esc(period)}</span></figcaption>
+    <p class="fc-now"><b class="${last.v < 0 ? "down" : ""}">${fmt(last.v)}</b><span class="fc-of">${esc(last.short)}</span>${change ? `<span class="fc-chg">${change}</span>` : ""}</p>
+    <div class="fc-chart" role="img" aria-label="${esc(said)}">
+      <div class="fc-axis" aria-hidden="true">${ax}</div>
+      <div class="fc-plot" aria-hidden="true"><div class="fc-grids">${grid}</div><div class="fc-cols" style="--n:${pts.length}">${cols}</div></div>
+    </div>
+  </figure>`;
+}
+
+// The cards for each fiscal year, from the same figures as the table: revenue, gross profit, net income, free cash flow,
+// FFO for a REIT, and gross and net margin worked out from them.
+function yearCharts(f, cols, has) {
+  const pt = (c, v) => ({ x: String(c.year), v: v ?? null, name: `Fiscal ${c.year}`, short: `fiscal ${c.year}` });
+  const share = (a, b) => (a != null && b != null && b > 0 ? a / b : null);
+  const cards = [
+    chartCard({ title: "Revenue", period: "By fiscal year", pts: cols.map((c) => pt(c, c.revenue)) }),
+    has("gross_profit") ? chartCard({ title: "Gross profit", period: "By fiscal year", pts: cols.map((c) => pt(c, c.gross_profit)) }) : "",
+    chartCard({ title: "Net income", period: "By fiscal year, as reported", pts: cols.map((c) => pt(c, c.net_income)) }),
+    chartCard({ title: "Free cash flow", period: "By fiscal year", pts: cols.map((c) => pt(c, c.fcf)) }),
+    has("ffo") ? chartCard({ title: "FFO", period: "By fiscal year", pts: cols.map((c) => pt(c, c.ffo)) }) : "",
+    has("gross_profit") ? chartCard({ title: "Gross margin", period: "By fiscal year", share: true, pts: cols.map((c) => pt(c, share(c.gross_profit, c.revenue))) }) : "",
+    chartCard({ title: "Net margin", period: "By fiscal year, as reported", share: true, pts: cols.map((c) => pt(c, share(c.net_income, c.revenue))) }),
+  ].filter(Boolean);
+  return cards;
+}
+
+// The cards for each quarter: revenue, and gross profit and margin where the health check measures a gross margin (not
+// for banks, insurers, other financial companies and REITs). A fourth quarter worked out from the year's total less its
+// first three is drawn hollow, as in "Revenue by quarter".
+function quarterCharts(r) {
+  const f = r.fundamentals;
+  const qs = f && Array.isArray(f.quarters) ? f.quarters : [];
+  if (f?.sales_doubt || !qs.some((q) => q.revenue > 0)) return [];
+  const gross = (r.health || []).flatMap((g) => g.bars).some((b) => b.key === "gross_margin") && qs.some((q) => q.gross_profit != null);
+  // Each bar is labeled with its fiscal quarter, and the calendar year under the first quarter that ends in a new one.
+  const series = (fn) => qs.map((q, i) => ({
+    x: q.fiscal_quarter ? `Q${q.fiscal_quarter}` : "", x2: i === 0 || q.end.slice(0, 4) !== qs[i - 1].end.slice(0, 4) ? q.end.slice(0, 4) : "",
+    v: fn(q) ?? null, name: quarterName(q), short: `${monthYear(q.end)} quarter`, hollow: q.derived,
+  }));
+  return [
+    chartCard({ title: "Revenue", period: "By quarter", pts: series((q) => q.revenue) }),
+    gross ? chartCard({ title: "Gross profit", period: "By quarter", pts: series((q) => q.gross_profit) }) : "",
+    gross ? chartCard({ title: "Gross margin", period: "By quarter", share: true, pts: series((q) => (q.gross_profit != null && q.revenue > 0 ? q.gross_profit / q.revenue : null)) }) : "",
+  ].filter(Boolean);
 }
 
 // ---- Health check ----
@@ -924,7 +1048,7 @@ function notesSection(r, meta, home) {
       : f ? `Financials from fiscal year ${esc(String(f.fiscal_year))}${f.fiscal_year_end ? ` (ended ${esc(fullDate(f.fiscal_year_end))})` : ""}.${f.balance_as_of ? ` Balance sheet as of ${esc(fullDate(f.balance_as_of))}.` : ""} Source: SEC filings.` : "",
     f?.revenue_source ? revenueSource(f) : "",
     r.peer_group && !r.peer_basis ? `Compared with ${esc(String(r.peer_count))} other US-listed companies in ${esc(r.peer_group)}.` : "",
-    meta?.market_date ? `Prices and data as of ${esc(fullDate(meta.market_date))}.` : "",
+    meta?.market_date ? `${esc(closeWords(meta))}; data as of ${esc(fullDate(meta.market_date))}.` : "",
     "Educational estimates only. Not investment advice.",
   ].filter(Boolean);
   return `<section class="sec r-notes" aria-labelledby="notes-h">
@@ -943,20 +1067,28 @@ function header(r, meta) {
       <p class="r-where">${r.exchange ? `<span>${esc(r.exchange)}</span>` : ""}${where ? `<span>${where}</span>` : ""}${r.screener === true ? `<a class="tag tag-up r-pass" href="${href}">${icon("check")}Passes the screener</a>` : ""}</p>
     </div>
     <dl class="proof-line r-proof" aria-label="Price and size">
-      <div class="r-px"><dt>share price</dt><dd>${price(r.price)}</dd></div>
+      <div class="r-px"><dt>${r.price_day && meta?.price_date && r.price_day !== meta.price_date ? `share price, last traded ${esc(longDate(r.price_day))}` : "share price"}</dt><dd>${price(r.price)}</dd></div>
+      ${r.day_change != null && meta?.price_date ? `<div><dt>on ${esc(longDate(meta.price_date))}</dt><dd class="${signClass(Number((r.day_change * 100).toFixed(2)))}">${pct(r.day_change, 2, true)}</dd></div>` : ""}
+      ${r.volume != null && meta?.price_date ? `<div><dt>shares traded</dt><dd>${volumeShort(r.volume)}</dd></div>` : ""}
       <div><dt>market value</dt><dd>${money(r.mcap)}</dd></div>
-      ${meta?.market_date ? `<div class="r-asof"><dt>data as of</dt><dd>${esc(fullDate(meta.market_date))}</dd></div>` : ""}
     </dl>
+    <p class="source-line r-source" data-source-line></p>
   </header>`;
 }
 
+// Shares traded in a day, shortened.
+function volumeShort(n) {
+  return n >= 1e9 ? `${(n / 1e9).toFixed(2)}B` : n >= 1e6 ? `${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : String(n);
+}
+
 function render(r, sc, meta) {
+  shown = r;
   document.title = `${r.symbol}: ${displayName(r.name)} | ${TITLE}`;
   const home = oneTimeHome(r);
   const parts = [
     ["score", "Screener score", scoreSection(r, sc, meta, home)],
     ["quarters", "Revenue by quarter", quarterSection(r)],
-    ["history", "Financial history", historySection(r, home)],
+    ["history", "Financials", historySection(r, home)],
     ["health", "Health check", healthSection(r, home)],
     ["peers", "Similar companies", peersSection(r)],
     ["insiders", "Insider buying", insiderSection(r)],
@@ -968,6 +1100,7 @@ function render(r, sc, meta) {
       `<a href="#${id}" data-jump="${id}">${label}</a>`).join("")}</nav>
     ${parts.map(([, , html]) => html).join("")}
     ${notesSection(r, meta, home)}`;
+  if (meta) paintDataStatus(meta);
   fitRanges();
 }
 

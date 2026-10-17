@@ -1,19 +1,19 @@
-import { chrome, displayName, esc, icon, load, longDate, money, pct, price, tape, times } from "./common.js";
+import { chrome, closeWords, displayName, esc, icon, load, longDate, money, pct, price, tape, times } from "./common.js";
 import { debtTag, flagDefs as sharedFlagDefs, flagIcons, flagTile, ledger, under } from "./ledger.js";
 
 chrome();
 
 const params = new URLSearchParams(location.search);
-// The table's column sets, each its own view of the same companies.
-const VIEWS = ["overview", "valuation", "financials", "price", "score"];
+// The table's column sets, each its own view of the same companies. "price" was the Trading view's first name.
+const VIEWS = ["overview", "valuation", "financials", "trading", "signals", "score"];
+const viewParam = params.get("view") === "price" ? "trading" : params.get("view");
 // Each sort's order is fixed: a score from best to worst, a ratio from cheapest, a margin from highest.
-const SORT_NAMES = ["score", "ps", "pb", "net_margin", "fcf_yield", "revenue_growth", "drawdown", "analysts", "mcap"];
+const SORT_NAMES = ["score", "ps", "pb", "net_margin", "fcf_yield", "revenue_growth", "drawdown", "analysts", "mcap", "day_change", "volume"];
 const state = {
   f: {}, // each filter in use, by its key (FILTERS below): the id of the option chosen
   sort: SORT_NAMES.includes(params.get("sort")) ? params.get("sort") : "score",
   q: (params.get("q") || "").trim(), // the panel's filter by ticker or company name
-  view: VIEWS.includes(params.get("view")) ? params.get("view") : "overview",
-  group: "descriptive", // the group of filters the panel shows
+  view: VIEWS.includes(viewParam) ? viewParam : "overview",
   open: null,
 };
 const host = document.querySelector("[data-results]");
@@ -40,13 +40,18 @@ const SORTS = {
   drawdown: (a, b) => high(b.drawdown) - high(a.drawdown),
   analysts: (a, b) => low(a.analysts) - low(b.analysts),
   mcap: (a, b) => a.mcap - b.mcap,
+  day_change: (a, b) => high(b.day_change) - high(a.day_change),
+  volume: (a, b) => high(b.volume) - high(a.volume),
 };
 const SORT_DIR = { score: "descending", ps: "ascending", pb: "ascending", net_margin: "descending", fcf_yield: "descending",
-  revenue_growth: "descending", drawdown: "descending", analysts: "ascending", mcap: "ascending" };
+  revenue_growth: "descending", drawdown: "descending", analysts: "ascending", mcap: "ascending", day_change: "descending",
+  volume: "descending" };
 
 // Older data (a screener.json from before a feature) lacks its keys, and the page hides what it can't show.
 const hasPb = () => data.results.some((r) => "pb" in r);
 const hasInsiders = () => data.insiders_checked === true;
+// A figure the data has for at least one company (the day's change, volume and 52-week low came in October 2026).
+const has = (k) => data.results.some((r) => r[k] != null);
 const ofDrawdown = () => pct(data.rules?.out_of_favor_drawdown ?? 0.25, 0);
 const window_ = () => (insiderDays ? `in the last ${insiderDays} days` : "recently");
 
@@ -167,8 +172,7 @@ function wouldShow(key, id) {
   const f = { ...state.f };
   if (id) f[key] = id; else delete f[key];
   if (key === "sector" && f.industry && !FILTERS[1].options(f).some((o) => o.id === f.industry)) delete f.industry;
-  const tests = usable().filter((x) => f[x.key]).map((x) => (x.key === "industry" ? x.options(f) : x.options()).find((o) => o.id === f[x.key])?.test).filter(Boolean);
-  return data.results.filter((r) => queryOk(r) && tests.every((t) => t(r))).length;
+  return countWith(f);
 }
 
 // The panel's filter: a ticker that starts with what is typed, or a company name that contains it.
@@ -187,38 +191,60 @@ function setParam(key, value) {
 function paintReset() {
   if (!data) return;
   resetEl.hidden = !inUse().length && !state.q;
-  // With nothing in use the line under the dropdowns goes, so the list starts higher.
-  document.querySelector(".builder-foot").hidden = resetEl.hidden;
 }
 
-// The panel's dropdowns for the group shown. Each choice counts the companies the list would show if it were picked,
-// with the other filters and the text filter as they are, so a dropdown says what picking it would leave.
+// How many companies the list would show with these filters (by key, the id chosen) and the text filter.
+function countWith(f) {
+  const tests = usable().filter((x) => f[x.key]).map((x) => (x.key === "industry" ? x.options(f) : x.options()).find((o) => o.id === f[x.key])?.test);
+  if (tests.some((t) => !t)) return 0;
+  return data.results.filter((r) => queryOk(r) && tests.every((t) => t(r))).length;
+}
+
+// The sidebar: every filter's dropdown, in its group. Each choice counts the companies the list would show if it were
+// picked, with the other filters and the text filter as they are, so a dropdown says what picking it would leave.
+const GROUPS = ["descriptive", "valuation", "financial", "signals"];
+function field(f) {
+  const opts = f.options();
+  const now = state.f[f.key] || "";
+  return `<div class="ff${now ? " on" : ""}"><label for="f-${f.key}">${esc(f.label)}</label>
+    <select class="select" id="f-${f.key}" data-f="${f.key}"><option value="">${esc(f.any || "Any")} (${wouldShow(f.key, null)})</option>${opts.map((o) =>
+      `<option value="${esc(o.id)}"${o.id === now ? " selected" : ""}>${esc(o.label)}${o.excluded ? "" : ` (${wouldShow(f.key, o.id)})`}</option>`).join("")}</select></div>`;
+}
 function renderFields(focusKey) {
   if (!data) return;
   const el = document.querySelector("[data-fields]");
-  const shown = usable().filter((f) => state.group === "all" || f.group === state.group);
-  el.classList.toggle("all", state.group === "all");
-  el.innerHTML = shown.map((f) => {
-    const opts = f.options();
-    const now = state.f[f.key] || "";
-    return `<div class="ff${now ? " on" : ""}"><label for="f-${f.key}">${esc(f.label)}</label>
-      <select class="select" id="f-${f.key}" data-f="${f.key}"><option value="">${esc(f.any || "Any")} (${wouldShow(f.key, null)})</option>${opts.map((o) =>
-        `<option value="${esc(o.id)}"${o.id === now ? " selected" : ""}>${esc(o.label)}${o.excluded ? "" : ` (${wouldShow(f.key, o.id)})`}</option>`).join("")}</select></div>`;
+  el.innerHTML = GROUPS.map((g) => {
+    const fs = usable().filter((f) => f.group === g);
+    const n = fs.filter((f) => state.f[f.key]).length;
+    return `<section class="fgroup" aria-labelledby="fg-${g}"><h3 id="fg-${g}">${GROUP_NAMES[g]}${n ? `<span class="count">${n}<span class="sr-only"> in use</span></span>` : ""}</h3>${fs.map(field).join("")}</section>`;
   }).join("");
+  const n = inUse().length;
+  document.querySelectorAll("[data-active-count]").forEach((c) => { c.innerHTML = n ? `<span class="sr-only">, </span>${n}<span class="sr-only"> in use</span>` : ""; });
   if (focusKey) el.querySelector(`[data-f="${focusKey}"]`)?.focus();
 }
 
-function renderGroups() {
+// Quick screens: each sets the filters to one ready-made screen, clearing the rest (the text filter stays), and says
+// what it asks. The one the filters match is pressed; filters that match none make a custom screen.
+const PRESETS = () => [
+  { id: "all", label: "All qualifying", f: {}, note: "Every company that passed all eight checks." },
+  { id: "top", label: "Score 60+", f: { score: "60-plus" }, note: "Companies scoring 60 or more of the 100 points." },
+  { id: "deep", label: "Deep value", f: { ps: "under-0.5" }, note: "Priced under half a year's sales: price to sales under 0.5x." },
+  { id: "nodebt", label: "No debt", f: { debt: "none" }, note: "No debt on the latest balance sheet." },
+  ...(hasPb() ? [{ id: "book", label: "Under book value", f: { pb: "under-1" }, note: "Worth less on the market than its book value: shareholders' equity less preferred stock." }] : []),
+  { id: "cash", label: "Cash yield 15%+", f: { cy: "15-plus" }, note: "Free cash flow in the latest fiscal year of 15% or more of market value." },
+  { id: "growth", label: "Sales up 10%+", f: { growth: "10-plus" }, note: "Sales up 10% or more on the year before." },
+  { id: "oof", label: "Out of favor", f: { flag: "out_of_favor" }, note: `Trading ${ofDrawdown()} or more below the 52-week high.` },
+  ...(hasInsiders() ? [{ id: "insiders", label: "Insiders buying", f: { insider: "buying" }, note: `Tier 1 or 2 open-market insider buying ${window_()}: $1 million or more, or a buyer growing their stake by 20% or more.` }] : []),
+];
+const sameFilters = (a, b) => Object.keys(a).length === Object.keys(b).length && Object.keys(a).every((k) => a[k] === b[k]);
+function renderPresets() {
   if (!data) return;
-  const used = inUse();
-  document.querySelectorAll("[data-group]").forEach((b) => {
-    const g = b.dataset.group;
-    const n = g === "all" ? used.length : used.filter((f) => f.group === g).length;
-    b.setAttribute("aria-pressed", String(g === state.group));
-    b.querySelector("[data-group-count]").innerHTML = n ? `<span class="sr-only">, </span>${n}<span class="sr-only"> in use</span>` : "";
-  });
-  const all = document.querySelector("[data-active-count]");
-  all.innerHTML = used.length ? `<span class="sr-only">, </span>${used.length}<span class="sr-only"> in use</span>` : "";
+  const el = document.querySelector("[data-presets]");
+  const list = PRESETS();
+  const on = list.find((p) => sameFilters(p.f, state.f));
+  el.innerHTML = list.map((p) => { const n = countWith(p.f); return `<button class="pill" type="button" data-preset="${p.id}" aria-pressed="${p === on}">${esc(p.label)}<span class="count"><span class="sr-only">, </span>${n}<span class="sr-only"> ${n === 1 ? "company" : "companies"}</span></span></button>`; }).join("");
+  const n = inUse().length;
+  document.querySelector("[data-preset-note]").textContent = on ? on.note : `A custom screen of ${n} ${n === 1 ? "filter" : "filters"}.`;
 }
 
 // The filters in use as chips, each removed by its own button, the text filter's last.
@@ -235,8 +261,8 @@ function renderChips() {
   paintReset();
 }
 
-// After any filter changes: the dropdowns' counts, the chips, the groups' counts and the table. A filter the change
-// left without an answer (an industry outside the sector just chosen) is dropped, and the count line says so.
+// After any filter changes: the dropdowns' counts, the quick screens, the chips and the table. A filter the change left
+// without an answer (an industry outside the sector just chosen) is dropped, and the count line says so.
 let droppedNote = "";
 function refresh(focusKey) {
   const dropped = validate();
@@ -244,7 +270,7 @@ function refresh(focusKey) {
     `. The industry filter (${esc(v)}) was cleared, since no company on the list in ${esc(state.f.sector || "any sector")} is in it.`).join("");
   state.open = null;
   renderFields(focusKey);
-  renderGroups();
+  renderPresets();
   renderChips();
   renderTable();
 }
@@ -255,7 +281,7 @@ function setFilter(key, id) {
 }
 
 function setSort(key) {
-  if (!SORTS[key] || (key === "pb" && !hasPb())) return;
+  if (!SORTS[key] || (key === "pb" && !hasPb()) || (key === "day_change" && !has("day_change")) || (key === "volume" && !has("volume"))) return;
   state.sort = key;
   state.open = null;
   sortEl.value = key;
@@ -310,10 +336,29 @@ function unverifiedNote() {
 // for its name, and its cell. A figure's color is its sign: emerald when it is up or in the company's favor.
 const sign = (v) => (v == null ? "" : v > 0 ? " up" : v < 0 ? " down" : "");
 const fig = (k, h, label, cell, more = {}) => ({ k, h, label, cell, ...more });
+// The last trading day's volume, in shares, shortened.
+const shares = (n) => (n == null ? "n/a" : n >= 1e9 ? `${(n / 1e9).toFixed(2)}B` : n >= 1e6 ? `${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : String(n));
+// Where the price sits in its 52-week range: the low and high either side of a track, a dot at the price.
+function rangeBar(r) {
+  if (r.low52 == null || r.high52 == null || !(r.high52 > r.low52)) return "n/a";
+  const f = Math.max(0, Math.min(1, (r.price - r.low52) / (r.high52 - r.low52)));
+  return `<span class="range"><span class="r-end">${price(r.low52)}</span><span class="r-track" role="img" aria-label="${esc(`Price ${price(r.price)}, ${Math.round(f * 100)}% of the way from the 52-week low to the high`)}"><span class="r-dot" style="--f:${f.toFixed(3)}"></span></span><span class="r-end">${price(r.high52)}</span></span>`;
+}
+const dayDate = () => (meta?.price_date ? ` (${longDate(meta.price_date)})` : "");
+const shortDay = (iso) => new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 const C = {
+  score: { k: "score", h: "Score", sort: "score", txt: true },
   flags: fig("flags", "Flags", null, (r) => flags(r), { txt: true }),
   mcap: fig("mcap", "Market value", "Value", (r) => money(r.mcap), { sort: "mcap", cls: () => " ink" }),
-  price: fig("price", "Price", "Price", (r) => price(r.price)),
+  // A stock whose last close is from before the prices' day says the day beside its price.
+  price: fig("price", "Price", "Price", (r) => (r.price_day && meta?.price_date && r.price_day !== meta.price_date
+    ? `${price(r.price)} <span class="faint" title="${esc(`Last traded ${longDate(r.price_day)}`)}">${esc(shortDay(r.price_day))}</span>` : price(r.price)),
+  { title: "The latest close; a date beside a price means the stock last traded that day" }),
+  chg: fig("chg", "Day change", "Day", (r) => (r.day_change == null ? `<span class="faint" title="Not available: its last trade was not on the day of the prices">n/a</span>` : pct(r.day_change, 2, true)),
+    { sort: "day_change", ok: () => has("day_change"), cls: (r) => sign(shownPct(r.day_change, 2)), title: "The price's change on the close before, on the day of the prices" }),
+  vol: fig("vol", "Volume", "Volume", (r) => (r.volume == null ? `<span class="faint" title="Not available: its last trade was not on the day of the prices">n/a</span>` : shares(r.volume)),
+    { sort: "volume", ok: () => has("volume"), title: "Shares traded on the day of the prices" }),
+  range: fig("range", "52-week range", "52-week range", rangeBar, { ok: () => has("low52"), title: "The price between its 52-week low and high" }),
   ps: fig("ps", "P/S", "P/S", (r) => times(r.ps), { sort: "ps", title: "Price to sales: market value over the latest fiscal year's sales" }),
   pb: fig("pb", "P/B", "P/B", (r) => under(r.pb), { sort: "pb", ok: () => hasPb(), title: "Price to book: market value over book value" }),
   book: fig("book", "Book value", "Book", (r) => money(r.book_value), { title: "Shareholders' equity less preferred stock", ok: () => hasPb() }),
@@ -330,19 +375,22 @@ const C = {
   cash: fig("cash", "Cash less debt", "Cash less debt", (r) => money(r.net_cash), { cls: (r) => sign(r.net_cash),
     title: "Cash, short-term investments and long-term securities, less debt" }),
   years: fig("years", "Profitable", "Profitable", (r) => `${r.profitable_years} of ${r.years_checked}`, { title: "Years profitable, without one-time items, of the years checked" }),
-  dd: fig("dd", "Below high", "Below high", (r) => (r.drawdown == null ? "n/a" : pct(r.drawdown, 0)), { sort: "drawdown" }),
-  high: fig("high", "52-week high", "52-wk high", (r) => price(r.high52)),
+  dd: fig("dd", "Below high", "Below high", (r) => (r.drawdown == null ? "n/a" : pct(r.drawdown, 0)), { sort: "drawdown", title: "How far the price is below its 52-week high" }),
   band: fig("band", "Upper band", "Upper band", (r) => price(r.upper_band), { title: "The average of the last 20 weekly closes plus two standard deviations of them" }),
   an: fig("an", "Analysts", "Analysts", (r) => r.analysts ?? "n/a", { sort: "analysts" }),
   ins: fig("ins", "Tier 1 or 2 buying", "Insiders", (r) => (r.insiders ? `Tier ${esc(String(r.insiders.tier))}, ${money(r.insiders.total_value)}` : `<span class="faint">None</span>`),
     { ok: () => hasInsiders(), title: "Open-market insider buying of $1 million or more, or a buyer growing their stake by 20% or more" }),
+  industry: fig("industry", "Industry", "Industry", (r) => `<span class="ind" title="${esc(r.industry || "")}">${esc(r.industry || "n/a")}</span>`, { txt: true }),
 };
-const VIEW_COLUMNS = {
-  overview: ["flags", "mcap", "ps", "pb", "margin", "debt", "cy", "dd", "an"],
-  valuation: ["price", "mcap", "ps", "pb", "book", "sales", "fcf", "cy"],
-  financials: ["sales", "growth", "margin", "reported", "fcf", "debt", "cash", "years"],
-  price: ["price", "high", "dd", "band", "an", "ins", "flags"],
-};
+// Each view's columns, after the rank and the company. The Overview shows the 52-week range where the data has the
+// low, and how far below the high it is where it doesn't.
+const VIEW_COLUMNS = () => ({
+  overview: ["price", "chg", "mcap", "score", "ps", "margin", "cy", has("low52") ? "range" : "dd"],
+  valuation: ["score", "mcap", "ps", "pb", "book", "sales", "fcf", "cy"],
+  financials: ["score", "sales", "growth", "margin", "fcf", "debt", "cash", "years"],
+  trading: ["price", "chg", "vol", "range", "dd", "band", "an"],
+  signals: ["score", "flags", "ins", "dd", "an", "industry"],
+});
 // The score's parts by their key, named as "How the 100-point score works" names them.
 const PART_NAMES = { ps: "Cheap vs. sales", debt: "Debt", margin: "Profit margin", fcf: "Cash generation", growth: "Sales growth",
   small: "Under $2 billion", out_of_favor: "Out of favor", undiscovered: "Few analysts", under_book: "Under book value", insiders_buying: "Insiders buying" };
@@ -356,12 +404,12 @@ function partColumns() {
     return p ? `<b>${pts(p.points)}</b><span class="of">/${esc(String(p.max))}</span>` : "n/a";
   }, { cls: (r) => (r.score_parts.find((x) => x.key === p0.key)?.points ? "" : " zero"), part: true }));
 }
+const viewHasFlags = () => (VIEW_COLUMNS()[state.view] || []).includes("flags");
 
 const columns = () => [
   { k: "rank", h: `<span class="sr-only">Rank</span>#` },
   { k: "co", h: "Company", txt: true },
-  { k: "score", h: "Score", sort: "score", txt: true },
-  ...(state.view === "score" ? partColumns() : VIEW_COLUMNS[state.view].map((k) => C[k]).filter((c) => !c.ok || c.ok())),
+  ...(state.view === "score" ? [C.score, ...partColumns()] : VIEW_COLUMNS()[state.view].map((k) => C[k]).filter((c) => !c.ok || c.ok())),
   { k: "go", h: `<span class="sr-only">Report</span>` },
 ];
 
@@ -387,7 +435,7 @@ function row(r, i, cols) {
       case "flags": return `<td class="txt c-flags">${flags(r)}</td>`;
       default: {
         const tip = c.tip ? c.tip(r) : "";
-        return `<td class="c-${c.k}${c.cls ? c.cls(r) : ""}"${c.label ? ` data-label="${esc(c.label)}"` : ""}${tip ? ` title="${esc(tip)}"` : ""}>${c.cell(r)}</td>`;
+        return `<td class="c-${c.k}${c.txt ? " txt" : ""}${c.cls ? c.cls(r) : ""}"${c.label ? ` data-label="${esc(c.label)}"` : ""}${tip ? ` title="${esc(tip)}"` : ""}>${c.cell(r)}</td>`;
       }
     }
   }).join("")}</tr>`;
@@ -399,18 +447,20 @@ function renderStatus(rows) {
   const checked = data.sectors.reduce((a, s) => a + (s.checked || 0), 0);
   const items = ["Latest fiscal year and balance sheet", "US dollars",
     `${rows.length} of ${data.results.length} ${data.results.length === 1 ? "row" : "rows"}${checked ? `, ${checked.toLocaleString("en-US")} stocks checked` : ""}`,
-    meta?.market_date ? `Prices from ${longDate(meta.market_date)}` : null].filter(Boolean);
+    meta?.market_date ? closeWords(meta) : null, "End of day, not live"].filter(Boolean);
   el.innerHTML = items.map((t) => `<li>${esc(t)}</li>`).join("");
   el.hidden = false;
 }
 
 // The notes under the table: what its figures mean in the view shown.
 function tableNote() {
+  const day = has("day_change") ? ` Day change and volume are for the day of the prices${dayDate()}, from the same Yahoo Finance quote as the price; n/a for a stock that didn't trade that day.` : "";
   const notes = {
-    overview: `Open a row to see how its score adds up and its figure for each rule. Cash yield is free cash flow as a share of market value.${hasPb() ? " Price to book is market value over book value: shareholders' equity less preferred stock." : ""}`,
-    valuation: `Sales and free cash flow are the latest fiscal year's. Cash yield is free cash flow as a share of market value.${hasPb() ? " Book value is shareholders' equity less preferred stock." : ""}`,
-    financials: "Sales, growth, margins and free cash flow are the latest fiscal year's. Net margin leaves out one-time items; reported margin counts them. Cash less debt is cash, short-term investments and long-term securities less debt, from the latest balance sheet.",
-    price: `Prices are the last close. The upper band is the average of the last 20 weekly closes plus two standard deviations of them.${hasInsiders() ? ` Tier 1 or 2 buying is open-market buying by insiders ${esc(window_())}: $1 million or more, or a buyer growing their stake by 20% or more.` : ""}`,
+    overview: `Open a row to see how its score adds up and its figure for each rule. Cash yield is free cash flow as a share of market value.${day}`,
+    valuation: `Sales and free cash flow are the latest fiscal year's. Cash yield is free cash flow as a share of market value.${hasPb() ? " Price to book is market value over book value: shareholders' equity less preferred stock." : ""}`,
+    financials: "Sales, growth, margins and free cash flow are the latest fiscal year's. Net margin leaves out one-time items (hover it for the reported margin). Cash less debt is cash, short-term investments and long-term securities less debt, from the latest balance sheet.",
+    trading: `Prices are the last close.${day} The upper band is the average of the last 20 weekly closes plus two standard deviations of them.`,
+    signals: `Flags are context: none of them keeps a company off the list.${hasInsiders() ? ` Tier 1 or 2 buying is open-market buying by insiders ${esc(window_())}: $1 million or more, or a buyer growing their stake by 20% or more.` : ""}`,
     score: "Each part's points out of its most. The parts add up to the score; open a row to see what each was measured on.",
   };
   return `<p class="table-note">${notes[state.view]}</p>`;
@@ -434,9 +484,10 @@ function renderTable() {
     : state.f.sector ? `<b>${rows.length}</b> of ${sec?.checked ?? 0} ${esc(state.f.sector)} stocks passed every check`
     : `<b>${rows.length}</b> ${rows.length === 1 ? "company" : "companies"} passed every check`) + droppedNote;
   droppedNote = "";
-  document.querySelector("[data-matches]").innerHTML = sec?.excluded ? "Not screened" : `<b>${rows.length}</b> ${rows.length === 1 ? "match" : "matches"}`;
   // The flag icons' legend sits on the count's line, beside the table it explains, in the views that show flags.
-  document.querySelector("[data-result-meta]").innerHTML = rows.length && !sec?.excluded && VIEW_COLUMNS[state.view]?.includes("flags") ? flagLegend() : "";
+  const legend = document.querySelector("[data-result-meta]");
+  legend.innerHTML = rows.length && !sec?.excluded && viewHasFlags() ? flagLegend() : "";
+  legend.hidden = !legend.innerHTML;
   renderStatus(sec?.excluded ? [] : rows);
   after.innerHTML = "";
 
@@ -729,12 +780,11 @@ function explainRules() {
 const STATED_WEIGHTS = { ps: 15, debt: 20, margin: 15, fcf: 10, growth: 10, small: 5, out_of_favor: 5, undiscovered: 5, under_book: 10, insiders_buying: 5 };
 
 function renderProof(meta) {
-  // The claim carries its own proof: how many of the stocks checked passed all eight rules. The pipeline counts one per
-  // listing, so a company with two share classes is checked twice: "stocks", not "companies".
+  // The page's figures: how many of the stocks checked passed all eight rules. The pipeline counts one per listing, so
+  // a company with two share classes is checked twice: "stocks", not "companies".
   const checked = data.sectors.reduce((a, s) => a + (s.checked || 0), 0);
   const n = data.results.length;
-  if (checked) document.querySelector("[data-claim]").textContent = `${n.toLocaleString("en-US")} of ${checked.toLocaleString("en-US")} stocks pass all eight quality checks`;
-  document.querySelector("[data-proof-date]").textContent = meta?.market_date ? longDate(meta.market_date) : "n/a";
+  document.querySelector('[data-stat="pass"]').innerHTML = checked ? `${n.toLocaleString("en-US")}<span class="of"> of ${checked.toLocaleString("en-US")}</span>` : n.toLocaleString("en-US");
   // The screen at a glance, from the data: its market value limit (screener.RULES) and today's top score.
   const cap = data.rules?.max_mcap;
   if (cap) document.querySelector('[data-stat="mcap"]').textContent = `Under ${cap % 1e9 === 0 ? `$${cap / 1e9}B` : money(cap)}`;
@@ -742,7 +792,7 @@ function renderProof(meta) {
   document.querySelector('[data-stat="top"]').textContent = n ? String(top) : "None";
   const src = document.querySelector("[data-sources-date]");
   if (src && meta?.market_date) {
-    src.textContent = `The latest update read SEC filings through ${longDate(meta.last_filing_day || meta.market_date)}, with prices from ${longDate(meta.market_date)}.`;
+    src.textContent = `The latest update read SEC filings through ${longDate(meta.last_filing_day || meta.market_date)}. ${closeWords(meta)}.`;
   }
 }
 
@@ -755,7 +805,7 @@ filterEl.addEventListener("input", () => {
     state.q = filterEl.value.trim();
     state.open = null;
     setParam("q", state.q || null);
-    if (data) { renderFields(); renderChips(); renderTable(); }
+    if (data) { renderFields(); renderPresets(); renderChips(); renderTable(); }
   }, 120);
 });
 filterEl.addEventListener("keydown", (e) => { if (e.key === "Escape" && filterEl.value) { e.preventDefault(); clearFilter(); } });
@@ -763,7 +813,7 @@ function clearFilter() {
   filterEl.value = "";
   state.q = "";
   setParam("q", null);
-  if (data) { renderFields(); renderChips(); renderTable(); }
+  if (data) { renderFields(); renderPresets(); renderChips(); renderTable(); }
 }
 host.addEventListener("click", (e) => { if (e.target.closest("[data-clear-filter]")) { clearFilter(); filterEl.focus(); } });
 
@@ -802,13 +852,17 @@ document.querySelector("[data-chips]").addEventListener("click", (e) => {
   // Keyboard focus moves to the chip beside the one removed, or to the text filter when none is left.
   ((key && document.querySelector(`[data-remove="${key}"]`)) || filterEl).focus();
 });
-document.querySelector("[data-groups]").addEventListener("click", (e) => {
-  const b = e.target.closest("[data-group]");
+// A quick screen replaces the filters with its own (the text filter stays).
+document.querySelector("[data-presets]").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-preset]");
   if (!b || !data) return;
-  state.group = b.dataset.group;
-  renderGroups();
-  renderFields();
+  const p = PRESETS().find((x) => x.id === b.dataset.preset);
+  if (!p) return;
+  for (const f of FILTERS) setFilter(f.key, p.f[f.key] || null);
+  refresh();
+  document.querySelector(`[data-preset="${p.id}"]`)?.focus();
 });
+// Under 1440px the sidebar folds into a panel over the list, opened by its button.
 const toggleEl = document.querySelector("[data-builder-toggle]");
 toggleEl.addEventListener("click", () => {
   const open = !builder.classList.contains("open");
@@ -838,9 +892,11 @@ Promise.all([load("screener.json"), load("meta.json").catch(() => null)]).then((
   insiderDays = m?.insider_days ?? null;
   insiderPending = m?.insider_pending?.length ?? 0;
   if (insiderDays) document.querySelectorAll("[data-window]").forEach((el) => { el.textContent = insiderDays; });
-  if (!hasPb()) {
-    document.querySelector("[data-needs-pb]")?.remove();
-    if (state.sort === "pb") state.sort = "score";
+  // Sorts by a figure the data lacks leave the menu, and a link asking for one sorts by score.
+  for (const [k, ok] of [["pb", hasPb()], ["day_change", has("day_change")], ["volume", has("volume")]]) {
+    if (ok) continue;
+    sortEl.querySelector(`option[value="${k}"]`)?.remove();
+    if (state.sort === k) state.sort = "score";
   }
   // The filters a link carries (screener.html?sector=Technology&insider=buying), each checked against today's data.
   for (const f of FILTERS) {
@@ -848,8 +904,6 @@ Promise.all([load("screener.json"), load("meta.json").catch(() => null)]).then((
     if (v) state.f[f.key] = v;
   }
   validate();
-  // The panel opens on the group of the first filter in use.
-  state.group = inUse()[0]?.group || "descriptive";
   sortEl.value = state.sort;
   paintViews();
   renderProof(m);

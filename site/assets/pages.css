@@ -1,13 +1,12 @@
 /* Tool pages: the screener and the insider buying page. */
 
-/* ---- The screener's head: the claim with the screen in four figures beside it (value above, name below, one frame
-   split by hairline seams), the lede under both. On a phone the data date joins the figures (app.css .proof-date).
-   ---- */
-.claim-head.screen-head { align-items: center; gap: 10px 40px; padding: 20px 0 14px; }
-.screen-head h1 { grid-column: 1; grid-row: 1; }
-.screen-head .lede { grid-column: 1 / -1; grid-row: 2; max-width: none; }
-.claim-head.screen-head .stat-strip { grid-column: 2; grid-row: 1; }
-@media (max-width: 1180px) { .claim-head.screen-head .stat-strip { grid-column: 1 / -1; grid-row: 3; justify-self: start; } }
+/* ---- A tool page's head: its title, what it does and where its figures come from and when, the day's figures on the
+   right (value above, name below, one frame split by hairline seams). The screener runs wider than the other pages,
+   its filters in a sidebar beside the list. ---- */
+.wide-page { --wrap: 1520px; }
+.tool-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 16px 40px; padding: 28px 0 22px; }
+.tool-title .lede { margin-top: 8px; font-size: 15px; max-width: 92ch; }
+@media (max-width: 960px) { .tool-head { grid-template-columns: minmax(0, 1fr); padding: 22px 0 18px; } }
 .stat-strip {
   display: grid; grid-auto-flow: column; grid-auto-columns: auto; gap: 1px; margin: 0; overflow: hidden;
   border: 1px solid var(--line); border-radius: var(--r-frame); background: var(--line);
@@ -15,127 +14,113 @@
 .stat-strip > div { display: flex; flex-direction: column; gap: 3px; padding: 11px 16px 12px; background: var(--surface); min-width: 0; }
 .stat-strip dt { order: 2; font-size: 12.5px; color: var(--text-3); line-height: 1.3; }
 .stat-strip dd { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
-@media (max-width: 900px) { .stat-strip .proof-date { display: flex !important; } }
-@media (max-width: 860px) { .claim-head.screen-head .stat-strip { justify-self: stretch; grid-auto-columns: minmax(0, 1fr); } }
-@media (max-width: 560px) {
-  .stat-strip { grid-auto-flow: row; grid-template-columns: 1fr 1fr; }
-  .stat-strip > div:last-child:nth-child(odd) { grid-column: 1 / -1; }
-  .stat-strip dd { font-size: 17px; }
+.stat-strip dd .of { font-size: 14px; font-weight: 400; letter-spacing: 0; color: var(--text-3); }
+@media (max-width: 960px) { .stat-strip { justify-self: stretch; grid-auto-columns: minmax(0, 1fr); } }
+@media (max-width: 560px) { .stat-strip dd { font-size: 17px; } .stat-strip > div { padding: 10px 12px; } }
+
+/* ---- Quick screens: ready-made sets of filters as pills with their counts, the chosen one's question under them. ---- */
+.presets { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 16px; }
+.presets .presets-label { font-size: 13px; font-weight: 400; color: var(--text-3); font-stretch: 100%; letter-spacing: 0; }
+.presets-row { gap: 6px; }
+.preset-note { flex-basis: 100%; font-size: 12.5px; color: var(--text-3); }
+@media (max-width: 720px) {
+  .presets { display: grid; gap: 8px; }
+  .presets-row { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding: 3px; margin: -3px; }
+  .presets-row::-webkit-scrollbar { display: none; }
+  .presets-row .pill { flex: none; }
 }
 
-/* ---- The filter panel: a text filter, the groups of dropdowns as a segmented control, the dropdowns for the group
-   chosen (four to a row), and the filters in use as chips. On a phone the dropdowns open from a button. ---- */
-.builder {
-  display: grid; gap: 12px; padding: 12px 14px; margin-bottom: 12px;
+/* ---- The screener's two columns: the filters in a sidebar that stays in view (scrolling inside itself when taller
+   than the screen), the results beside it. Under 1440px, where the list needs the width, the sidebar folds into a panel over it. ---- */
+.screen-app { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 20px; align-items: start; }
+.filters-side {
+  position: sticky; top: calc(var(--nav-h) + 12px); max-height: calc(100vh - var(--nav-h) - 24px); overflow-y: auto;
+  scrollbar-width: thin; display: grid; gap: 12px; align-content: start; padding: 12px;
   border: 1px solid var(--line); border-radius: var(--r-frame); background: var(--surface);
 }
-.builder > * { min-width: 0; }
-.builder-top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
-.table-search { flex: 1 1 260px; min-width: 200px; max-width: 380px; }
-.table-search .input { height: 38px; }
+.side-head { display: flex; align-items: center; gap: 8px; min-height: 28px; }
+.side-head h2 { margin-right: auto; display: inline-flex; align-items: center; gap: 8px; font-size: 15px; font-stretch: 100%; letter-spacing: -0.01em; }
+.side-head .reset { height: 28px; padding: 0 10px; }
+.side-toggle { display: none; height: 28px; padding: 0 10px; }
+/* How many filters are in use: a small solid count in the accent, absent while none is. */
+.side-head h2 .count, .fgroup h3 .count {
+  display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--r-tag);
+  background: var(--accent); color: #ffffff; font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.side-head h2 .count:empty, .fgroup h3 .count:empty { display: none; }
+.table-search { position: relative; min-width: 0; }
+.table-search .input { height: 36px; }
 .table-search .input::-webkit-search-cancel-button { filter: invert(0.6); cursor: pointer; }
-.builder-toggle { display: none; }
-.builder-groups { position: relative; display: flex; gap: 2px; padding: 2px; border: 1px solid var(--line-2); border-radius: var(--r-ctl); }
-.group-btn {
-  display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 11px; border: 0; border-radius: var(--r-tag);
-  background: transparent; color: var(--text-2); font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer;
-  transition: color .15s, background .15s;
-}
-.group-btn:hover { color: var(--text); background: var(--surface-2); }
-.group-btn[aria-pressed="true"] { background: var(--surface-4); color: var(--text); }
-/* How many filters a group has in use: a small solid count, absent while none is. */
-.group-btn .count, .builder-toggle .count {
-  display: inline-grid; place-items: center; min-width: 17px; height: 17px; padding: 0 4px; border-radius: var(--r-tag);
-  background: var(--inverse); color: var(--on-inverse); font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums;
-}
-.group-btn .count:empty, .builder-toggle .count:empty { display: none; }
-.builder-toggle .count { margin-left: 8px; }
-.builder-matches { margin-left: auto; font-size: 13px; color: var(--text-3); white-space: nowrap; }
-.builder-matches b { font-size: 15px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
-.builder-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 14px; }
-.ff { display: grid; gap: 5px; min-width: 0; }
-.ff label { font-size: 12.5px; color: var(--text-3); }
-.ff .select { width: 100%; height: 34px; min-width: 0; text-overflow: ellipsis; }
+.side-body { display: grid; gap: 14px; }
+.fgroup { display: grid; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); min-width: 0; }
+.fgroup h3 { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); }
+.ff { display: grid; gap: 4px; min-width: 0; }
+.ff label { font-size: 12px; line-height: 1.25; color: var(--text-3); }
+.ff .select { width: 100%; height: 32px; min-width: 0; font-size: 12.5px; text-overflow: ellipsis; background-color: var(--bg-raise); }
 .ff.on label { color: var(--text); }
-.ff.on .select { border-color: var(--text-2); background-color: var(--surface-2); }
-.builder-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-height: 28px; }
+.ff.on .select { border-color: var(--accent-text); background-color: var(--accent-dim); }
+@media (max-width: 1439px) {
+  .screen-app { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .filters-side { position: static; max-height: none; overflow: visible; }
+  .side-toggle { display: inline-flex; }
+  .filters-side:not(.open) .side-body { display: none; }
+  .side-body { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px 18px; }
+}
+@media (max-width: 900px) { .side-body { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .side-body { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---- The results: the count, the column views and the sort over the filters in use as chips, then one frame
+   holding the flags' key, the table and a status line saying what its figures are. ---- */
+.results { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; align-content: start; }
+.results-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; min-height: 34px; }
+.results-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.result-count { color: var(--text-2); font-size: 14px; }
+.result-count b { color: var(--text); font-weight: 600; }
 .chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {
-  display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 7px 0 10px; border: 1px solid var(--line-2);
-  border-radius: var(--r-ctl); background: var(--surface-2); color: var(--text); font: inherit; font-size: 12.5px; cursor: pointer;
-  transition: border-color .15s;
+  display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 4px 7px 4px 10px; text-align: left; border: 1px solid var(--accent-line);
+  border-radius: var(--r-ctl); background: var(--accent-dim); color: var(--text); font: inherit; font-size: 12.5px; cursor: pointer;
+  transition: border-color .15s, background .15s;
 }
-.chip-k { color: var(--text-3); }
-.chip .i { font-size: 14px; color: var(--text-3); transition: color .15s; }
-.chip:hover { border-color: var(--line-3); }
+.chip-k { color: var(--accent-text); }
+.chip .i { font-size: 14px; color: var(--text-2); transition: color .15s; }
+.chip:hover { border-color: var(--accent-text); }
 .chip:hover .i { color: var(--text); }
-.chips-none { font-size: 12.5px; color: var(--text-3); }
-.builder-foot .reset { margin-left: auto; height: 28px; }
-@media (max-width: 1000px) { .builder-matches { margin-left: 0; } }
-@media (max-width: 860px) { .builder-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 720px) {
-  .builder { padding: 12px; }
-  .table-search { max-width: none; flex-basis: 100%; }
-  .builder-toggle { display: inline-flex; }
-  .builder-matches { margin-left: auto; }
-  .builder:not(.open) .builder-groups, .builder:not(.open) .builder-fields { display: none; }
-  /* The five groups wrap onto a second line rather than scroll, so none hides and every focus ring shows whole. */
-  .builder-groups { order: 3; flex-basis: 100%; flex-wrap: wrap; }
-  .group-btn { flex: 1 0 auto; justify-content: center; }
-  /* The column views size to their names, so "Financials" stays inside its button. */
-  .grid-bar .seg { grid-auto-columns: auto; }
-  .seg-field { width: 100%; }
-  .seg-field { flex-direction: column; align-items: flex-start; gap: 6px; }
-  .seg { width: 100%; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
-  .seg-btn { min-width: 0; height: auto; min-height: 34px; padding: 4px 6px; white-space: normal; line-height: 1.2; }
-}
-@media (max-width: 480px) { .builder-fields { grid-template-columns: minmax(0, 1fr); } }
-@media (max-width: 400px) { .grid-bar .seg-btn { padding: 4px; font-size: 12.5px; } }
-@media (max-width: 340px) { .grid-bar .seg-btn { padding: 4px 2px; font-size: 12px; } }
-
-/* ---- The results: one frame holding the column views and the sort, the count and the flags' key, the table, and a
-   status line saying what its figures are. ---- */
-.grid-card { border: 1px solid var(--line); border-radius: var(--r-frame); background: var(--surface); }
-.grid-bar {
-  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 9px 12px;
-  border-bottom: 1px solid var(--line); background: var(--bg-raise); border-radius: var(--r-frame) var(--r-frame) 0 0;
-}
-.grid-sub { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; padding: 9px 14px; border-bottom: 1px solid var(--line); }
-.result-count { color: var(--text-2); font-size: 13.5px; }
-.result-count b { color: var(--text); font-weight: 600; }
+/* The frame clips its corners without being a scroll box, so the table's names still stay under the site's header. */
+.grid-card { border: 1px solid var(--line); border-radius: var(--r-frame); background: var(--surface); overflow: clip; }
+.grid-card > .result-meta { padding: 9px 14px; border-bottom: 1px solid var(--line); }
 .result-meta .flag-legend { margin: 0; }
 .grid-card .table-wrap { border: 0; border-radius: 0; background: transparent; }
 .grid-card table.data > thead > tr > th { border-radius: 0; }
 .grid-empty { padding: 32px 20px; }
 .empty-act { margin-top: 14px !important; }
-.grid-status {
-  list-style: none; margin: 0; padding: 8px 12px; display: flex; flex-wrap: wrap; gap: 6px; border-top: 1px solid var(--line);
-  background: var(--bg-raise); border-radius: 0 0 var(--r-frame) var(--r-frame);
-}
+.grid-status { list-style: none; margin: 0; padding: 8px 12px; display: flex; flex-wrap: wrap; gap: 6px; border-top: 1px solid var(--line); background: var(--bg-raise); }
 .grid-status li {
   display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: var(--r-tag);
   background: var(--surface-3); color: var(--text-2); font-size: 12px; font-variant-numeric: tabular-nums;
 }
-@media (max-width: 720px) { .grid-sub { padding: 9px 12px; } }
-
-.flag-legend { margin: 0; }
-@media (max-width: 1000px) {
-  .table-search { max-width: none; flex-basis: 100%; }
-  .sort-field { margin-left: 0; }
-}
 @media (max-width: 720px) {
-  .screen-panel { padding: 12px; }
-  .seg-field { width: 100%; }
-  .quick { flex-direction: column; align-items: flex-start; gap: 6px; }
-  .seg-field { flex-direction: column; align-items: flex-start; gap: 6px; }
-  .seg { width: 100%; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
-  .seg-btn { min-width: 0; height: auto; min-height: 34px; padding: 4px 6px; white-space: normal; line-height: 1.2; }
+  .results-tools { width: 100%; }
+  .results-tools .seg { display: flex; flex-wrap: wrap; width: 100%; }
+  .results-tools .seg-btn { flex: 1 0 auto; }
+}
+/* The insider page's segmented controls stretch across a phone in equal columns, letting their labels wrap. */
+@media (max-width: 720px) {
+  .seg-field { width: 100%; flex-direction: column; align-items: flex-start; gap: 6px; }
+  .seg-field .seg { width: 100%; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+  .seg-field .seg-btn { min-width: 0; height: auto; min-height: 34px; padding: 4px 6px; white-space: normal; line-height: 1.2; }
 }
 
 .flag-legend { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12.5px; color: var(--text-3); }
 .flag-legend li { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
 .flag-legend .flag { width: 18px; height: 18px; }
 .flag-legend .flag .i { width: 12px; height: 12px; }
+
+/* Where the price sits in its 52-week range: the low and the high either side of a short track, a dot at the price. */
+.range { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-3); }
+.r-track { position: relative; width: 44px; height: 4px; border-radius: 2px; background: var(--tape-track); }
+.r-dot { position: absolute; top: 50%; left: calc(var(--f, 0) * 100%); width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: var(--accent-text); box-shadow: 0 0 0 2px var(--surface); }
+.ind { display: inline-block; max-width: 230px; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; color: var(--text-2); }
 
 /* ---- The ranked table: rows 35px tall, a seam between column names, the ticker as a chip beside its name. ---- */
 .screen-table > thead > tr > th { border-right: 1px solid var(--line); }
@@ -152,7 +137,7 @@
 }
 .screen-table > thead > tr > th:not(.txt) { white-space: nowrap; }
 /* The score's parts are named in full, on two lines. */
-.screen-table > thead > tr > th.part { white-space: normal; min-width: 76px; max-width: 110px; }
+.screen-table > thead > tr > th.part { white-space: normal; min-width: 72px; max-width: 110px; }
 /* The Score view shows each part's points, so the score is its number alone there and the name gives way to the parts. */
 .view-score .score .tape { display: none; }
 .screen-table.view-score td.c-score { min-width: 0; }
@@ -184,8 +169,8 @@
 .row-toggle .caret { font-size: 14px; color: var(--text-3); transition: transform .2s var(--ease), color .15s; }
 .row-toggle[aria-expanded="true"] .caret { transform: rotate(90deg); color: var(--text); }
 .screen-table .co { max-width: 250px; }
-.screen-table .co .nm { max-width: 170px; }
-.screen-table .score .tape { width: 96px; }
+.screen-table .co .nm { max-width: 150px; }
+.screen-table .score .tape { width: 72px; }
 .screen-table td.c-score { min-width: 140px; }
 .go { display: inline-grid; place-items: center; width: 26px; height: 26px; vertical-align: middle; border-radius: var(--r-ctl); color: var(--text-3); }
 .go:hover { color: var(--text); background: var(--surface-4); }
@@ -244,6 +229,7 @@
   .screen-table td[data-label] { font-size: 13px; }
   .screen-table td[data-label]::before { content: attr(data-label); display: block; font-size: 11px; line-height: 1.3; color: var(--text-3); margin-bottom: 2px; white-space: normal; }
   .screen-table tr.row > td.c-go { display: none; }
+  .screen-table td.c-range { grid-column: span 2; }
   .screen-table td .tag { height: 19px; padding: 0 5px; font-size: 11.5px; }
   .screen-table tr.detail, .screen-table tr.detail > td { display: block; }
 }

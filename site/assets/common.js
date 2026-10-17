@@ -25,8 +25,8 @@ export const icon = (name, cls = "") =>
 export const BRAND = "TFA";
 export const BRAND_LONG = "Ticker Finder Analysis";
 export const markSvg = (cls = "brand-mark") => `<svg class="${cls}" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
-  <rect width="32" height="32" rx="7" fill="#e8ecf2"/><rect x="5.5" y="13" width="10" height="6" rx="1.5" fill="#090d14"/>
-  <rect x="17" y="13" width="5.5" height="6" rx="1.5" fill="#090d14"/><rect x="24" y="13" width="2.5" height="6" rx="1.25" fill="#090d14" fill-opacity=".32"/></svg>`;
+  <rect width="32" height="32" rx="7" fill="#2563eb"/><rect x="5.5" y="13" width="10" height="6" rx="1.5" fill="#ffffff"/>
+  <rect x="17" y="13" width="5.5" height="6" rx="1.5" fill="#ffffff"/><rect x="24" y="13" width="2.5" height="6" rx="1.25" fill="#ffffff" fill-opacity=".4"/></svg>`;
 
 // Rounds down, so $9,999,999 reads $9.9M and never looks like it crossed a $10M threshold.
 export function money(n, { digits } = {}) {
@@ -139,7 +139,7 @@ export function chrome({ search = true } = {}) {
       <a class="brand" href="./" aria-label="${BRAND}, ${BRAND_LONG}, home">${markSvg()}<span class="brand-name">${BRAND}</span><span class="brand-long">${BRAND_LONG}</span></a>
       <nav class="nav-links" aria-label="Tools">${NAV.map(([h, l]) =>
         `<a href="${h}"${h.replace(/\.html$/, "") === here ? ' aria-current="page"' : ""}>${l}</a>`).join("")}</nav>
-      <div class="nav-end"><span class="nav-meta" data-updated></span>${search ? searchMarkup("nav-search", "Search a ticker", { compact: true }) : ""}</div></div>`;
+      <div class="nav-end"><span class="data-status" data-updated></span>${search ? searchMarkup("nav-search", "Search a ticker", { compact: true }) : ""}</div></div>`;
     const form = nav.querySelector("form");
     if (form) attachSearch(form);
   }
@@ -156,9 +156,54 @@ export function chrome({ search = true } = {}) {
       <nav aria-label="Footer">${NAV.map(([h, l]) => `<a href="${h}">${l}</a>`).join("")}<a href="index.html#method">How it works</a></nav>
     </div>`;
   }
-  load("meta.json").then((m) => {
-    document.querySelectorAll("[data-updated]").forEach((el) => { el.textContent = `Data as of ${longDate(m.market_date)}`; });
-  }).catch(() => {});
+  load("meta.json").then(paintDataStatus).catch(() => {
+    document.querySelectorAll("[data-source-line]").forEach((el) => { el.textContent = "The data's date could not be loaded."; });
+  });
+}
+
+// What the data is, from meta.json: end-of-day prices from one trading day (price_date, the day most quotes closed on)
+// and SEC filings read through a day, refreshed each weekday night, never live. Data from before price_date was recorded
+// names only the update's day, not a close. Data more than STALE_DAYS older than today (a weekend and a holiday are
+// fewer) says how old it is, in the header and in every page's source line.
+const STALE_DAYS = 4;
+export function daysOld(iso) {
+  const [y, m, d] = String(iso).split("-").map(Number);
+  const t = new Date();
+  return Math.round((Date.UTC(t.getFullYear(), t.getMonth(), t.getDate()) - Date.UTC(y, m - 1, d)) / 864e5);
+}
+// When the update that built the data finished, in New York time, as the SEC's filing day is.
+export function updatedAt(m) {
+  const d = m?.generated_at ? new Date(m.generated_at) : null;
+  if (!d || Number.isNaN(d.getTime())) return null;
+  return `${d.toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })} ET`;
+}
+// "Closing prices as of" the prices' day: each stock's latest close on or before it (one that didn't trade that day keeps
+// its last, and its row says when). Older data, without price_date, names only the update's day.
+export const closeWords = (m) => (m?.price_date ? `Closing prices as of ${longDate(m.price_date)}` : m?.market_date ? `Prices as of the update of ${longDate(m.market_date)}` : "Prices as of the latest update");
+// How long ago the update ran, in whole days, or null without its time.
+function updateAge(m) {
+  const d = m?.generated_at ? new Date(m.generated_at) : null;
+  return d && !Number.isNaN(d.getTime()) ? Math.floor((Date.now() - d.getTime()) / 864e5) : null;
+}
+export function paintDataStatus(m) {
+  if (!m?.market_date) return;
+  const day = longDate(m.price_date || m.market_date);
+  const filed = longDate(m.last_filing_day || m.market_date);
+  const at = updatedAt(m);
+  // Stale when the update itself hasn't run for longer than a weekend and a holiday, whatever day the prices are from.
+  const age = updateAge(m);
+  const stale = age != null && age > STALE_DAYS;
+  const title = `End-of-day data, not live. ${closeWords(m)}; SEC filings read through ${filed}.${at ? ` Updated ${at}.` : ""} Refreshed each weekday night.`;
+  document.querySelectorAll("[data-updated]").forEach((el) => {
+    el.classList.toggle("stale", stale);
+    el.title = title;
+    el.innerHTML = stale ? `${icon("warning")}Updated ${age} days ago` : `<span class="ds-dot" aria-hidden="true"></span>${m.price_date ? `Prices as of ${esc(day)}` : `Data as of ${esc(day)}`}`;
+  });
+  document.querySelectorAll("[data-source-line]").forEach((el) => {
+    el.innerHTML = [stale ? `<span class="stale-note">${icon("warning")}Last updated ${age} days ago. The nightly update may not have run since.</span>` : "",
+      `<span>${esc(closeWords(m))}</span>`, `<span>SEC filings through ${esc(filed)}</span>`,
+      at ? `<span>Updated ${esc(at)}</span>` : "", `<span>End of day, not live</span>`].filter(Boolean).join("");
+  });
 }
 
 // "/" anywhere outside a text field jumps to the header's search.

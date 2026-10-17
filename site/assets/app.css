@@ -1,28 +1,37 @@
 /* TFA design system
-   One cool neutral scale from navy-black to near-white, seams one pixel wide, frames with an 8px corner.
-   Color is a figure's sign and nothing else: emerald for up or in the company's favor, muted red for down or against it.
-   Everything else (flags, tags, the score) stays on the neutral scale, its icon or word carrying the meaning. The
-   primary action is the scale's lightest step, not a hue.
+   One neutral scale from near-black to near-white (dark grays with the faintest cool cast), seams one pixel wide, frames with an 8px corner.
+   One blue accent for what you act on and what is chosen (buttons, links, pressed choices, focus), for what identifies a
+   company in a table, and for the score. Green and red are a figure's sign and nothing else: emerald for up or in the
+   company's favor, muted red for down or against it. Flags and tags stay on the neutral scale, their icon or word
+   carrying the meaning.
    Type: Archivo, a grotesque with true tabular figures, at two weights (400, 600); headings set a little condensed, tickers
    in its semibold. */
 
 :root {
-  --bg: #090d14;
-  --bg-raise: #0c111a;
-  --surface: #0f1520;
-  --surface-2: #141b28;
-  --surface-3: #1a2232;
-  --surface-4: #222b3d;
-  --line: #1c2433;
-  --line-2: #273042;
-  --line-3: #364156;
-  --text: #e8ecf2;
-  --text-2: #a3adbd;
-  --text-3: #7c879a;
-  --inverse: #e8ecf2;
-  --inverse-hover: #ffffff;
-  --on-inverse: #090d14;
-  --on-inverse-2: #4b5566; /* secondary ink on the inverse fill (a pressed pill's count) */
+  --bg: #0a0a0c;
+  --bg-raise: #101013;
+  --surface: #141417;
+  --surface-2: #1a1a1e;
+  --surface-3: #212126;
+  --surface-4: #2a2a30;
+  --line: #232328;
+  --line-2: #2f2f36;
+  --line-3: #3f3f47;
+  --text: #ededf0;
+  --text-2: #a8a8b1;
+  --text-3: #8a8a94;
+  /* The accent: a fill dark enough for white text (5.2:1), a lighter step for text, icons and rings on the dark
+     grounds, and a tint and an edge for a chosen control. */
+  --accent: #2563eb;
+  --accent-hover: #1d55d0;
+  --accent-text: #7fb0ff;
+  --accent-dim: rgba(59, 130, 246, 0.15);
+  --accent-line: rgba(127, 176, 255, 0.36);
+  /* The primary action's fill is the accent (it was the scale's lightest step). */
+  --inverse: var(--accent);
+  --inverse-hover: var(--accent-hover);
+  --on-inverse: #ffffff;
+  --on-inverse-2: rgba(255, 255, 255, 0.74); /* secondary ink on the accent fill */
   --up: #3fbf8c;
   --up-dim: rgba(63, 191, 140, 0.12);
   --down: #e2706a;
@@ -37,7 +46,9 @@
   --ink-line: rgba(127, 176, 255, 0.24);
   /* The score tape: a part's earned points in the scale's light step, the rest of its slot in the track. */
   --tape: #c3ccda;
-  --tape-track: #2b364b;
+  --tape-track: #2c2c34;
+  /* The score's earned points, in the accent: the tape, the ledger's point bars. */
+  --score: #5b93f0;
   --r-frame: 8px;
   --r-ctl: 6px;
   --r-tag: 4px;
@@ -64,10 +75,13 @@ body {
   text-rendering: optimizeLegibility;
   caret-color: var(--text);
 }
-::selection { background: rgba(195, 204, 218, 0.28); color: #ffffff; }
-:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; border-radius: 3px; }
+::selection { background: rgba(59, 130, 246, 0.35); color: #ffffff; }
+:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; border-radius: 3px; }
 a { color: inherit; text-decoration-color: var(--line-3); text-decoration-thickness: 1px; text-underline-offset: 3px; }
 a:hover { text-decoration-color: var(--text-2); }
+/* A link in running text is the accent; links with a class (rows, tickers, buttons, the brand) set their own color. */
+a:not([class]) { color: var(--accent-text); text-decoration-color: var(--accent-line); }
+a:not([class]):hover { text-decoration-color: var(--accent-text); }
 img, svg { display: block; }
 button, input, select { font: inherit; color: inherit; }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -96,25 +110,39 @@ html { scrollbar-color: var(--surface-4) var(--bg); }
 /* Navigation: the mark and name, the three tools, the data date and a search that opens any report. */
 .nav {
   position: sticky; top: 0; z-index: 20; height: var(--nav-h);
-  background: rgba(9, 13, 20, 0.86);
+  background: rgba(10, 10, 12, 0.86);
   backdrop-filter: saturate(140%) blur(12px);
   -webkit-backdrop-filter: saturate(140%) blur(12px);
   border-bottom: 1px solid var(--line);
 }
-.nav .wrap { display: flex; align-items: center; gap: 24px; height: 100%; }
-.brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; white-space: nowrap; }
-.brand-mark { width: 22px; height: 22px; flex: none; }
-.brand-name { font-weight: 600; font-size: 15px; letter-spacing: -0.01em; }
-.brand-long { color: var(--text-3); font-size: 13px; }
-.nav-links { display: flex; gap: 2px; }
+.nav .wrap { display: flex; align-items: center; gap: 28px; height: 100%; }
+.brand { display: inline-flex; align-items: center; gap: 10px; color: var(--text); text-decoration: none; white-space: nowrap; }
+.brand-mark { width: 24px; height: 24px; flex: none; }
+.brand-name { font-weight: 600; font-size: 16px; letter-spacing: -0.01em; }
+.brand-long { color: var(--text-3); font-size: 13px; padding-left: 10px; border-left: 1px solid var(--line-2); line-height: 16px; }
+/* The tools fill the header's height, the current one underlined in the accent along its bottom edge. */
+.nav-links { display: flex; gap: 4px; align-self: stretch; }
 .nav-links a {
-  text-decoration: none; color: var(--text-2); padding: 6px 10px; border-radius: var(--r-ctl); font-size: 14px;
-  transition: color .15s, background .15s; white-space: nowrap;
+  display: flex; align-items: center; padding: 0 10px; text-decoration: none; color: var(--text-2); font-size: 14px;
+  box-shadow: inset 0 -2px 0 transparent; transition: color .15s, box-shadow .15s; white-space: nowrap;
 }
-.nav-links a:hover { color: var(--text); background: var(--surface-2); }
-.nav-links a[aria-current="page"] { color: var(--text); background: var(--surface-3); }
-.nav-end { margin-left: auto; display: flex; align-items: center; gap: 16px; }
+.nav-links a:hover { color: var(--text); box-shadow: inset 0 -2px 0 var(--line-3); }
+.nav-links a[aria-current="page"] { color: var(--text); box-shadow: inset 0 -2px 0 var(--accent-text); }
+.nav-links a:focus-visible { outline-offset: -4px; }
+.nav-end { margin-left: auto; display: flex; align-items: center; gap: 14px; }
 .nav-meta { font-size: 13px; color: var(--text-3); white-space: nowrap; }
+/* What the data is: end-of-day figures from a date, never live. Stale data says how old it is, in the warning's red. */
+.data-status {
+  display: inline-flex; align-items: center; gap: 7px; height: 28px; padding: 0 10px; border-radius: var(--r-ctl);
+  border: 1px solid var(--line-2); color: var(--text-2); font-size: 12.5px; white-space: nowrap; cursor: default;
+}
+.data-status .ds-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-text); flex: none; }
+/* Stale data: the words stay neutral and only the warning's icon is red, as on the warning flag. */
+.data-status.stale { color: var(--text); border-color: var(--line-3); }
+.data-status .i { font-size: 13px; color: var(--down); }
+.stale-note { color: var(--text); }
+.stale-note .i { color: var(--down); }
+.data-status:empty { display: none; }
 .nav-search { width: 260px; }
 .nav-search .input { height: 34px; font-size: 13.5px; padding-left: 34px; padding-right: 34px; background: var(--surface); }
 .nav-search .field > .i { left: 11px; font-size: 15px; }
@@ -124,15 +152,16 @@ html { scrollbar-color: var(--surface-4) var(--bg); }
 }
 .nav-search .input:focus + kbd, .nav-search .input:not(:placeholder-shown) + kbd { display: none; }
 @media (max-width: 1100px) { .brand-long { display: none; } .nav-search { width: 200px; } }
-@media (max-width: 900px) { .nav-meta { display: none; } }
+@media (max-width: 900px) { .nav-meta, .data-status { display: none; } }
 @media (max-width: 760px) {
   .nav .wrap { gap: 12px; }
   .nav-search { display: none; }
-  .nav-links { margin-left: auto; }
-  .nav-links a { padding: 6px 8px; font-size: 13.5px; }
+  .nav-links { margin-left: auto; gap: 0; }
+  .nav-links a { padding: 0 8px; font-size: 13.5px; }
   .nav-end { display: none; }
 }
-@media (max-width: 420px) { .nav-links a { padding: 6px 6px; font-size: 13px; } }
+@media (max-width: 420px) { .nav-links a { padding: 0 6px; font-size: 13px; } }
+@media (max-width: 360px) { .nav .brand-name { display: none; } }
 
 /* Type: one scale. Headings in sentence case; space above a heading is larger than below. */
 h1, h2, h3, h4 { margin: 0; font-weight: 600; text-wrap: balance; }
@@ -152,6 +181,7 @@ p { margin: 0; }
 .claim-head > div { display: contents; }
 .claim-head h1 { grid-column: 1 / -1; }
 .claim-head .lede { grid-column: 1; }
+.claim-head .source-line { grid-column: 1; grid-row: 3; margin-top: 4px; }
 .claim-head .proof-line { grid-column: 2; grid-row: 2; }
 .claim-head .lede { margin-top: 0; }
 .claim-head h1 { text-wrap: pretty; }
@@ -163,6 +193,11 @@ p { margin: 0; }
 .proof-date { display: none !important; }
 @media (max-width: 900px) { .proof-date { display: block !important; } .proof-line .proof-date { display: flex !important; } }
 .date-line { font-size: 13px; color: var(--text-3); }
+/* Where a page's figures come from and when (common.js): end-of-day prices, the filings' day, the update's time. */
+.source-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 18px; margin-top: 12px; font-size: 12.5px; color: var(--text-3); }
+.source-line > span { display: inline-flex; align-items: center; gap: 6px; }
+.proof-line dd.up { color: var(--up); }
+.proof-line dd.down { color: var(--down); }
 @media (max-width: 860px) {
   .claim-head { grid-template-columns: 1fr; padding: 22px 0 16px; }
   .claim-head .proof-line { grid-column: 1; grid-row: auto; margin-top: 6px; gap: 6px 18px; }
@@ -176,7 +211,7 @@ p { margin: 0; }
 .sec-head .count { color: var(--text-3); font-size: 14px; font-variant-numeric: tabular-nums; }
 .sec-lede { color: var(--text-2); font-size: 14.5px; max-width: 76ch; margin: 0 0 16px; }
 
-/* Buttons: the primary is the scale's lightest step; the rest are hairline outlines. */
+/* Buttons: the primary is the accent; the rest are hairline outlines. */
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   height: 38px; padding: 0 16px; border-radius: var(--r-ctl);
@@ -243,9 +278,9 @@ p { margin: 0; }
   font-size: 13px; cursor: pointer; white-space: nowrap; transition: color .15s, border-color .15s, background .15s;
 }
 .pill:hover { color: var(--text); border-color: var(--line-3); }
-.pill[aria-pressed="true"] { background: var(--inverse); color: var(--on-inverse); border-color: var(--inverse); }
+.pill[aria-pressed="true"] { background: var(--accent-dim); color: var(--text); border-color: var(--accent-text); }
 .pill .count { font-variant-numeric: tabular-nums; font-size: 12px; color: var(--text-3); }
-.pill[aria-pressed="true"] .count { color: var(--on-inverse-2); }
+.pill[aria-pressed="true"] .count { color: var(--accent-text); }
 .pill.pill-empty:not([aria-pressed="true"]) { color: var(--text-3); border-color: var(--line); }
 .pill[disabled] { opacity: .45; cursor: default; }
 @media (max-width: 720px) {
@@ -268,7 +303,7 @@ p { margin: 0; }
   font-size: 13px; cursor: pointer; white-space: nowrap; transition: color .15s, background .15s;
 }
 .seg-btn:hover { color: var(--text); background: var(--surface-2); }
-.seg-btn[aria-pressed="true"] { background: var(--surface-4); color: var(--text); }
+.seg-btn[aria-pressed="true"] { background: var(--accent-dim); color: var(--text); box-shadow: inset 0 0 0 1px var(--accent-text); }
 .label-inline { display: inline-flex; align-items: center; gap: 8px; }
 .select {
   height: 32px; padding: 0 30px 0 11px; border-radius: var(--r-ctl); background-color: transparent;
@@ -288,7 +323,7 @@ p { margin: 0; }
 .tag-up { background: var(--up-dim); color: var(--up); }
 .tag-down { background: var(--down-dim); color: var(--down); }
 .tag-mid { background: var(--mid-dim); color: var(--mid); }
-.tag-solid { background: var(--inverse); color: var(--on-inverse); }
+.tag-solid { background: var(--accent-dim); color: var(--accent-text); }
 .tag-line { background: transparent; border: 1px solid var(--line-3); color: var(--text-2); }
 .debt-word { color: var(--text); white-space: nowrap; }
 .debt-word.low { color: var(--text-2); }
@@ -343,7 +378,7 @@ a.sym:hover { text-decoration: underline; text-decoration-color: var(--line-3); 
 /* The score tape: ten slots, each as wide as its part's maximum points, filled to the points it earned. */
 .tape { display: grid; gap: 2px; height: 8px; width: 100%; }
 .tape > span { position: relative; background: var(--tape-track); border-radius: 1px; overflow: hidden; }
-.tape > span::after { content: ""; position: absolute; inset: 0 auto 0 0; width: calc(var(--f, 0) * 100%); background: var(--tape); }
+.tape > span::after { content: ""; position: absolute; inset: 0 auto 0 0; width: calc(var(--f, 0) * 100%); background: var(--score); }
 .tape-lg { height: 10px; gap: 2px; }
 .score { display: flex; align-items: center; gap: 10px; }
 .score b { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; min-width: 22px; letter-spacing: -0.01em; }
@@ -415,7 +450,7 @@ details.disclose .body { padding: 4px 16px 18px; }
 .ledger-table .pt b { font-weight: 600; }
 .ledger-table .pt .of { color: var(--text-3); }
 .pt-bar { display: inline-block; position: relative; width: 30px; height: 4px; margin-right: 8px; vertical-align: 2px; background: var(--tape-track); border-radius: 1px; overflow: hidden; }
-.pt-bar::after { content: ""; position: absolute; inset: 0 auto 0 0; width: calc(var(--f, 0) * 100%); background: var(--tape); }
+.pt-bar::after { content: ""; position: absolute; inset: 0 auto 0 0; width: calc(var(--f, 0) * 100%); background: var(--score); }
 .ledger-table tr.zero th, .ledger-table tr.zero td.in, .ledger-table tr.zero .pt b { color: var(--text-3); }
 .ledger-table tfoot th, .ledger-table tfoot td { border-top: 1px solid var(--line-3); padding-top: 8px; font-weight: 600; color: var(--text); }
 .ledger-table tfoot td.in { font-weight: 400; color: var(--text-3); }
