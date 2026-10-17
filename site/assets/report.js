@@ -1,4 +1,4 @@
-import { asShown, attachSearch, chrome, date, displayName, esc, healthBand, icon, load, localToday, longDate, meter, money, pct, price, searchMarkup, signClass, vsPaid } from "./common.js";
+import { asShown, attachSearch, chrome, closeWords, date, displayName, esc, healthBand, icon, load, localToday, longDate, meter, money, paintDataStatus, pct, price, searchMarkup, signClass, vsPaid } from "./common.js";
 import { ledger } from "./ledger.js";
 
 // The report has its own search box at the top of the page, which opens a report in place.
@@ -924,7 +924,7 @@ function notesSection(r, meta, home) {
       : f ? `Financials from fiscal year ${esc(String(f.fiscal_year))}${f.fiscal_year_end ? ` (ended ${esc(fullDate(f.fiscal_year_end))})` : ""}.${f.balance_as_of ? ` Balance sheet as of ${esc(fullDate(f.balance_as_of))}.` : ""} Source: SEC filings.` : "",
     f?.revenue_source ? revenueSource(f) : "",
     r.peer_group && !r.peer_basis ? `Compared with ${esc(String(r.peer_count))} other US-listed companies in ${esc(r.peer_group)}.` : "",
-    meta?.market_date ? `Prices and data as of ${esc(fullDate(meta.market_date))}.` : "",
+    meta?.market_date ? `${esc(closeWords(meta))}; data as of ${esc(fullDate(meta.market_date))}.` : "",
     "Educational estimates only. Not investment advice.",
   ].filter(Boolean);
   return `<section class="sec r-notes" aria-labelledby="notes-h">
@@ -943,11 +943,18 @@ function header(r, meta) {
       <p class="r-where">${r.exchange ? `<span>${esc(r.exchange)}</span>` : ""}${where ? `<span>${where}</span>` : ""}${r.screener === true ? `<a class="tag tag-up r-pass" href="${href}">${icon("check")}Passes the screener</a>` : ""}</p>
     </div>
     <dl class="proof-line r-proof" aria-label="Price and size">
-      <div class="r-px"><dt>share price</dt><dd>${price(r.price)}</dd></div>
+      <div class="r-px"><dt>${r.price_day && meta?.price_date && r.price_day !== meta.price_date ? `share price, last traded ${esc(longDate(r.price_day))}` : "share price"}</dt><dd>${price(r.price)}</dd></div>
+      ${r.day_change != null && meta?.price_date ? `<div><dt>on ${esc(longDate(meta.price_date))}</dt><dd class="${signClass(Number((r.day_change * 100).toFixed(2)))}">${pct(r.day_change, 2, true)}</dd></div>` : ""}
+      ${r.volume != null && meta?.price_date ? `<div><dt>shares traded</dt><dd>${volumeShort(r.volume)}</dd></div>` : ""}
       <div><dt>market value</dt><dd>${money(r.mcap)}</dd></div>
-      ${meta?.market_date ? `<div class="r-asof"><dt>data as of</dt><dd>${esc(fullDate(meta.market_date))}</dd></div>` : ""}
     </dl>
+    <p class="source-line r-source" data-source-line></p>
   </header>`;
+}
+
+// Shares traded in a day, shortened.
+function volumeShort(n) {
+  return n >= 1e9 ? `${(n / 1e9).toFixed(2)}B` : n >= 1e6 ? `${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : String(n);
 }
 
 function render(r, sc, meta) {
@@ -968,6 +975,7 @@ function render(r, sc, meta) {
       `<a href="#${id}" data-jump="${id}">${label}</a>`).join("")}</nav>
     ${parts.map(([, , html]) => html).join("")}
     ${notesSection(r, meta, home)}`;
+  if (meta) paintDataStatus(meta);
   fitRanges();
 }
 

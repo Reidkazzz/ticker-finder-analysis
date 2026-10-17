@@ -410,6 +410,7 @@ def main():
     for leftover in ("t_new", "t_old"):
         shutil.rmtree(os.path.join(OUT, leftover), ignore_errors=True)
     ins_by_sym = {c["symbol"]: c for c in ins["companies"] if c.get("symbol")}
+    day = market.price_day(prices)
     index = []
     for s in symbols:
         u, m, p = uni[s], metrics.get(s), prices.get(s) or {}
@@ -431,6 +432,12 @@ def main():
             "sector": u["sector"],
             "industry": u["industry"],
             "price": price,
+            # The change on the close before and the volume of the prices' trading day, None for a stock whose last
+            # session was another day (market.day_move).
+            "day_change": market.day_move(p, day)[0],
+            "volume": market.day_move(p, day)[1],
+            # The day of this stock's own closing price, None where it has none from a closed session (market.session_day).
+            "price_day": market.session_day(p),
             "mcap": u["mcap"],
             "high52": p.get("high52"),
             "low52": p.get("low52"),
@@ -525,6 +532,8 @@ def main():
     write("meta.json", {
         "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="minutes"),
         "market_date": today.isoformat(),
+        # The trading day most prices closed on: the day the pages name as the prices' close (market.price_day).
+        "price_date": day,
         "last_filing_day": insiders._iso(max(cache["days_done"])) if cache["days_done"] else None,
         # Tier 1 and 2 only, the same companies the home page counts next to it.
         "filed_today": sum(1 for c in ins["companies"] if c["tier"] <= 2 and c["filed"] == today.isoformat()),

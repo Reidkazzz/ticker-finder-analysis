@@ -35,8 +35,8 @@
 .r-pass:hover { box-shadow: inset 0 0 0 1px currentColor; }
 .r-proof { align-items: flex-end; gap: 6px 28px; }
 .r-proof .r-px dd { font-size: 30px; line-height: 1.05; letter-spacing: -0.025em; }
-.r-proof .r-asof { display: none; }
-@media (max-width: 900px) { .r-proof .r-asof { display: flex; } }
+/* Where the figures come from and when (common.js), across the header under the name and price. */
+.r-source { grid-column: 1 / -1; margin-top: 2px; }
 @media (max-width: 860px) {
   .r-head { grid-template-columns: 1fr; padding: 20px 0 18px; }
   .r-proof .r-px dd { font-size: 26px; }

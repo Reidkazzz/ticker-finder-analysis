@@ -9,6 +9,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 
 from .net import NotFound, Throttled, sec_json
+from .market import day_move, price_day, session_day
 from .report import one_time_note, sales_doubtful
 
 CACHE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".cache", "registrations.json")
@@ -701,6 +702,7 @@ def run(universe, metrics, prices, analyst_counter, insiders=None):
 
     rows = []
     ps_by = dict(candidates)
+    day = price_day(prices)
     for sym in us:
         u, m, p = universe[sym], metrics[sym], prices.get(sym) or {}
         price = p.get("price") or u["price"]
@@ -710,6 +712,7 @@ def run(universe, metrics, prices, analyst_counter, insiders=None):
         band = _upper_band(p.get("weekly"))
         bought = (insiders or {}).get(sym)
         bought = bought if bought and bought.get("tier") in (1, 2) else None
+        day_change, volume = day_move(p, day)
         row = {
             "symbol": sym,
             "name": u["name"],
@@ -740,6 +743,13 @@ def run(universe, metrics, prices, analyst_counter, insiders=None):
             "years_checked": m["years_checked"],
             "fiscal_year": m["fiscal_year"],
             "high52": high,
+            "low52": p.get("low52"),
+            # The change on the close before and the volume of the prices' trading day (meta.json's price_date), None for
+            # a stock whose last session was another day (market.day_move).
+            "day_change": day_change,
+            "volume": volume,
+            # The day of this stock's own closing price, None where it has none from a closed session (market.session_day).
+            "price_day": session_day(p),
             "drawdown": drawdown,
             # The upper Bollinger band from the weekly closes (_upper_band), None with under BAND_WEEKS of them.
             "upper_band": band,
