@@ -1,25 +1,29 @@
-import { chrome, displayName, esc, icon, load, longDate, money, pct, tape, times } from "./common.js";
+import { chrome, displayName, esc, icon, load, longDate, money, pct, price, tape, times } from "./common.js";
 import { debtTag, flagDefs as sharedFlagDefs, flagIcons, flagTile, ledger, under } from "./ledger.js";
 
 chrome();
 
 const params = new URLSearchParams(location.search);
-const INSIDER_FILTERS = ["any", "buying", "below"];
+// The table's column sets, each its own view of the same companies.
+const VIEWS = ["overview", "valuation", "financials", "price", "score"];
 // Each sort's order is fixed: a score from best to worst, a ratio from cheapest, a margin from highest.
-const SORT_NAMES = ["score", "ps", "pb", "net_margin", "fcf_yield", "drawdown", "mcap"];
+const SORT_NAMES = ["score", "ps", "pb", "net_margin", "fcf_yield", "revenue_growth", "drawdown", "analysts", "mcap"];
 const state = {
-  sector: params.get("sector") || "All",
-  insider: INSIDER_FILTERS.includes(params.get("insider")) ? params.get("insider") : "any",
+  f: {}, // each filter in use, by its key (FILTERS below): the id of the option chosen
   sort: SORT_NAMES.includes(params.get("sort")) ? params.get("sort") : "score",
   q: (params.get("q") || "").trim(), // the panel's filter by ticker or company name
+  view: VIEWS.includes(params.get("view")) ? params.get("view") : "overview",
+  group: "descriptive", // the group of filters the panel shows
   open: null,
 };
 const host = document.querySelector("[data-results]");
+const builder = document.querySelector("[data-builder]");
 const filterEl = document.querySelector("[data-filter]");
 const countEl = document.querySelector("[data-count]");
 const sortEl = document.querySelector("[data-sort]");
 const resetEl = document.querySelector("[data-reset]");
 let data;
+let meta = null;
 let insiderDays = null; // the insider scan's window (meta.json), for "in the last 30 days"
 let insiderPending = 0; // the insider scan's days not yet read (meta.json), which the filter's empty state names
 
@@ -32,10 +36,13 @@ const SORTS = {
   pb: (a, b) => low(a.pb) - low(b.pb),
   net_margin: (a, b) => b.net_margin - a.net_margin,
   fcf_yield: (a, b) => high(b.fcf_yield) - high(a.fcf_yield),
+  revenue_growth: (a, b) => high(b.revenue_growth) - high(a.revenue_growth),
   drawdown: (a, b) => high(b.drawdown) - high(a.drawdown),
+  analysts: (a, b) => low(a.analysts) - low(b.analysts),
   mcap: (a, b) => a.mcap - b.mcap,
 };
-const SORT_DIR = { score: "descending", ps: "ascending", pb: "ascending", net_margin: "descending", fcf_yield: "descending", drawdown: "descending", mcap: "ascending" };
+const SORT_DIR = { score: "descending", ps: "ascending", pb: "ascending", net_margin: "descending", fcf_yield: "descending",
+  revenue_growth: "descending", drawdown: "descending", analysts: "ascending", mcap: "ascending" };
 
 // Older data (a screener.json from before a feature) lacks its keys, and the page hides what it can't show.
 const hasPb = () => data.results.some((r) => "pb" in r);
@@ -48,8 +55,8 @@ const ctx = () => ({ rules: data.rules, industries: data.industries, insiderDays
 const flagDefs = () => sharedFlagDefs(ctx());
 const flags = (r) => flagIcons(r, ctx());
 
-// The flags any company on the list carries, each icon beside its name: the same whichever sector or filter is shown,
-// so the table doesn't move when they change.
+// The flags any company on the list carries, each icon beside its name: the same whichever filter is shown, so the
+// table doesn't move when they change.
 function flagLegend() {
   const used = flagDefs().filter(([k]) => data.results.some((r) => r.flags.includes(k)));
   return used.length ? `<ul class="flag-legend" aria-label="What the flag icons mean">${used.map((d) => `<li>${flagTile(d)}<span>${esc(d[3])}</span></li>`).join("")}</ul>` : "";
@@ -60,16 +67,92 @@ function detailRow(r, cols) {
   return `<tr class="detail" id="${detailId(r.symbol)}"><td colspan="${cols}">${ledger(r, ctx())}</td></tr>`;
 }
 
-// ---- Filters, sort and the table ----
+// ---- The filters ----
 
-// The insider filter above the list (Tier 1 or 2 buying, and a price under what insiders paid).
-const insiderOk = (r) => state.insider === "any"
-  || (state.insider === "buying" ? r.flags.includes("insiders_buying") : r.flags.includes("below_insider_price"));
-// What the filter asks, after "and" in the count (for one company, then for several). Only Tier 1 or 2 buying counts:
-// a company with smaller purchases (Tier 3) is on neither side of the filter's claim.
-const INSIDER_WORDS = {
-  buying: ["has Tier 1 or 2 insider buying", "have Tier 1 or 2 insider buying"],
-  below: ["trades below what Tier 1 or 2 insiders paid", "trade below what Tier 1 or 2 insiders paid"],
+// A filter tests a figure as the table shows it, so a margin shown as 10.0% passes "10% or more" and a price to sales
+// shown as 1.00x doesn't pass "Under 1x". A missing figure passes no option but "Any".
+const shownPct = (v, d = 1) => (v == null ? null : Number((v * 100).toFixed(d)));
+const shownX = (v) => (v == null ? null : Number(v.toFixed(2)));
+const opt = (id, label, test) => ({ id, label, test });
+const R = () => data.rules || {};
+const moreThan = (get, d, list, word = "or more") => list.map((n) => opt(`${n}-plus`, `${n}% ${word}`, (r) => { const v = shownPct(get(r), d); return v != null && v >= n; }));
+
+// Each filter: its key (also its parameter in the page's address), the group the panel shows it in, its name, the name
+// of its "any" choice, whether today's data can answer it, and its choices, each with the test a company must pass.
+const FILTERS = [
+  { key: "sector", group: "descriptive", label: "Sector", any: "All sectors",
+    options: () => data.sectors.filter((s) => s.checked > 0 || s.excluded)
+      .map((s) => ({ ...opt(s.name, s.excluded ? `${s.name}, not screened` : s.name, (r) => r.sector === s.name), excluded: s.excluded })) },
+  { key: "industry", group: "descriptive", label: "Industry", any: "All industries",
+    // The industries of the companies in the sector chosen, so each one listed has a company in it.
+    options: () => [...new Set(data.results.filter((r) => !state.f.sector || r.sector === state.f.sector).map((r) => r.industry).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b)).map((n) => opt(n, n, (r) => r.industry === n)) },
+  { key: "mcap", group: "descriptive", label: "Market value",
+    options: () => [[250e6, "250m", "$250M"], [500e6, "500m", "$500M"], [1e9, "1b", "$1B"], [2e9, "2b", "$2B"]]
+      .filter(([v]) => !R().max_mcap || v < R().max_mcap).map(([v, id, w]) => opt(`under-${id}`, `Under ${w}`, (r) => r.mcap != null && r.mcap < v)) },
+  { key: "analysts", group: "descriptive", label: "Analysts",
+    options: () => {
+      const few = R().undiscovered_max_analysts ?? 2;
+      return [opt("none", "None", (r) => r.analysts === 0), opt("few", `${few} or fewer`, (r) => r.analysts != null && r.analysts <= few),
+        opt("more", `${few + 1} or more`, (r) => r.analysts != null && r.analysts > few)];
+    } },
+  { key: "ps", group: "valuation", label: "Price / sales",
+    options: () => [0.5, 1, 1.5].map((n) => opt(`under-${n}`, `Under ${n}x`, (r) => { const v = shownX(r.ps); return v != null && v < n; })) },
+  { key: "pb", group: "valuation", label: "Price / book", ok: () => hasPb(),
+    // Under 1x is the Under book value flag's own test; the table shows a figure under 1 cut, not rounded, to 0.99x.
+    options: () => [opt("under-1", "Under 1x, under book value", (r) => r.pb != null && r.pb < 1),
+      ...[1.5, 2, 3].map((n) => opt(`under-${n}`, `Under ${n}x`, (r) => { const v = shownX(r.pb); return v != null && v < n; }))] },
+  { key: "cy", group: "valuation", label: "Cash yield", options: () => moreThan((r) => r.fcf_yield, 1, [5, 10, 15]) },
+  { key: "dd", group: "valuation", label: "Below 52-week high",
+    options: () => [...new Set([10, Math.round((R().out_of_favor_drawdown ?? 0.25) * 100), 50])].sort((a, b) => a - b)
+      .map((n) => opt(`${n}-plus`, `${n}% or more below`, (r) => { const v = shownPct(r.drawdown, 0); return v != null && v >= n; })) },
+  { key: "margin", group: "financial", label: "Net margin", options: () => moreThan((r) => r.net_margin, 1, [5, 10, 15]) },
+  { key: "growth", group: "financial", label: "Sales growth",
+    options: () => [opt("shrinking", "Shrinking", (r) => { const v = shownPct(r.revenue_growth); return v != null && v < 0; }),
+      opt("growing", "Growing", (r) => { const v = shownPct(r.revenue_growth); return v != null && v > 0; }),
+      ...moreThan((r) => r.revenue_growth, 1, [10, 20], "or more growth")] },
+  { key: "debt", group: "financial", label: "Debt",
+    options: () => [opt("none", "No debt", (r) => r.debt_status === "none"), opt("net-cash", "Net cash, more cash than debt", (r) => r.debt_status === "net_cash"),
+      opt("none-or-net-cash", "No debt or net cash", (r) => r.debt_status === "none" || r.debt_status === "net_cash"),
+      opt("low", "Low", (r) => r.debt_status === "low")] },
+  { key: "years", group: "financial", label: "Profitable years",
+    // "3 of 3" where every company was checked over the same number of years, as today; in words otherwise.
+    options: () => {
+      const n = new Set(data.results.map((r) => r.years_checked));
+      const y = n.size === 1 ? [...n][0] : null;
+      return [opt("every", y ? `${y} of ${y}` : "Every year checked", (r) => r.profitable_years >= r.years_checked),
+        opt("all-but-one", y ? `${y - 1} of ${y}` : "All but one year checked", (r) => r.profitable_years === r.years_checked - 1)];
+    } },
+  { key: "score", group: "signals", label: "Score", options: () => [60, 50, 40].map((n) => opt(`${n}-plus`, `${n} or more`, (r) => r.score >= n)) },
+  { key: "insider", group: "signals", label: "Insider buying", ok: () => hasInsiders(),
+    options: () => [opt("buying", "Tier 1 or 2 buying", (r) => r.flags.includes("insiders_buying")),
+      opt("below", "Below insiders' price", (r) => r.flags.includes("below_insider_price"))] },
+  { key: "flag", group: "signals", label: "Flag",
+    options: () => flagDefs().filter(([k]) => !["insiders_buying", "below_insider_price", "above_upper_band"].includes(k))
+      .map(([k, , , label]) => opt(k, label, (r) => r.flags.includes(k))) },
+  { key: "band", group: "signals", label: "Upper band",
+    options: () => [opt("no-warning", "No pullback warning", (r) => !r.flags.includes("above_upper_band")),
+      opt("above", "Above it, wait for a pullback", (r) => r.flags.includes("above_upper_band"))] },
+];
+const GROUP_NAMES = { descriptive: "Descriptive", valuation: "Valuation", financial: "Financial", signals: "Signals", all: "All filters" };
+const usable = () => FILTERS.filter((f) => !f.ok || f.ok());
+const choice = (f) => (state.f[f.key] ? f.options().find((o) => o.id === state.f[f.key]) : null);
+const inUse = () => usable().filter((f) => choice(f));
+const sectorRow = () => (state.f.sector ? data.sectors.find((s) => s.name === state.f.sector) : null);
+
+// Drops a choice the data can't answer: a filter today's data lacks, an option it doesn't list (an industry outside the
+// sector chosen), or a parameter from an old link.
+function validate() {
+  for (const f of FILTERS) {
+    if (!state.f[f.key]) { delete state.f[f.key]; continue; }
+    if ((f.ok && !f.ok()) || !f.options().some((o) => o.id === state.f[f.key])) { delete state.f[f.key]; setParam(f.key, null); }
+  }
+}
+
+// The companies that pass every filter in use but `skip`, before the panel's text filter.
+const passing = (skip) => {
+  const tests = inUse().filter((f) => f.key !== skip).map((f) => choice(f).test);
+  return data.results.filter((r) => tests.every((t) => t(r)));
 };
 
 // The panel's filter: a ticker that starts with what is typed, or a company name that contains it.
@@ -86,75 +169,66 @@ function setParam(key, value) {
 }
 
 function paintReset() {
-  resetEl.hidden = state.sector === "All" && state.insider === "any" && state.sort === "score" && !state.q;
+  resetEl.hidden = !inUse().length && !state.q;
+  // With nothing in use the line under the dropdowns goes, so the list starts higher.
+  document.querySelector(".builder-foot").hidden = resetEl.hidden;
 }
 
-function renderSectors() {
-  const el = document.querySelector("[data-sectors]");
-  // With the insider filter on, each sector counts the companies the list would show.
-  const count = (name) => (state.insider === "any"
-    ? (name === "All" ? data.results.length : data.sectors.find((s) => s.name === name)?.passed ?? 0)
-    : data.results.filter((r) => insiderOk(r) && (name === "All" || r.sector === name)).length);
-  const list = [{ name: "All" }, ...data.sectors.filter((s) => s.checked > 0 || s.excluded)];
-  el.innerHTML = list.map((s) => {
-    const n = s.excluded ? null : count(s.name);
-    const label = s.name === "All" ? "All sectors" : s.name;
-    return `<button class="pill${n ? "" : " pill-empty"}" type="button" data-sector="${esc(s.name)}" aria-pressed="${s.name === state.sector}">
-    ${esc(label)}<span class="count"><span class="sr-only">, </span>${n == null ? "<span class=\"sr-only\">not screened</span><span aria-hidden=\"true\">n/a</span>" : `${n}<span class="sr-only"> passed</span>`}</span></button>`;
+// The panel's dropdowns for the group shown. Each choice counts the companies it would show with the other filters in
+// use, before the text filter, so a dropdown says what picking it would leave.
+function renderFields(focusKey) {
+  const el = document.querySelector("[data-fields]");
+  const shown = usable().filter((f) => state.group === "all" || f.group === state.group);
+  el.classList.toggle("all", state.group === "all");
+  el.innerHTML = shown.map((f) => {
+    const pool = passing(f.key);
+    const opts = f.options();
+    const now = state.f[f.key] || "";
+    return `<div class="ff${now ? " on" : ""}"><label for="f-${f.key}">${esc(f.label)}</label>
+      <select class="select" id="f-${f.key}" data-f="${f.key}"><option value="">${esc(f.any || "Any")} (${pool.length})</option>${opts.map((o) =>
+        `<option value="${esc(o.id)}"${o.id === now ? " selected" : ""}>${esc(o.label)}${o.excluded ? "" : ` (${pool.filter(o.test).length})`}</option>`).join("")}</select></div>`;
   }).join("");
-  el.onclick = (e) => {
-    const b = e.target.closest("[data-sector]");
-    if (!b) return;
-    state.sector = b.dataset.sector;
-    state.open = null;
-    setParam("sector", state.sector === "All" ? null : state.sector);
-    renderSectors();
-    paintQuick();
-    renderTable();
-    // The pills are drawn again, so keyboard focus goes back to the one chosen rather than to the page.
-    el.querySelector(`[data-sector="${CSS.escape(state.sector)}"]`)?.focus();
-  };
-  // On a phone the sectors scroll sideways: bring the chosen one into view without moving the page.
-  const on = el.querySelector('[aria-pressed="true"]');
-  if (on && el.scrollWidth > el.clientWidth) el.scrollLeft = Math.max(0, on.offsetLeft - el.offsetLeft - 16);
+  if (focusKey) el.querySelector(`[data-f="${focusKey}"]`)?.focus();
+}
+
+function renderGroups() {
+  const used = inUse();
+  document.querySelectorAll("[data-group]").forEach((b) => {
+    const g = b.dataset.group;
+    const n = g === "all" ? used.length : used.filter((f) => f.group === g).length;
+    b.setAttribute("aria-pressed", String(g === state.group));
+    b.querySelector("[data-group-count]").innerHTML = n ? `<span class="sr-only">, </span>${n}<span class="sr-only"> in use</span>` : "";
+  });
+  const all = document.querySelector("[data-active-count]");
+  all.innerHTML = used.length ? `<span class="sr-only">, </span>${used.length}<span class="sr-only"> in use</span>` : "";
+}
+
+// The filters in use as chips, each removed by its own button.
+function renderChips() {
+  const el = document.querySelector("[data-chips]");
+  el.innerHTML = inUse().map((f) => {
+    const o = choice(f);
+    return `<li><button class="chip" type="button" data-remove="${f.key}" aria-label="Remove the filter ${esc(f.label)}: ${esc(o.label)}">
+      <span class="chip-k">${esc(f.label)}</span> ${esc(o.label)}${icon("x")}</button></li>`;
+  }).join("");
+  el.hidden = !el.children.length;
+  document.querySelector("[data-chips-none]").hidden = !el.hidden;
   paintReset();
 }
 
-// Each quick filter's count: the companies it would show in the sector chosen, before the panel's text filter.
-function paintQuick() {
-  if (!hasInsiders()) return;
-  const inSector = data.results.filter((r) => state.sector === "All" || r.sector === state.sector);
-  const n = { any: inSector.length, buying: inSector.filter((r) => r.flags.includes("insiders_buying")).length,
-    below: inSector.filter((r) => r.flags.includes("below_insider_price")).length };
-  document.querySelectorAll("[data-insider-filter] [data-insider]").forEach((b) => {
-    const k = b.dataset.insider;
-    b.classList.toggle("pill-empty", !n[k]);
-    b.querySelector("[data-quick-count]").innerHTML = `<span class="sr-only">, </span>${n[k]}<span class="sr-only"> ${n[k] === 1 ? "company" : "companies"}</span>`;
-  });
+// After any filter changes: the dropdowns' counts, the chips, the groups' counts and the table.
+function refresh(focusKey) {
+  validate();
+  state.open = null;
+  renderFields(focusKey);
+  renderGroups();
+  renderChips();
+  renderTable();
 }
 
-function renderInsiderFilter() {
-  const row = document.querySelector("[data-insider-only]");
-  if (!hasInsiders()) {
-    state.insider = "any";
-    setParam("insider", null);
-    return;
-  }
-  row.hidden = false;
-  const el = row.querySelector("[data-insider-filter]");
-  const paint = () => el.querySelectorAll("[data-insider]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.insider === state.insider));
-  paint();
-  paintQuick();
-  el.onclick = (e) => {
-    const b = e.target.closest("[data-insider]");
-    if (!b) return;
-    state.insider = b.dataset.insider;
-    state.open = null;
-    setParam("insider", state.insider === "any" ? null : state.insider);
-    paint();
-    renderSectors();
-    renderTable();
-  };
+function setFilter(key, id) {
+  if (id) state.f[key] = id; else delete state.f[key];
+  setParam(key, id || null);
 }
 
 function setSort(key) {
@@ -163,7 +237,6 @@ function setSort(key) {
   state.open = null;
   sortEl.value = key;
   setParam("sort", key === "score" ? null : key);
-  paintReset();
   renderTable();
 }
 
@@ -180,10 +253,12 @@ const UNCONFIRMED = {
 const andList = (a) => (a.length < 2 ? a.join("") : `${a.slice(0, -1).join(", ")} and ${a[a.length - 1]}`);
 const symLink = (s, title) => `<a class="mono" href="report.html?t=${encodeURIComponent(s)}"${title ? ` title="${esc(title)}"` : ""}>${esc(s)}</a>`;
 
+// Shown under the list while no filter but the sector is in use: these companies are on neither side of any other.
 function unverifiedNote() {
+  if (inUse().some((f) => f.key !== "sector")) return "";
   const list = (data.unverified || []).map((u) => (typeof u === "string" ? { symbol: u } : u))
-    .filter((u) => u && u.symbol && (state.sector === "All" || !u.sector || u.sector === state.sector));
-  if (!list.length || state.insider !== "any") return "";
+    .filter((u) => u && u.symbol && (!state.f.sector || !u.sector || u.sector === state.f.sector));
+  if (!list.length) return "";
   const groups = new Map();
   for (const u of list) {
     const key = Array.isArray(u.unconfirmed) && u.unconfirmed.length ? [...u.unconfirmed].sort().join(" ") : "us";
@@ -206,102 +281,180 @@ function unverifiedNote() {
     <div>${sentences.map((s) => `<p>${s}</p>`).join("")}</div></div>`;
 }
 
-// The ranked table's columns: [key, heading, the sort it sets or null, its label on a phone].
-const COLUMNS = () => [
-  ["rank", `<span class="sr-only">Rank</span>#`, null],
-  ["co", "Company", null],
-  ["score", "Score", "score"],
-  ["flags", "Flags", null],
-  ["mcap", "Market value", "mcap", "Value"],
-  ["ps", "Price / sales", "ps", "P/S"],
-  ...(hasPb() ? [["pb", "Price / book", "pb", "P/B"]] : []),
-  ["margin", "Net margin", "net_margin", "Margin"],
-  ["debt", "Debt", null, "Debt"],
-  ["fcf", "Cash yield", "fcf_yield", "Cash yield"],
-  ["dd", "Below high", "drawdown", "Below high"],
-  ["an", "Analysts", null, "Analysts"],
-  ["go", `<span class="sr-only">Report</span>`, null],
+// ---- The table's columns ----
+
+// Each column: its key, its name, the sort it sets (if any), its label on a phone, whether it holds words, a title
+// for its name, and its cell. A figure's color is its sign: emerald when it is up or in the company's favor.
+const sign = (v) => (v == null ? "" : v > 0 ? " up" : v < 0 ? " down" : "");
+const fig = (k, h, label, cell, more = {}) => ({ k, h, label, cell, ...more });
+const C = {
+  flags: fig("flags", "Flags", null, (r) => flags(r), { txt: true }),
+  mcap: fig("mcap", "Market value", "Value", (r) => money(r.mcap), { sort: "mcap", cls: () => " ink" }),
+  price: fig("price", "Price", "Price", (r) => price(r.price)),
+  ps: fig("ps", "P/S", "P/S", (r) => times(r.ps), { sort: "ps", title: "Price to sales: market value over the latest fiscal year's sales" }),
+  pb: fig("pb", "P/B", "P/B", (r) => under(r.pb), { sort: "pb", ok: () => hasPb(), title: "Price to book: market value over book value" }),
+  book: fig("book", "Book value", "Book", (r) => money(r.book_value), { title: "Shareholders' equity less preferred stock", ok: () => hasPb() }),
+  margin: fig("margin", "Net margin", "Margin", (r) => pct(r.net_margin), { sort: "net_margin", cls: (r) => sign(shownPct(r.net_margin)),
+    tip: (r) => (r.one_time_note && r.net_margin_reported != null ? `Leaves out one-time items. Reported margin: ${pct(r.net_margin_reported)}` : "") }),
+  reported: fig("reported", "Reported", "Reported", (r) => pct(r.net_margin_reported), { title: "Net margin as reported, one-time items included",
+    cls: (r) => sign(shownPct(r.net_margin_reported)) }),
+  debt: fig("debt", "Debt", "Debt", (r) => debtTag(r), { title: "No debt, more cash than debt (net cash), or long-term debt as a multiple of equity" }),
+  cy: fig("fcf", "Cash yield", "Cash yield", (r) => pct(r.fcf_yield), { sort: "fcf_yield", cls: (r) => sign(shownPct(r.fcf_yield)) }),
+  fcf: fig("fcfv", "Free cash flow", "Free cash", (r) => money(r.fcf), { cls: (r) => sign(r.fcf) }),
+  sales: fig("sales", "Sales", "Sales", (r) => money(r.revenue), { title: "The latest fiscal year's sales" }),
+  growth: fig("growth", "Sales growth", "Growth", (r) => (r.revenue_growth == null ? "n/a" : pct(r.revenue_growth, 1, true)),
+    { sort: "revenue_growth", cls: (r) => sign(shownPct(r.revenue_growth)) }),
+  cash: fig("cash", "Cash less debt", "Cash less debt", (r) => money(r.net_cash), { cls: (r) => sign(r.net_cash),
+    title: "Cash, short-term investments and long-term securities, less debt" }),
+  years: fig("years", "Profitable", "Profitable", (r) => `${r.profitable_years} of ${r.years_checked}`, { title: "Years profitable, without one-time items, of the years checked" }),
+  dd: fig("dd", "Below high", "Below high", (r) => (r.drawdown == null ? "n/a" : pct(r.drawdown, 0)), { sort: "drawdown" }),
+  high: fig("high", "52-week high", "52-wk high", (r) => price(r.high52)),
+  band: fig("band", "Upper band", "Upper band", (r) => price(r.upper_band), { title: "The average of the last 20 weekly closes plus two standard deviations of them" }),
+  an: fig("an", "Analysts", "Analysts", (r) => r.analysts ?? "n/a", { sort: "analysts" }),
+  ins: fig("ins", "Tier 1 or 2 buying", "Insiders", (r) => (r.insiders ? `Tier ${esc(String(r.insiders.tier))}, ${money(r.insiders.total_value)}` : `<span class="faint">None</span>`),
+    { ok: () => hasInsiders(), title: "Open-market insider buying of $1 million or more, or a buyer growing their stake by 20% or more" }),
+};
+const VIEW_COLUMNS = {
+  overview: ["flags", "mcap", "ps", "pb", "margin", "debt", "cy", "dd", "an"],
+  valuation: ["price", "mcap", "ps", "pb", "book", "sales", "fcf", "cy"],
+  financials: ["sales", "growth", "margin", "reported", "fcf", "debt", "cash", "years"],
+  price: ["price", "high", "dd", "band", "an", "ins", "flags"],
+};
+// The score's parts by their key, named as "How the 100-point score works" names them.
+const PART_NAMES = { ps: "Cheap vs. sales", debt: "Debt", margin: "Profit margin", fcf: "Cash generation", growth: "Sales growth",
+  small: "Under $2 billion", out_of_favor: "Out of favor", undiscovered: "Few analysts", under_book: "Under book value", insiders_buying: "Insiders buying" };
+function partColumns() {
+  const first = data.results[0]?.score_parts || [];
+  // Whole points when the pipeline sends them; older data has one-decimal parts, which keep their decimal.
+  const whole = data.results.every((r) => r.score_parts.every((p) => Number.isInteger(p.points)));
+  const pts = (n) => (whole ? String(n) : (Math.round(n * 10) / 10).toFixed(1));
+  return first.map((p0) => fig(`pt-${p0.key}`, esc(PART_NAMES[p0.key] || p0.label), PART_NAMES[p0.key] || p0.label, (r) => {
+    const p = r.score_parts.find((x) => x.key === p0.key);
+    return p ? `<b>${pts(p.points)}</b><span class="of">/${esc(String(p.max))}</span>` : "n/a";
+  }, { cls: (r) => (r.score_parts.find((x) => x.key === p0.key)?.points ? "" : " zero"), part: true }));
+}
+
+const columns = () => [
+  { k: "rank", h: `<span class="sr-only">Rank</span>#` },
+  { k: "co", h: "Company", txt: true },
+  { k: "score", h: "Score", sort: "score", txt: true },
+  ...(state.view === "score" ? partColumns() : VIEW_COLUMNS[state.view].map((k) => C[k]).filter((c) => !c.ok || c.ok())),
+  { k: "go", h: `<span class="sr-only">Report</span>` },
 ];
 
-function head() {
-  return `<thead><tr>${COLUMNS().map(([k, h, s]) => {
-    const cls = ["co", "score", "flags"].includes(k) ? ` class="txt c-${k}"` : ` class="c-${k}"`;
-    if (!s) return `<th scope="col"${cls}${k === "debt" ? ` title="No debt, more cash than debt (net cash), or long-term debt as a multiple of equity"` : ""}>${h}</th>`;
-    const on = state.sort === s;
-    return `<th scope="col"${cls}${on ? ` aria-sort="${SORT_DIR[s]}"` : ""}><button class="sort" type="button" data-sort-key="${s}">${h}${icon(on ? (SORT_DIR[s] === "descending" ? "sort-down" : "sort-up") : "sort")}<span class="sr-only">${on ? ", sorted" : ", sort"}</span></button></th>`;
+function head(cols) {
+  return `<thead><tr>${cols.map((c) => {
+    const cls = ` class="c-${c.k}${c.txt ? " txt" : ""}${c.part ? " part" : ""}"`;
+    const title = c.title ? ` title="${esc(c.title)}"` : "";
+    if (!c.sort) return `<th scope="col"${cls}${title}>${c.h}</th>`;
+    const on = state.sort === c.sort;
+    return `<th scope="col"${cls}${title}${on ? ` aria-sort="${SORT_DIR[c.sort]}"` : ""}><button class="sort" type="button" data-sort-key="${c.sort}">${c.h}${icon(on ? (SORT_DIR[c.sort] === "descending" ? "sort-down" : "sort-up") : "sort")}<span class="sr-only">${on ? ", sorted" : ", sort"}</span></button></th>`;
   }).join("")}</tr></thead>`;
 }
 
-function row(r, i) {
+function row(r, i, cols) {
   const sym = esc(r.symbol);
-  const labelled = (k, label, v, extra = "") => `<td class="c-${k}" data-label="${label}"${extra}>${v}</td>`;
-  return `<tr class="row" data-sym="${sym}">
-    <td class="c-rank">${i + 1}</td>
-    <td class="txt c-co"><button class="row-toggle" type="button" aria-expanded="${state.open === r.symbol}" aria-controls="${detailId(r.symbol)}">
-      ${icon("caret-right", "caret")}<span class="co"><span class="sym">${sym}</span> <span class="nm" title="${esc(r.name)}">${esc(displayName(r.name))}</span></span></button></td>
-    <td class="txt c-score"><div class="score" role="img" aria-label="Score ${esc(String(r.score))} out of 100"><b>${esc(String(r.score))}</b>${tape(r.score_parts)}</div></td>
-    <td class="txt c-flags">${flags(r)}</td>
-    ${labelled("mcap", "Value", money(r.mcap))}
-    ${labelled("ps", "P/S", times(r.ps))}
-    ${hasPb() ? labelled("pb", "P/B", under(r.pb)) : ""}
-    ${labelled("margin", "Margin", pct(r.net_margin), r.one_time_note && r.net_margin_reported != null ? ` title="Leaves out one-time items. Reported margin: ${pct(r.net_margin_reported)}"` : "")}
-    ${labelled("debt", "Debt", debtTag(r))}
-    ${labelled("fcf", "Cash yield", pct(r.fcf_yield))}
-    ${labelled("dd", "Below high", r.drawdown == null ? "n/a" : pct(r.drawdown, 0))}
-    ${labelled("an", "Analysts", r.analysts ?? "n/a")}
-    <td class="c-go"><a class="go" href="report.html?t=${encodeURIComponent(r.symbol)}" aria-label="Open the ${sym} report">${icon("arrow-up-right")}</a></td>
-  </tr>`;
+  return `<tr class="row" data-sym="${sym}">${cols.map((c) => {
+    switch (c.k) {
+      case "rank": return `<td class="c-rank">${i + 1}</td>`;
+      case "co": return `<td class="txt c-co"><button class="row-toggle" type="button" aria-expanded="${state.open === r.symbol}" aria-controls="${detailId(r.symbol)}">
+        ${icon("caret-right", "caret")}<span class="co"><span class="sym">${sym}</span> <span class="nm" title="${esc(r.name)}">${esc(displayName(r.name))}</span></span></button></td>`;
+      case "score": return `<td class="txt c-score"><div class="score" role="img" aria-label="Score ${esc(String(r.score))} out of 100"><b>${esc(String(r.score))}</b>${tape(r.score_parts)}</div></td>`;
+      case "go": return `<td class="c-go"><a class="go" href="report.html?t=${encodeURIComponent(r.symbol)}" aria-label="Open the ${sym} report">${icon("arrow-up-right")}</a></td>`;
+      case "flags": return `<td class="txt c-flags">${flags(r)}</td>`;
+      default: {
+        const tip = c.tip ? c.tip(r) : "";
+        return `<td class="c-${c.k}${c.cls ? c.cls(r) : ""}"${c.label ? ` data-label="${esc(c.label)}"` : ""}${tip ? ` title="${esc(tip)}"` : ""}>${c.cell(r)}</td>`;
+      }
+    }
+  }).join("")}</tr>`;
+}
+
+// What the table's figures are, under it: which year, which currency, how many rows and the prices' date.
+function renderStatus(rows) {
+  const el = document.querySelector("[data-status]");
+  const checked = data.sectors.reduce((a, s) => a + (s.checked || 0), 0);
+  const items = ["Latest fiscal year and balance sheet", "US dollars",
+    `${rows.length} of ${data.results.length} ${data.results.length === 1 ? "row" : "rows"}${checked ? `, ${checked.toLocaleString("en-US")} stocks checked` : ""}`,
+    meta?.market_date ? `Prices from ${longDate(meta.market_date)}` : null].filter(Boolean);
+  el.innerHTML = items.map((t) => `<li>${esc(t)}</li>`).join("");
+  el.hidden = false;
+}
+
+// The notes under the table: what its figures mean in the view shown.
+function tableNote() {
+  const notes = {
+    overview: `Open a row to see how its score adds up and its figure for each rule. Cash yield is free cash flow as a share of market value.${hasPb() ? " Price to book is market value over book value: shareholders' equity less preferred stock." : ""}`,
+    valuation: `Sales and free cash flow are the latest fiscal year's. Cash yield is free cash flow as a share of market value.${hasPb() ? " Book value is shareholders' equity less preferred stock." : ""}`,
+    financials: "Sales, growth, margins and free cash flow are the latest fiscal year's. Net margin leaves out one-time items; reported margin counts them. Cash less debt is cash, short-term investments and long-term securities less debt, from the latest balance sheet.",
+    price: `Prices are the last close. The upper band is the average of the last 20 weekly closes plus two standard deviations of them.${hasInsiders() ? ` Tier 1 or 2 buying is open-market buying by insiders ${esc(window_())}: $1 million or more, or a buyer growing their stake by 20% or more.` : ""}`,
+    score: "Each part's points out of its most. The parts add up to the score; open a row to see what each was measured on.",
+  };
+  return `<p class="table-note">${notes[state.view]}</p>`;
 }
 
 function renderTable() {
   host.setAttribute("aria-busy", "false");
-  // The list the sector and the quick filter leave, then the rows the panel's text filter keeps of it.
-  const listed = data.results.filter((r) => (state.sector === "All" || r.sector === state.sector) && insiderOk(r)).sort(SORTS[state.sort]);
+  const after = document.querySelector("[data-after]");
+  const sec = sectorRow();
+  // The companies the sector leaves, those every filter leaves, then the rows the text filter keeps of them.
+  const base = data.results.filter((r) => !state.f.sector || r.sector === state.f.sector);
+  const listed = passing(null).sort(SORTS[state.sort]);
   const rows = listed.filter(queryOk);
-  const sec = data.sectors.find((s) => s.name === state.sector);
-  const which = state.insider === "any" ? "" : ` and ${INSIDER_WORDS[state.insider][listed.length === 1 ? 0 : 1]}`;
-  countEl.innerHTML = sec?.excluded ? `${esc(state.sector)} is not screened`
-    : state.q ? `<b>${rows.length}</b> of the ${listed.length} ${state.sector === "All" ? (listed.length === 1 ? "company" : "companies")
-      : `${esc(state.sector)} ${listed.length === 1 ? "stock" : "stocks"}`} that passed every check${which} ${rows.length === 1 ? "matches" : "match"} "${esc(state.q)}"`
-    : state.sector === "All" ? `<b>${rows.length}</b> ${rows.length === 1 ? "company" : "companies"} passed every check${which}`
-    : `<b>${rows.length}</b> of ${sec?.checked ?? 0} ${esc(state.sector)} stocks passed every check${which}`;
-  // The flag icons' legend sits on the count's line, beside the table it explains.
-  document.querySelector("[data-result-meta]").innerHTML = rows.length && !sec?.excluded ? flagLegend() : "";
+  const others = inUse().filter((f) => f.key !== "sector").length;
+  const scope = (n) => (state.f.sector ? `${esc(state.f.sector)} ${n === 1 ? "stock" : "stocks"}` : n === 1 ? "company" : "companies");
+  // With a sector chosen it is the list's scope, so the rest are "the other" filters.
+  const other = state.f.sector ? "other " : "";
+  const asked = [others ? (others === 1 ? `the ${other}filter` : others === 2 ? `both ${other}filters` : `all ${others} ${other}filters`) : "", state.q ? `"${esc(state.q)}"` : ""].filter(Boolean).join(" and ");
+  countEl.innerHTML = sec?.excluded ? `${esc(state.f.sector)} is not screened`
+    : asked ? `<b>${rows.length}</b> of the ${base.length} ${scope(base.length)} that passed every check ${rows.length === 1 ? "matches" : "match"} ${asked}`
+    : state.f.sector ? `<b>${rows.length}</b> of ${sec?.checked ?? 0} ${esc(state.f.sector)} stocks passed every check`
+    : `<b>${rows.length}</b> ${rows.length === 1 ? "company" : "companies"} passed every check`;
+  document.querySelector("[data-matches]").textContent = sec?.excluded ? "n/a" : String(rows.length);
+  // The flag icons' legend sits on the count's line, beside the table it explains, in the views that show flags.
+  document.querySelector("[data-result-meta]").innerHTML = rows.length && !sec?.excluded && VIEW_COLUMNS[state.view]?.includes("flags") ? flagLegend() : "";
+  renderStatus(sec?.excluded ? [] : rows);
+  after.innerHTML = "";
 
   if (sec?.excluded) {
     const see = Array.isArray(data.financials_list) ? ` <a href="#financials">See the banks and insurers under book value below.</a>` : "";
-    host.innerHTML = `<div class="panel empty"><h2>${esc(state.sector)} companies are not screened</h2><p>${esc(sec.excluded)}${see}</p></div>`;
+    host.innerHTML = `<div class="empty grid-empty"><h2>${esc(state.f.sector)} companies are not screened</h2><p>${esc(sec.excluded)}${see}</p></div>`;
     return;
   }
-
+  if (!base.length) {
+    host.innerHTML = `<div class="empty grid-empty"><h2>No ${esc(state.f.sector)} company passes today</h2>
+      <p>That is normal. The checks are strict on purpose, and some sectors rarely have cheap, debt-light, profitable small caps.
+      Try another sector or come back after the next update.</p></div>`;
+    after.innerHTML = unverifiedNote();
+    return;
+  }
   if (listed.length && !rows.length) {
     // Only the text filter empties the list: say so, and point to the report, which covers every listed stock.
     const ticker = /^[A-Za-z][A-Za-z.]{0,5}$/.test(state.q) ? state.q.toUpperCase() : null;
-    host.innerHTML = `<div class="panel empty"><h2>No company on this list matches "${esc(state.q)}"</h2>
+    host.innerHTML = `<div class="empty grid-empty"><h2>No company on this list matches "${esc(state.q)}"</h2>
       <p>The filter looks at the tickers and company names of the ${listed.length} ${listed.length === 1 ? "company" : "companies"} on it.${ticker
         ? ` To see how ${esc(ticker)} looks against everything else, <a href="report.html?t=${encodeURIComponent(ticker)}">open its report</a>.` : ""}</p>
-      <p class="empty-act"><button class="btn btn-ghost btn-sm" type="button" data-clear-filter>Clear the filter</button></p></div>`;
+      <p class="empty-act"><button class="btn btn-ghost btn-sm" type="button" data-clear-filter>Clear the text filter</button></p></div>`;
     return;
   }
   if (!rows.length) {
-    const passing = state.sector === "All" ? "the companies that pass" : `the ${esc(state.sector)} companies that pass`;
+    // The filters leave nothing. With the insider filter alone, say why: the scan's window and any days not read yet.
+    const only = inUse().filter((f) => f.key !== "sector");
     const notYet = insiderPending ? ` (${insiderPending} filing day${insiderPending === 1 ? " is" : "s are"} not scanned yet)` : "";
-    host.innerHTML = state.insider !== "any"
-      ? `<div class="panel empty"><h2>No ${state.sector === "All" ? "" : `${esc(state.sector)} `}company on the list ${INSIDER_WORDS[state.insider][0]}</h2>
-        <p>None of ${passing} today had Tier 1 or 2 insider buying ${esc(window_())}${state.insider === "below" ? " at an average price above today's price" : ""}${notYet}.
-        Try "Any company"${state.sector === "All" ? "" : " or another sector"}.</p></div>`
-      : `<div class="panel empty"><h2>No ${esc(state.sector)} company passes today</h2>
-      <p>That is normal. The checks are strict on purpose, and some sectors rarely have cheap, debt-light, profitable small caps.
-      Try another sector or come back after the next update.</p></div>${unverifiedNote()}`;
+    const why = only.length > 1 ? "Remove a filter above, or clear them all."
+      : only[0]?.key === "insider" ? `None of them had Tier 1 or 2 insider buying ${esc(window_())}${state.f.insider === "below" ? " at an average price above today's price" : ""}${notYet}.`
+      : "None of them passes it.";
+    host.innerHTML = `<div class="empty grid-empty"><h2>No company on the list matches ${only.length === 1 ? "this filter" : "all of these filters"}</h2>
+      <p>${base.length} ${scope(base.length)} passed every check. ${why}</p>
+      <p class="empty-act"><button class="btn btn-ghost btn-sm" type="button" data-clear-all>Clear filters</button></p></div>`;
     return;
   }
-  const cols = COLUMNS().length;
-  host.innerHTML = `<div class="table-wrap"><table class="data screen-table">
+  const cols = columns();
+  host.innerHTML = `<div class="table-wrap"><table class="data screen-table view-${state.view}">
     <caption class="sr-only">Companies that passed every check, ${esc(sortEl.selectedOptions[0]?.textContent || "best score")} first. Open a company to see its score and rules.</caption>
-    ${head()}
-    <tbody>${rows.map((r, i) => row(r, i) + (state.open === r.symbol ? detailRow(r, cols) : "")).join("")}</tbody></table></div>
-    <p class="table-note">Open a row to see how its score adds up and its figure for each rule. Cash yield is free cash flow as a share of market value.${hasPb() ? " Price to book is market value over book value: shareholders' equity less preferred stock." : ""}</p>
-    ${unverifiedNote()}`;
+    ${head(cols)}
+    <tbody>${rows.map((r, i) => row(r, i, cols) + (state.open === r.symbol ? detailRow(r, cols.length) : "")).join("")}</tbody></table></div>`;
+  after.innerHTML = `${tableNote()}${unverifiedNote()}`;
   watch(host.querySelector(".table-wrap"));
 }
 
@@ -318,7 +471,7 @@ function toggle(sym) {
   const r = data.results.find((x) => x.symbol === sym);
   if (!tr || !r) return;
   tr.querySelector(".row-toggle").setAttribute("aria-expanded", "true");
-  tr.insertAdjacentHTML("afterend", detailRow(r, COLUMNS().length));
+  tr.insertAdjacentHTML("afterend", detailRow(r, columns().length));
   fitLedger();
 }
 
@@ -341,12 +494,14 @@ function watch(wrap) {
   observed = wrap;
   wrap.addEventListener("scroll", () => edge(wrap), { passive: true });
   ro?.observe(wrap);
+  ro?.observe(wrap.querySelector("table")); // fonts arriving can widen it
   edge(wrap);
 }
 
 host.addEventListener("click", (e) => {
   const sortBtn = e.target.closest("[data-sort-key]");
   if (sortBtn) { setSort(sortBtn.dataset.sortKey); host.querySelector(`[data-sort-key="${sortBtn.dataset.sortKey}"]`)?.focus(); return; }
+  if (e.target.closest("[data-clear-all]")) { clearAll(); return; }
   if (e.target.closest("a, .ledger")) return;
   const tr = e.target.closest("tr.row");
   if (tr) toggle(tr.dataset.sym);
@@ -590,6 +745,16 @@ function clearFilter() {
 }
 host.addEventListener("click", (e) => { if (e.target.closest("[data-clear-filter]")) { clearFilter(); filterEl.focus(); } });
 
+// Every filter and the text filter off; the sort and the columns shown stay as they are.
+function clearAll() {
+  for (const f of FILTERS) setFilter(f.key, null);
+  filterEl.value = "";
+  state.q = "";
+  setParam("q", null);
+  refresh();
+  filterEl.focus();
+}
+
 // A link into "How the list is made" (screener.html#scoring, or to anything inside a section) opens its section.
 function openTarget() {
   const el = location.hash ? document.getElementById(decodeURIComponent(location.hash.slice(1))) : null;
@@ -597,36 +762,77 @@ function openTarget() {
 }
 window.addEventListener("hashchange", openTarget);
 
-sortEl.addEventListener("change", (e) => setSort(e.target.value));
-resetEl.addEventListener("click", () => {
-  state.sector = "All"; state.insider = "any"; state.open = null; state.q = ""; filterEl.value = "";
-  ["sector", "insider", "sort", "q"].forEach((k) => setParam(k, null));
-  document.querySelectorAll("[data-insider]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.insider === "any"));
-  renderSectors();
-  paintQuick();
-  setSort("score");
-  document.querySelector("[data-sectors] [aria-pressed='true']")?.focus();
+// The panel: a dropdown sets its filter, a chip removes one, a group button shows that group's dropdowns, and on a
+// phone a button opens the dropdowns.
+document.querySelector("[data-fields]").addEventListener("change", (e) => {
+  const s = e.target.closest("[data-f]");
+  if (!s) return;
+  setFilter(s.dataset.f, s.value);
+  refresh(s.dataset.f);
 });
+document.querySelector("[data-chips]").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-remove]");
+  if (!b) return;
+  const li = b.closest("li");
+  const key = (li.nextElementSibling || li.previousElementSibling)?.querySelector("[data-remove]")?.dataset.remove;
+  setFilter(b.dataset.remove, null);
+  refresh();
+  // Keyboard focus moves to the chip beside the one removed, or to the text filter when none is left.
+  ((key && document.querySelector(`[data-remove="${key}"]`)) || filterEl).focus();
+});
+document.querySelector("[data-groups]").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-group]");
+  if (!b) return;
+  state.group = b.dataset.group;
+  renderGroups();
+  renderFields();
+});
+const toggleEl = document.querySelector("[data-builder-toggle]");
+toggleEl.addEventListener("click", () => {
+  const open = !builder.classList.contains("open");
+  builder.classList.toggle("open", open);
+  toggleEl.setAttribute("aria-expanded", String(open));
+  toggleEl.querySelector("[data-toggle-word]").textContent = open ? "Hide filters" : "Show filters";
+});
+document.querySelector("[data-views]").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-view]");
+  if (!b) return;
+  state.view = b.dataset.view;
+  state.open = null;
+  setParam("view", state.view === "overview" ? null : state.view);
+  paintViews();
+  renderTable();
+});
+function paintViews() {
+  document.querySelectorAll("[data-view]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.view === state.view)));
+}
 
-Promise.all([load("screener.json"), load("meta.json").catch(() => null)]).then(([d, meta]) => {
+sortEl.addEventListener("change", (e) => setSort(e.target.value));
+resetEl.addEventListener("click", clearAll);
+
+Promise.all([load("screener.json"), load("meta.json").catch(() => null)]).then(([d, m]) => {
   data = d;
-  insiderDays = meta?.insider_days ?? null;
-  insiderPending = meta?.insider_pending?.length ?? 0;
+  meta = m;
+  insiderDays = m?.insider_days ?? null;
+  insiderPending = m?.insider_pending?.length ?? 0;
   if (insiderDays) document.querySelectorAll("[data-window]").forEach((el) => { el.textContent = insiderDays; });
   if (!hasPb()) {
     document.querySelector("[data-needs-pb]")?.remove();
     if (state.sort === "pb") state.sort = "score";
   }
-  if (state.sector !== "All" && !d.sectors.some((s) => s.name === state.sector && (s.checked > 0 || s.excluded))) {
-    state.sector = "All";
-    setParam("sector", null);
+  // The filters a link carries (screener.html?sector=Technology&insider=buying), each checked against today's data.
+  for (const f of FILTERS) {
+    const v = params.get(f.key);
+    if (v) state.f[f.key] = v;
   }
+  validate();
+  // The panel opens on the group of the first filter in use.
+  state.group = inUse()[0]?.group || "descriptive";
   sortEl.value = state.sort;
-  renderProof(meta);
+  paintViews();
+  renderProof(m);
   explainRules();
-  renderInsiderFilter();
-  renderSectors();
-  renderTable();
+  refresh();
   renderIndustries();
   renderNetCash();
   renderFinancials();
@@ -636,7 +842,8 @@ Promise.all([load("screener.json"), load("meta.json").catch(() => null)]).then((
   // explanation opens its section first.
   openTarget();
   if (location.hash) document.getElementById(decodeURIComponent(location.hash.slice(1)))?.scrollIntoView({ block: "start", behavior: "instant" });
-}).catch(() => {
+}).catch((err) => {
+  console.error(err);
   host.setAttribute("aria-busy", "false");
-  host.innerHTML = `<div class="panel empty"><h2>Screener data is not available yet</h2><p>Results appear after the first nightly update runs. If you expected them, reload the page in a minute.</p></div>`;
+  host.innerHTML = `<div class="empty grid-empty"><h2>Screener data is not available yet</h2><p>Results appear after the first nightly update runs. If you expected them, reload the page in a minute.</p></div>`;
 });

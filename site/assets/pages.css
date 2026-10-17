@@ -23,23 +23,98 @@
   .stat-strip dd { font-size: 17px; }
 }
 
-/* ---- The screening panel: a filter for the list, the quick filters and the sort on one line, the sectors under them.
-   ---- */
-.screen-panel {
-  display: grid; gap: 10px; padding: 12px 14px; margin-bottom: 10px;
+/* ---- The filter panel: a text filter, the groups of dropdowns as a segmented control, the dropdowns for the group
+   chosen (four to a row), and the filters in use as chips. On a phone the dropdowns open from a button. ---- */
+.builder {
+  display: grid; gap: 12px; padding: 12px 14px; margin-bottom: 12px;
   border: 1px solid var(--line); border-radius: var(--r-frame); background: var(--surface);
 }
-.panel-top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
-.table-search { flex: 1 1 240px; min-width: 200px; max-width: 360px; }
+.builder > * { min-width: 0; }
+.builder-top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.table-search { flex: 1 1 260px; min-width: 200px; max-width: 380px; }
 .table-search .input { height: 38px; }
 .table-search .input::-webkit-search-cancel-button { filter: invert(0.6); cursor: pointer; }
-.quick { gap: 10px; }
-.quick-pills { display: flex; flex-wrap: wrap; gap: 6px; }
-.sort-field { margin-left: auto; }
-.screen-bar { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; margin: 0 0 10px; }
-.result-count { color: var(--text-2); font-size: 14px; }
+.builder-toggle { display: none; }
+.builder-groups { position: relative; display: flex; gap: 2px; padding: 2px; border: 1px solid var(--line-2); border-radius: var(--r-ctl); }
+.group-btn {
+  display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 11px; border: 0; border-radius: var(--r-tag);
+  background: transparent; color: var(--text-2); font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer;
+  transition: color .15s, background .15s;
+}
+.group-btn:hover { color: var(--text); background: var(--surface-2); }
+.group-btn[aria-pressed="true"] { background: var(--surface-4); color: var(--text); }
+/* How many filters a group has in use: a small solid count, absent while none is. */
+.group-btn .count, .builder-toggle .count {
+  display: inline-grid; place-items: center; min-width: 17px; height: 17px; padding: 0 4px; border-radius: var(--r-tag);
+  background: var(--inverse); color: var(--on-inverse); font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.group-btn .count:empty, .builder-toggle .count:empty { display: none; }
+.builder-toggle .count { margin-left: 8px; }
+.builder-matches { margin-left: auto; font-size: 13px; color: var(--text-3); white-space: nowrap; }
+.builder-matches b { font-size: 15px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+.builder-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 14px; }
+.ff { display: grid; gap: 5px; min-width: 0; }
+.ff label { font-size: 12.5px; color: var(--text-3); }
+.ff .select { width: 100%; height: 34px; min-width: 0; text-overflow: ellipsis; }
+.ff.on label { color: var(--text); }
+.ff.on .select { border-color: var(--text-2); background-color: var(--surface-2); }
+.builder-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-height: 28px; padding-top: 10px; border-top: 1px solid var(--line); }
+.chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 7px 0 10px; border: 1px solid var(--line-2);
+  border-radius: var(--r-ctl); background: var(--surface-2); color: var(--text); font: inherit; font-size: 12.5px; cursor: pointer;
+  transition: border-color .15s;
+}
+.chip-k { color: var(--text-3); }
+.chip .i { font-size: 14px; color: var(--text-3); transition: color .15s; }
+.chip:hover { border-color: var(--line-3); }
+.chip:hover .i { color: var(--text); }
+.chips-none { font-size: 12.5px; color: var(--text-3); }
+.builder-foot .reset { margin-left: auto; height: 28px; }
+@media (max-width: 1000px) { .builder-matches { margin-left: 0; } }
+@media (max-width: 860px) { .builder-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 720px) {
+  .builder { padding: 12px; }
+  .table-search { max-width: none; flex-basis: 100%; }
+  .builder-toggle { display: inline-flex; }
+  .builder-matches { margin-left: auto; }
+  .builder:not(.open) .builder-groups, .builder:not(.open) .builder-fields { display: none; }
+  .builder-groups { order: 3; flex-basis: 100%; min-width: 0; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .builder-groups::-webkit-scrollbar { display: none; }
+  .group-btn { flex: 1 0 auto; justify-content: center; }
+  .seg-field { width: 100%; }
+  .seg-field { flex-direction: column; align-items: flex-start; gap: 6px; }
+  .seg { width: 100%; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+  .seg-btn { min-width: 0; height: auto; min-height: 34px; padding: 4px 6px; white-space: normal; line-height: 1.2; }
+}
+@media (max-width: 480px) { .builder-fields { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---- The results: one frame holding the column views and the sort, the count and the flags' key, the table, and a
+   status line saying what its figures are. ---- */
+.grid-card { border: 1px solid var(--line); border-radius: var(--r-frame); background: var(--surface); }
+.grid-bar {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 9px 12px;
+  border-bottom: 1px solid var(--line); background: var(--bg-raise); border-radius: var(--r-frame) var(--r-frame) 0 0;
+}
+.grid-sub { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; padding: 9px 14px; border-bottom: 1px solid var(--line); }
+.result-count { color: var(--text-2); font-size: 13.5px; }
 .result-count b { color: var(--text); font-weight: 600; }
 .result-meta .flag-legend { margin: 0; }
+.grid-card .table-wrap { border: 0; border-radius: 0; background: transparent; }
+.grid-card table.data > thead > tr > th { border-radius: 0; }
+.grid-empty { padding: 32px 20px; }
+.empty-act { margin-top: 14px !important; }
+.grid-status {
+  list-style: none; margin: 0; padding: 8px 12px; display: flex; flex-wrap: wrap; gap: 6px; border-top: 1px solid var(--line);
+  background: var(--bg-raise); border-radius: 0 0 var(--r-frame) var(--r-frame);
+}
+.grid-status li {
+  display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: var(--r-tag);
+  background: var(--surface-3); color: var(--text-2); font-size: 12px; font-variant-numeric: tabular-nums;
+}
+@media (max-width: 720px) { .grid-sub { padding: 9px 12px; } }
+
+.flag-legend { margin: 0; }
 @media (max-width: 1000px) {
   .table-search { max-width: none; flex-basis: 100%; }
   .sort-field { margin-left: 0; }
@@ -58,27 +133,44 @@
 .flag-legend .flag { width: 18px; height: 18px; }
 .flag-legend .flag .i { width: 12px; height: 12px; }
 
-/* ---- The ranked table ---- */
-.screen-table > thead > tr > th, .screen-table > tbody > tr > td { padding-left: 8px; padding-right: 8px; }
-/* Figure columns' names wrap to two lines, so the column is as wide as its figures. */
+/* ---- The ranked table: rows 35px tall, a seam between column names, the ticker as a chip beside its name. ---- */
+.screen-table > thead > tr > th, .screen-table > tbody > tr > td { padding-left: 7px; padding-right: 7px; }
+.screen-table > thead > tr > th { padding-top: 9px; padding-bottom: 9px; border-right: 1px solid var(--line); }
+.screen-table > thead > tr > th:last-child, .screen-table > thead > tr > th.c-rank { border-right: 0; }
+.screen-table > tbody > tr.row > td { padding-top: 6px; padding-bottom: 6px; }
+.screen-table > tbody > tr.row > td.c-co { padding: 0; }
+.screen-table > thead > tr > th:not(.txt) { white-space: nowrap; }
+/* The score's parts are named in full, on two lines. */
+.screen-table > thead > tr > th.part { white-space: normal; min-width: 62px; max-width: 96px; }
+.screen-table .th-sub { display: block; font-size: 11px; color: var(--text-3); }
+.screen-table td.ink { color: var(--ink); }
+.screen-table td .of { color: var(--text-3); font-size: 12px; }
+.screen-table td.zero, .screen-table td.zero b { color: var(--text-3); font-weight: 400; }
+.screen-table td b { font-weight: 600; }
 .screen-table > thead > tr > th { vertical-align: bottom; }
-.screen-table > thead > tr > th:not(.txt) { white-space: normal; }
-.screen-table > thead > tr > th:not(.txt) .sort { display: inline; }
-.screen-table .c-rank { width: 40px; min-width: 40px; padding-left: 14px; color: var(--text-3); text-align: left; }
+.screen-table .c-rank { width: 36px; min-width: 36px; padding-left: 12px; color: var(--text-3); text-align: left; }
 .screen-table th.c-rank { color: var(--text-3); }
 .screen-table td.c-co { padding: 0; }
 .screen-table .c-flags .flag { width: 20px; height: 20px; }
-.screen-table .c-go { width: 40px; padding-right: 12px; }
+.screen-table .c-flags .flag-set { height: 20px; gap: 3px; }
+.screen-table .c-go { width: 40px; padding-right: 8px; }
 .row-toggle {
   all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0;
   padding: 5px 8px; cursor: pointer;
 }
 .row-toggle .co { line-height: 1.3; }
+.screen-table .co { flex-direction: row; align-items: center; gap: 8px; }
+.screen-table .co .sym {
+  flex: none; display: inline-grid; place-items: center; min-width: 46px; height: 21px; padding: 0 6px; border-radius: var(--r-tag);
+  background: var(--ink-dim); color: var(--ink); font-size: 12px; box-shadow: inset 0 0 0 1px var(--ink-line);
+}
+.screen-table .co .nm { color: var(--text); font-size: 13px; }
 .row-toggle:focus-visible { outline: 2px solid var(--text); outline-offset: -2px; border-radius: 4px; }
 .row-toggle .caret { font-size: 14px; color: var(--text-3); transition: transform .2s var(--ease), color .15s; }
 .row-toggle[aria-expanded="true"] .caret { transform: rotate(90deg); color: var(--text); }
-.screen-table .co { max-width: 200px; }
-.screen-table .co .nm { max-width: 190px; }
+.screen-table .co { max-width: 250px; }
+.screen-table .co .nm { max-width: 132px; }
+.screen-table .score .tape { width: 80px; }
 .screen-table td.c-score { min-width: 140px; }
 .go { display: inline-grid; place-items: center; width: 26px; height: 26px; vertical-align: middle; border-radius: var(--r-ctl); color: var(--text-3); }
 .go:hover { color: var(--text); background: var(--surface-4); }
@@ -87,9 +179,7 @@
 .screen-table tbody tr.row:hover > td,
 .screen-table tbody tr.row:has(.row-toggle[aria-expanded="true"]) > td { background: var(--surface-2); }
 .screen-table tbody tr.row:has(.row-toggle[aria-expanded="true"]) .sym { font-weight: 600; }
-.screen-table tbody tr.row:last-child > td { border-bottom: 0; }
-.screen-table tbody tr.row:last-child:hover > td:first-child { border-bottom-left-radius: var(--r-frame); }
-.screen-table tbody tr.row:last-child:hover > td:last-child { border-bottom-right-radius: var(--r-frame); }
+.screen-table > tbody > tr:last-child > td { border-bottom: 0; }
 
 /* Where the table fits its box, the column names stay under the page's header while the list scrolls past. */
 .table-wrap:not(.scrolls) .screen-table thead th { position: sticky; top: var(--nav-h); z-index: 2; }
@@ -97,7 +187,7 @@
 @media (min-width: 721px) { .table-wrap:not(.scrolls) .screen-table tbody :is(a, button) { scroll-margin-top: 56px; } }
 /* Where it doesn't, the rank and company stay in view while the figures scroll sideways, the right edge fading. */
 .table-wrap.scrolls .screen-table .c-rank { position: sticky; left: 0; z-index: 1; }
-.table-wrap.scrolls .screen-table .c-co { position: sticky; left: 40px; z-index: 1; border-right: 1px solid var(--line); }
+.table-wrap.scrolls .screen-table .c-co { position: sticky; left: 36px; z-index: 1; border-right: 1px solid var(--line); }
 .table-wrap.scrolls .screen-table thead .c-rank, .table-wrap.scrolls .screen-table thead .c-co { background: var(--bg-raise); }
 .table-wrap.more-right { -webkit-mask-image: linear-gradient(to left, transparent, #000 36px); mask-image: linear-gradient(to left, transparent, #000 36px); }
 /* An opened row's ledger doesn't scroll, so its words stop short of that fade, wherever the table is scrolled to. */
@@ -113,36 +203,31 @@
 }
 .screen-table > tbody > tr.detail > td { padding: 0; background: var(--bg-raise); border-bottom: 1px solid var(--line); white-space: normal; text-align: left; }
 
-/* ---- On a phone each company is a block: rank, company and score, its flags, then its figures, labelled. ---- */
+/* ---- On a phone each company is a block: rank, company and score, its flags, then the view's figures, labelled, four
+   to a row. ---- */
 @media (max-width: 720px) {
   /* Only the table's own sections: an opened row's ledger tables keep their table layout and their hidden headers. */
   .screen-table, .screen-table > tbody { display: block; }
   .screen-table > thead { display: none; }
   .screen-table tr.row {
-    display: grid; grid-template-columns: 22px repeat(4, minmax(0, 1fr)); column-gap: 10px; row-gap: 10px;
-    padding: 12px 12px 14px 10px; border-bottom: 1px solid var(--line); background: var(--surface);
+    position: relative; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: 10px; row-gap: 10px;
+    padding: 12px 12px 14px 40px; border-bottom: 1px solid var(--line); background: var(--surface);
   }
   .screen-table tbody tr.row:last-child { border-bottom: 0; }
   .screen-table tr.row > td { display: block; padding: 0; border: 0; text-align: left; background: transparent !important; min-width: 0; }
   .screen-table tbody tr.row:hover, .screen-table tbody tr.row:has(.row-toggle[aria-expanded="true"]) { background: var(--surface-2); }
-  .screen-table td.c-rank { grid-column: 1; grid-row: 1; width: auto; min-width: 0; padding-top: 1px; }
-  .screen-table td.c-co { grid-column: 2 / span 2; grid-row: 1; }
+  .screen-table td.c-rank { position: absolute; left: 12px; top: 13px; width: auto; min-width: 0; padding: 0; }
+  .screen-table td.c-co { grid-column: 1 / span 2; grid-row: 1; }
   .screen-table .row-toggle { padding: 0; }
   .screen-table .row-toggle .caret { display: none; }
+  .screen-table .co { flex-direction: column; align-items: flex-start; gap: 4px; max-width: 100%; }
   .screen-table .co .nm { max-width: 100%; }
-  .screen-table td.c-score { grid-column: 4 / span 2; grid-row: 1; justify-self: end; min-width: 0; }
-  .screen-table td.c-flags { grid-column: 2 / -1; grid-row: 2; }
+  .screen-table td.c-score { grid-column: 3 / span 2; grid-row: 1; justify-self: end; min-width: 0; }
+  .screen-table .score .tape { width: 90px; }
+  .screen-table td.c-flags { grid-column: 1 / -1; grid-row: 2; }
   .screen-table tr.row > td.c-flags:not(:has(.flag-set)) { display: none; }
   .screen-table td[data-label] { font-size: 13px; }
-  .screen-table td[data-label]::before { content: attr(data-label); display: block; font-size: 11px; color: var(--text-3); margin-bottom: 1px; }
-  .screen-table td.c-mcap { grid-column: 2; grid-row: 3; }
-  .screen-table td.c-ps { grid-column: 3; grid-row: 3; }
-  .screen-table td.c-pb { grid-column: 4; grid-row: 3; }
-  .screen-table td.c-margin { grid-column: 5; grid-row: 3; }
-  .screen-table td.c-debt { grid-column: 2; grid-row: 4; }
-  .screen-table td.c-fcf { grid-column: 3; grid-row: 4; }
-  .screen-table td.c-dd { grid-column: 4; grid-row: 4; }
-  .screen-table td.c-an { grid-column: 5; grid-row: 4; }
+  .screen-table td[data-label]::before { content: attr(data-label); display: block; font-size: 11px; line-height: 1.3; color: var(--text-3); margin-bottom: 2px; white-space: normal; }
   .screen-table tr.row > td.c-go { display: none; }
   .screen-table td .tag { height: 19px; padding: 0 5px; font-size: 11.5px; }
   .screen-table tr.detail, .screen-table tr.detail > td { display: block; }

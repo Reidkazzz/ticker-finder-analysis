@@ -30,20 +30,39 @@
     </dl>
   </section>
 
-  <div class="screen-panel" role="group" aria-label="Narrow the list">
-    <div class="panel-top">
+  <section class="builder" aria-label="Filters" data-builder>
+    <div class="builder-top">
       <div class="field table-search">
         <label class="sr-only" for="list-filter">Filter the list by ticker or company name</label>
         <svg class="i" aria-hidden="true" focusable="false"><use href="assets/icons.svg#i-search"></use></svg>
         <input class="input" id="list-filter" type="search" placeholder="Filter by ticker or company" autocomplete="off" spellcheck="false" data-filter>
       </div>
-      <div class="seg-field quick" data-insider-only hidden>
-        <span class="seg-label" id="insider-label">Quick filters</span>
-        <div class="pills quick-pills" role="group" aria-labelledby="insider-label" data-insider-filter>
-          <button class="pill" type="button" data-insider="any" aria-pressed="true">All qualifying<span class="count" data-quick-count="any"></span></button>
-          <button class="pill" type="button" data-insider="buying" aria-pressed="false">Insiders buying<span class="count" data-quick-count="buying"></span></button>
-          <button class="pill" type="button" data-insider="below" aria-pressed="false">Below insiders' price<span class="count" data-quick-count="below"></span></button>
-        </div>
+      <button class="btn btn-ghost btn-sm builder-toggle" type="button" aria-expanded="false" aria-controls="builder-groups builder-fields" data-builder-toggle><span data-toggle-word>Show filters</span><span class="count" data-active-count></span></button>
+      <div class="builder-groups" id="builder-groups" role="group" aria-label="Which filters to show" data-groups>
+        <button class="group-btn" type="button" data-group="descriptive" aria-pressed="true">Descriptive<span class="count" data-group-count></span></button>
+        <button class="group-btn" type="button" data-group="valuation" aria-pressed="false">Valuation<span class="count" data-group-count></span></button>
+        <button class="group-btn" type="button" data-group="financial" aria-pressed="false">Financial<span class="count" data-group-count></span></button>
+        <button class="group-btn" type="button" data-group="signals" aria-pressed="false">Signals<span class="count" data-group-count></span></button>
+        <button class="group-btn" type="button" data-group="all" aria-pressed="false">All filters<span class="count" data-group-count></span></button>
+      </div>
+      <p class="builder-matches" aria-hidden="true"><b data-matches>&nbsp;</b> matches</p>
+    </div>
+    <div class="builder-fields" id="builder-fields" data-fields></div>
+    <div class="builder-foot">
+      <ul class="chips" aria-label="Filters in use" data-chips hidden></ul>
+      <p class="chips-none" data-chips-none>No filters in use. Pick one from a dropdown to narrow the list.</p>
+      <button class="btn btn-ghost btn-sm reset" type="button" data-reset hidden>Clear filters</button>
+    </div>
+  </section>
+
+  <section class="grid-card" aria-label="Companies that passed every check">
+    <div class="grid-bar">
+      <div class="seg views" role="group" aria-label="Columns to show" data-views>
+        <button class="seg-btn" type="button" data-view="overview" aria-pressed="true">Overview</button>
+        <button class="seg-btn" type="button" data-view="valuation" aria-pressed="false">Valuation</button>
+        <button class="seg-btn" type="button" data-view="financials" aria-pressed="false">Financials</button>
+        <button class="seg-btn" type="button" data-view="price" aria-pressed="false">Price</button>
+        <button class="seg-btn" type="button" data-view="score" aria-pressed="false">Score</button>
       </div>
       <label class="label-inline sort-field">Sort by
         <select class="select" data-sort>
@@ -52,27 +71,27 @@
           <option value="pb" data-needs-pb>Cheapest vs. book value</option>
           <option value="net_margin">Highest profit margin</option>
           <option value="fcf_yield">Most cash generated</option>
+          <option value="revenue_growth">Fastest sales growth</option>
           <option value="drawdown">Furthest below high</option>
+          <option value="analysts">Fewest analysts</option>
           <option value="mcap">Smallest company</option>
         </select>
       </label>
-      <button class="btn btn-ghost btn-sm reset" type="button" data-reset hidden>Reset</button>
     </div>
-    <div class="pills scroll sector-pills" role="group" aria-label="Sector" data-sectors></div>
-  </div>
-
-  <div class="screen-bar">
-    <p class="result-count" data-count aria-live="polite">&nbsp;</p>
-    <div class="result-meta" data-result-meta></div>
-  </div>
-
-  <div data-results aria-busy="true">
-    <div class="skeleton" style="height:40px;margin-bottom:2px"></div>
-    <div class="skeleton" style="height:52px;margin-bottom:2px"></div>
-    <div class="skeleton" style="height:52px;margin-bottom:2px"></div>
-    <div class="skeleton" style="height:52px;margin-bottom:2px"></div>
-    <div class="skeleton" style="height:52px"></div>
-  </div>
+    <div class="grid-sub">
+      <p class="result-count" data-count aria-live="polite">&nbsp;</p>
+      <div class="result-meta" data-result-meta></div>
+    </div>
+    <div data-results aria-busy="true">
+      <div class="skeleton" style="height:40px;margin-bottom:2px"></div>
+      <div class="skeleton" style="height:36px;margin-bottom:2px"></div>
+      <div class="skeleton" style="height:36px;margin-bottom:2px"></div>
+      <div class="skeleton" style="height:36px;margin-bottom:2px"></div>
+      <div class="skeleton" style="height:36px"></div>
+    </div>
+    <ul class="grid-status" aria-label="About these figures" data-status hidden></ul>
+  </section>
+  <div class="grid-after" data-after></div>
 
   <nav class="index-rail" aria-label="On this page" data-index hidden></nav>
 
