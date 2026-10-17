@@ -85,7 +85,7 @@ const FILTERS = [
       .map((s) => ({ ...opt(s.name, s.excluded ? `${s.name}, not screened` : s.name, (r) => r.sector === s.name), excluded: s.excluded })) },
   { key: "industry", group: "descriptive", label: "Industry", any: "All industries",
     // The industries of the companies in the sector chosen, so each one listed has a company in it.
-    options: () => [...new Set(data.results.filter((r) => !state.f.sector || r.sector === state.f.sector).map((r) => r.industry).filter(Boolean))]
+    options: (f = state.f) => [...new Set(data.results.filter((r) => !f.sector || r.sector === f.sector).map((r) => r.industry).filter(Boolean))]
       .sort((a, b) => a.localeCompare(b)).map((n) => opt(n, n, (r) => r.industry === n)) },
   { key: "mcap", group: "descriptive", label: "Market value",
     options: () => [[250e6, "250m", "$250M"], [500e6, "500m", "$500M"], [1e9, "1b", "$1B"], [2e9, "2b", "$2B"]]
@@ -141,19 +141,35 @@ const inUse = () => usable().filter((f) => choice(f));
 const sectorRow = () => (state.f.sector ? data.sectors.find((s) => s.name === state.f.sector) : null);
 
 // Drops a choice the data can't answer: a filter today's data lacks, an option it doesn't list (an industry outside the
-// sector chosen), or a parameter from an old link.
+// sector chosen), or a parameter from an old link. Returns what it dropped, by filter and choice.
 function validate() {
+  const dropped = [];
   for (const f of FILTERS) {
     if (!state.f[f.key]) { delete state.f[f.key]; continue; }
-    if ((f.ok && !f.ok()) || !f.options().some((o) => o.id === state.f[f.key])) { delete state.f[f.key]; setParam(f.key, null); }
+    if ((f.ok && !f.ok()) || !f.options().some((o) => o.id === state.f[f.key])) {
+      dropped.push([f, state.f[f.key]]);
+      delete state.f[f.key];
+      setParam(f.key, null);
+    }
   }
+  return dropped;
 }
 
-// The companies that pass every filter in use but `skip`, before the panel's text filter.
-const passing = (skip) => {
-  const tests = inUse().filter((f) => f.key !== skip).map((f) => choice(f).test);
+// The companies that pass every filter in use, before the panel's text filter.
+const passing = () => {
+  const tests = inUse().map((f) => choice(f).test);
   return data.results.filter((r) => tests.every((t) => t(r)));
 };
+
+// How many companies the list would show with filter `key` set to `id` (or to "any" without one), as the page would
+// then apply it: with the text filter, and without an industry the new sector has no company in, which validate() drops.
+function wouldShow(key, id) {
+  const f = { ...state.f };
+  if (id) f[key] = id; else delete f[key];
+  if (key === "sector" && f.industry && !FILTERS[1].options(f).some((o) => o.id === f.industry)) delete f.industry;
+  const tests = usable().filter((x) => f[x.key]).map((x) => (x.key === "industry" ? x.options(f) : x.options()).find((o) => o.id === f[x.key])?.test).filter(Boolean);
+  return data.results.filter((r) => queryOk(r) && tests.every((t) => t(r))).length;
+}
 
 // The panel's filter: a ticker that starts with what is typed, or a company name that contains it.
 const queryOk = (r) => {
@@ -169,29 +185,31 @@ function setParam(key, value) {
 }
 
 function paintReset() {
+  if (!data) return;
   resetEl.hidden = !inUse().length && !state.q;
   // With nothing in use the line under the dropdowns goes, so the list starts higher.
   document.querySelector(".builder-foot").hidden = resetEl.hidden;
 }
 
-// The panel's dropdowns for the group shown. Each choice counts the companies it would show with the other filters in
-// use, before the text filter, so a dropdown says what picking it would leave.
+// The panel's dropdowns for the group shown. Each choice counts the companies the list would show if it were picked,
+// with the other filters and the text filter as they are, so a dropdown says what picking it would leave.
 function renderFields(focusKey) {
+  if (!data) return;
   const el = document.querySelector("[data-fields]");
   const shown = usable().filter((f) => state.group === "all" || f.group === state.group);
   el.classList.toggle("all", state.group === "all");
   el.innerHTML = shown.map((f) => {
-    const pool = passing(f.key);
     const opts = f.options();
     const now = state.f[f.key] || "";
     return `<div class="ff${now ? " on" : ""}"><label for="f-${f.key}">${esc(f.label)}</label>
-      <select class="select" id="f-${f.key}" data-f="${f.key}"><option value="">${esc(f.any || "Any")} (${pool.length})</option>${opts.map((o) =>
-        `<option value="${esc(o.id)}"${o.id === now ? " selected" : ""}>${esc(o.label)}${o.excluded ? "" : ` (${pool.filter(o.test).length})`}</option>`).join("")}</select></div>`;
+      <select class="select" id="f-${f.key}" data-f="${f.key}"><option value="">${esc(f.any || "Any")} (${wouldShow(f.key, null)})</option>${opts.map((o) =>
+        `<option value="${esc(o.id)}"${o.id === now ? " selected" : ""}>${esc(o.label)}${o.excluded ? "" : ` (${wouldShow(f.key, o.id)})`}</option>`).join("")}</select></div>`;
   }).join("");
   if (focusKey) el.querySelector(`[data-f="${focusKey}"]`)?.focus();
 }
 
 function renderGroups() {
+  if (!data) return;
   const used = inUse();
   document.querySelectorAll("[data-group]").forEach((b) => {
     const g = b.dataset.group;
@@ -203,22 +221,27 @@ function renderGroups() {
   all.innerHTML = used.length ? `<span class="sr-only">, </span>${used.length}<span class="sr-only"> in use</span>` : "";
 }
 
-// The filters in use as chips, each removed by its own button.
+// The filters in use as chips, each removed by its own button, the text filter's last.
 function renderChips() {
+  if (!data) return;
   const el = document.querySelector("[data-chips]");
   el.innerHTML = inUse().map((f) => {
     const o = choice(f);
     return `<li><button class="chip" type="button" data-remove="${f.key}" aria-label="Remove the filter ${esc(f.label)}: ${esc(o.label)}">
       <span class="chip-k">${esc(f.label)}</span> ${esc(o.label)}${icon("x")}</button></li>`;
-  }).join("");
+  }).join("") + (state.q ? `<li><button class="chip" type="button" data-remove="q" aria-label="Remove the text filter: ${esc(state.q)}">
+      <span class="chip-k">Text</span> "${esc(state.q)}"${icon("x")}</button></li>` : "");
   el.hidden = !el.children.length;
-  document.querySelector("[data-chips-none]").hidden = !el.hidden;
   paintReset();
 }
 
-// After any filter changes: the dropdowns' counts, the chips, the groups' counts and the table.
+// After any filter changes: the dropdowns' counts, the chips, the groups' counts and the table. A filter the change
+// left without an answer (an industry outside the sector just chosen) is dropped, and the count line says so.
+let droppedNote = "";
 function refresh(focusKey) {
-  validate();
+  const dropped = validate();
+  droppedNote = dropped.filter(([f]) => f.key === "industry").map(([, v]) =>
+    `. The industry filter (${esc(v)}) was cleared, since no company on the list in ${esc(state.f.sector || "any sector")} is in it.`).join("");
   state.open = null;
   renderFields(focusKey);
   renderGroups();
@@ -399,18 +422,19 @@ function renderTable() {
   const sec = sectorRow();
   // The companies the sector leaves, those every filter leaves, then the rows the text filter keeps of them.
   const base = data.results.filter((r) => !state.f.sector || r.sector === state.f.sector);
-  const listed = passing(null).sort(SORTS[state.sort]);
+  const listed = passing().sort(SORTS[state.sort]);
   const rows = listed.filter(queryOk);
   const others = inUse().filter((f) => f.key !== "sector").length;
   const scope = (n) => (state.f.sector ? `${esc(state.f.sector)} ${n === 1 ? "stock" : "stocks"}` : n === 1 ? "company" : "companies");
   // With a sector chosen it is the list's scope, so the rest are "the other" filters.
   const other = state.f.sector ? "other " : "";
   const asked = [others ? (others === 1 ? `the ${other}filter` : others === 2 ? `both ${other}filters` : `all ${others} ${other}filters`) : "", state.q ? `"${esc(state.q)}"` : ""].filter(Boolean).join(" and ");
-  countEl.innerHTML = sec?.excluded ? `${esc(state.f.sector)} is not screened`
-    : asked ? `<b>${rows.length}</b> of the ${base.length} ${scope(base.length)} that passed every check ${rows.length === 1 ? "matches" : "match"} ${asked}`
+  countEl.innerHTML = (sec?.excluded ? `${esc(state.f.sector)} is not screened`
+    : asked && base.length ? `<b>${rows.length}</b> of the ${base.length} ${scope(base.length)} that passed every check ${rows.length === 1 ? "matches" : "match"} ${asked}`
     : state.f.sector ? `<b>${rows.length}</b> of ${sec?.checked ?? 0} ${esc(state.f.sector)} stocks passed every check`
-    : `<b>${rows.length}</b> ${rows.length === 1 ? "company" : "companies"} passed every check`;
-  document.querySelector("[data-matches]").textContent = sec?.excluded ? "n/a" : String(rows.length);
+    : `<b>${rows.length}</b> ${rows.length === 1 ? "company" : "companies"} passed every check`) + droppedNote;
+  droppedNote = "";
+  document.querySelector("[data-matches]").innerHTML = sec?.excluded ? "Not screened" : `<b>${rows.length}</b> ${rows.length === 1 ? "match" : "matches"}`;
   // The flag icons' legend sits on the count's line, beside the table it explains, in the views that show flags.
   document.querySelector("[data-result-meta]").innerHTML = rows.length && !sec?.excluded && VIEW_COLUMNS[state.view]?.includes("flags") ? flagLegend() : "";
   renderStatus(sec?.excluded ? [] : rows);
@@ -731,8 +755,7 @@ filterEl.addEventListener("input", () => {
     state.q = filterEl.value.trim();
     state.open = null;
     setParam("q", state.q || null);
-    paintReset();
-    if (data) renderTable();
+    if (data) { renderFields(); renderChips(); renderTable(); }
   }, 120);
 });
 filterEl.addEventListener("keydown", (e) => { if (e.key === "Escape" && filterEl.value) { e.preventDefault(); clearFilter(); } });
@@ -740,8 +763,7 @@ function clearFilter() {
   filterEl.value = "";
   state.q = "";
   setParam("q", null);
-  paintReset();
-  if (data) renderTable();
+  if (data) { renderFields(); renderChips(); renderTable(); }
 }
 host.addEventListener("click", (e) => { if (e.target.closest("[data-clear-filter]")) { clearFilter(); filterEl.focus(); } });
 
@@ -775,14 +797,14 @@ document.querySelector("[data-chips]").addEventListener("click", (e) => {
   if (!b) return;
   const li = b.closest("li");
   const key = (li.nextElementSibling || li.previousElementSibling)?.querySelector("[data-remove]")?.dataset.remove;
-  setFilter(b.dataset.remove, null);
-  refresh();
+  if (b.dataset.remove === "q") clearFilter();
+  else { setFilter(b.dataset.remove, null); refresh(); }
   // Keyboard focus moves to the chip beside the one removed, or to the text filter when none is left.
   ((key && document.querySelector(`[data-remove="${key}"]`)) || filterEl).focus();
 });
 document.querySelector("[data-groups]").addEventListener("click", (e) => {
   const b = e.target.closest("[data-group]");
-  if (!b) return;
+  if (!b || !data) return;
   state.group = b.dataset.group;
   renderGroups();
   renderFields();
@@ -796,7 +818,7 @@ toggleEl.addEventListener("click", () => {
 });
 document.querySelector("[data-views]").addEventListener("click", (e) => {
   const b = e.target.closest("[data-view]");
-  if (!b) return;
+  if (!b || !data) return;
   state.view = b.dataset.view;
   state.open = null;
   setParam("view", state.view === "overview" ? null : state.view);
@@ -842,8 +864,7 @@ Promise.all([load("screener.json"), load("meta.json").catch(() => null)]).then((
   // explanation opens its section first.
   openTarget();
   if (location.hash) document.getElementById(decodeURIComponent(location.hash.slice(1)))?.scrollIntoView({ block: "start", behavior: "instant" });
-}).catch((err) => {
-  console.error(err);
+}).catch(() => {
   host.setAttribute("aria-busy", "false");
   host.innerHTML = `<div class="empty grid-empty"><h2>Screener data is not available yet</h2><p>Results appear after the first nightly update runs. If you expected them, reload the page in a minute.</p></div>`;
 });

@@ -58,7 +58,7 @@
 .ff .select { width: 100%; height: 34px; min-width: 0; text-overflow: ellipsis; }
 .ff.on label { color: var(--text); }
 .ff.on .select { border-color: var(--text-2); background-color: var(--surface-2); }
-.builder-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-height: 28px; padding-top: 10px; border-top: 1px solid var(--line); }
+.builder-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-height: 28px; }
 .chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {
   display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 7px 0 10px; border: 1px solid var(--line-2);
@@ -79,15 +79,19 @@
   .builder-toggle { display: inline-flex; }
   .builder-matches { margin-left: auto; }
   .builder:not(.open) .builder-groups, .builder:not(.open) .builder-fields { display: none; }
-  .builder-groups { order: 3; flex-basis: 100%; min-width: 0; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
-  .builder-groups::-webkit-scrollbar { display: none; }
+  /* The five groups wrap onto a second line rather than scroll, so none hides and every focus ring shows whole. */
+  .builder-groups { order: 3; flex-basis: 100%; flex-wrap: wrap; }
   .group-btn { flex: 1 0 auto; justify-content: center; }
+  /* The column views size to their names, so "Financials" stays inside its button. */
+  .grid-bar .seg { grid-auto-columns: auto; }
   .seg-field { width: 100%; }
   .seg-field { flex-direction: column; align-items: flex-start; gap: 6px; }
   .seg { width: 100%; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
   .seg-btn { min-width: 0; height: auto; min-height: 34px; padding: 4px 6px; white-space: normal; line-height: 1.2; }
 }
 @media (max-width: 480px) { .builder-fields { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 400px) { .grid-bar .seg-btn { padding: 4px; font-size: 12.5px; } }
+@media (max-width: 340px) { .grid-bar .seg-btn { padding: 4px 2px; font-size: 12px; } }
 
 /* ---- The results: one frame holding the column views and the sort, the count and the flags' key, the table, and a
    status line saying what its figures are. ---- */
@@ -134,14 +138,25 @@
 .flag-legend .flag .i { width: 12px; height: 12px; }
 
 /* ---- The ranked table: rows 35px tall, a seam between column names, the ticker as a chip beside its name. ---- */
-.screen-table > thead > tr > th, .screen-table > tbody > tr > td { padding-left: 7px; padding-right: 7px; }
-.screen-table > thead > tr > th { padding-top: 9px; padding-bottom: 9px; border-right: 1px solid var(--line); }
+.screen-table > thead > tr > th { border-right: 1px solid var(--line); }
 .screen-table > thead > tr > th:last-child, .screen-table > thead > tr > th.c-rank { border-right: 0; }
-.screen-table > tbody > tr.row > td { padding-top: 6px; padding-bottom: 6px; }
-.screen-table > tbody > tr.row > td.c-co { padding: 0; }
+/* Cells 8px apart and 6px tall-padded, the rank and the report link a little further from the frame. Above the phone
+   layout only, which sets its own; table.data's own padding (app.css) is what these replace. */
+@media (min-width: 721px) {
+  table.data.screen-table > thead > tr > th, table.data.screen-table > tbody > tr.row > td { padding-left: 8px; padding-right: 8px; }
+  table.data.screen-table > thead > tr > th { padding-top: 9px; padding-bottom: 9px; }
+  table.data.screen-table > tbody > tr.row > td { padding-top: 6px; padding-bottom: 6px; }
+  table.data.screen-table > tbody > tr.row > td.c-co { padding: 0; }
+  table.data.screen-table > thead > tr > th.c-rank, table.data.screen-table > tbody > tr.row > td.c-rank { padding-left: 12px; }
+  table.data.screen-table > thead > tr > th.c-go, table.data.screen-table > tbody > tr.row > td.c-go { padding-right: 10px; }
+}
 .screen-table > thead > tr > th:not(.txt) { white-space: nowrap; }
 /* The score's parts are named in full, on two lines. */
-.screen-table > thead > tr > th.part { white-space: normal; min-width: 62px; max-width: 96px; }
+.screen-table > thead > tr > th.part { white-space: normal; min-width: 76px; max-width: 110px; }
+/* The Score view shows each part's points, so the score is its number alone there and the name gives way to the parts. */
+.view-score .score .tape { display: none; }
+.screen-table.view-score td.c-score { min-width: 0; }
+.view-score .co .nm { max-width: 140px; }
 .screen-table .th-sub { display: block; font-size: 11px; color: var(--text-3); }
 .screen-table td.ink { color: var(--ink); }
 .screen-table td .of { color: var(--text-3); font-size: 12px; }
@@ -169,8 +184,8 @@
 .row-toggle .caret { font-size: 14px; color: var(--text-3); transition: transform .2s var(--ease), color .15s; }
 .row-toggle[aria-expanded="true"] .caret { transform: rotate(90deg); color: var(--text); }
 .screen-table .co { max-width: 250px; }
-.screen-table .co .nm { max-width: 132px; }
-.screen-table .score .tape { width: 80px; }
+.screen-table .co .nm { max-width: 170px; }
+.screen-table .score .tape { width: 96px; }
 .screen-table td.c-score { min-width: 140px; }
 .go { display: inline-grid; place-items: center; width: 26px; height: 26px; vertical-align: middle; border-radius: var(--r-ctl); color: var(--text-3); }
 .go:hover { color: var(--text); background: var(--surface-4); }
