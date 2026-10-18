@@ -124,52 +124,60 @@ def _otc_common(sym, name):
     return not _excluded(name) and not re.search(r"/ADR\b|\bADR\b", name, re.I)
 
 
-# Over-the-counter coverage is switched off until it passes a check against filings. A sample of 24 checked in October
-# 2026 found 10 with serious errors from its OTC handling: sectors from SEC industry codes the companies had outgrown
-# (a supplement maker under technology, a broker under software), a stale quote ($550 for a stock trading near $80), a
-# title insurer taken for a REIT by its code, an LLC's capital units, and Fannie Mae valued on profit that belongs to
-# the Treasury's senior preferred stock. Turning it on needs per-company sector checks, a stale-quote test and those cases.
-OTC_ENABLED = False
+# Over-the-counter coverage is a reviewed list (OTC_REVIEW): each company was checked against its own SEC filings for
+# its sector and industry, whether it is ordinary common stock of a going concern, whether it is a REIT, and whether its
+# quote fits the trading its filings report. A first, unreviewed version was checked on a sample of 24 in October 2026
+# and had serious errors in 10: sectors from SEC industry codes the companies had outgrown (a supplement maker under
+# technology, a broker under software), a stale quote ($550 for a stock trading near $80), a title insurer taken for a
+# REIT by its code, an LLC's capital units, and Fannie Mae, whose profit belongs to the Treasury's senior preferred
+# stock. A quote not on the list is left out, and the build names it, until it has been reviewed.
+OTC_ENABLED = True
+OTC_REVIEW = os.path.join(os.path.dirname(__file__), "otc_review.json")
 
 # An over-the-counter stock counts at OTC_MIN_PRICE or more, with a closing price from the last OTC_RECENT_DAYS: in
 # October 2026, 316 of the 959 companies left after the ticker and name rules. Most below a dollar are shells whose
 # filings are thin or late; one not traded in a week has no current price.
 OTC_MIN_PRICE = 1.0
 OTC_RECENT_DAYS = 7
+# A quote whose last OTC_FLAT_WEEKS weekly closes take fewer than OTC_FLAT_PRICES values hasn't traded: one $550 close
+# held for twelve weeks on one share of volume, while the bank's filings reported trades near $80. 45 of the October
+# 2026 candidates were dropped this way.
+OTC_FLAT_WEEKS = 8
+OTC_FLAT_PRICES = 3
 # Its market value is its price times the share count on its latest SEC filing's cover, which must be this recent.
 OTC_SHARES_DAYS = 400
 
 
 def price_otc(universe, prices, today, session_day):
     """Sets each OTC listing's price from its quote (prices, market.price_history's) and drops those without a
-    closing price from the last OTC_RECENT_DAYS (`session_day` gives a quote's day) or under OTC_MIN_PRICE."""
+    closing price from the last OTC_RECENT_DAYS (`session_day` gives a quote's day), under OTC_MIN_PRICE, or whose
+    weekly closes show no trading (OTC_FLAT_WEEKS)."""
     since = (today - dt.timedelta(days=OTC_RECENT_DAYS)).isoformat()
     for sym in [s for s, u in universe.items() if u.get("listing") == "otc"]:
         p = prices.get(sym) or {}
         day = session_day(p)
-        if not (day and day >= since and (p.get("price") or 0) >= OTC_MIN_PRICE):
+        closes = [c for _, c in (p.get("weekly") or [])[-OTC_FLAT_WEEKS:]]
+        if not (day and day >= since and (p.get("price") or 0) >= OTC_MIN_PRICE and len(set(closes)) >= OTC_FLAT_PRICES):
             del universe[sym]
             continue
         universe[sym]["price"] = p["price"]
 
 
-SIC_SECTORS_FILE = os.path.join(os.path.dirname(__file__), "sic_sectors.json")
-
-
-def sector_otc(universe, sic):
-    """Gives each OTC listing the Nasdaq sector and industry that listed companies with its SEC industry code (sic,
-    {cik: code}) most often have (sic_sectors.json, learned from them), else its code's major group's most common sector
-    and "Other". Drops a blank-check company (code 6770) and one without a code."""
-    with open(SIC_SECTORS_FILE, encoding="utf-8") as fh:
-        table = json.load(fh)
+def sector_otc(universe):
+    """Gives each OTC listing the sector, industry and REIT status its review found (OTC_REVIEW, keyed by CIK), and
+    drops one the review left out or that hasn't been reviewed. Returns the tickers waiting for a review."""
+    with open(OTC_REVIEW, encoding="utf-8") as fh:
+        review = json.load(fh)["companies"]
+    waiting = []
     for sym in [s for s, u in universe.items() if u.get("listing") == "otc"]:
-        code = str(sic.get(universe[sym]["cik"]) or "")
-        if not code or code == "6770":
+        r = review.get(str(universe[sym]["cik"]))
+        if not r:
+            waiting.append(sym)
+        if not r or not r["include"]:
             del universe[sym]
             continue
-        sector, industry = table["codes"].get(code) or (table["groups"].get(code[:2]), None)
-        universe[sym]["sector"] = sector or "Other"
-        universe[sym]["industry"] = industry or "Other"
+        universe[sym].update(sector=r["sector"], industry=r["industry"], reit_reviewed=bool(r["reit"]))
+    return sorted(waiting)
 
 
 def value_otc(universe, companies, today):
