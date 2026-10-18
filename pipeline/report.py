@@ -900,6 +900,9 @@ def peer_table(universe, metrics, sic=None):
             # Revenue read from the company's own income statements (fundamentals.derive's revenue_source, build.py),
             # which stays out of those ranks too.
             "stated": bool(m.get("revenue_source")),
+            # A listing added outside the exchange-listed common stock (a partnership's units): ranked and valued
+            # against the rest, but never a peer and never in the ranks or figures others are measured on (_pools).
+            "outside": bool(u.get("listing")),
             "pb": u["mcap"] / book if (kind == "mortgage" or bdc) and (book or 0) > 0 else None,
             # For a lender valued on its book value (book_lender), what its peer notes say of its figures: its book
             # value unread (no equity figure), its earnings and book value net of preferred stock worth naming, and for
@@ -981,14 +984,14 @@ def peer_table(universe, metrics, sic=None):
     # every other company, reordering near ties among the peers of 269 companies that none of the seven joined.
     for f in PEER_FEATURES:
         vals = sorted(r["features"][f] for r in table.values()
-                      if r["features"][f] is not None and not r["bank"] and not r["basis"] and not r["stated"])
+                      if r["features"][f] is not None and not r["bank"] and not r["basis"] and not r["stated"] and not r["outside"])
         for r in table.values():
             v = r["features"][f]
             r.setdefault("rank", []).append(
                 None if v is None else (bisect.bisect_left(vals, v) + bisect.bisect_right(vals, v)) / 2 / len(vals))
     banks = [r for r in table.values() if r["bank"]]
     for f in BANK_FEATURES:
-        vals = sorted(r["bank_features"][f] for r in banks if r["bank_features"][f] is not None)
+        vals = sorted(r["bank_features"][f] for r in banks if r["bank_features"][f] is not None and not r["outside"])
         for r in banks:
             v = r["bank_features"][f]
             r.setdefault("bank_rank", []).append(
@@ -998,7 +1001,8 @@ def peer_table(universe, metrics, sic=None):
 
 def _pools(table, keep):
     """The candidate pools (_pool) over the companies in `table` that `keep` lets in."""
-    rows = [(s, r) for s, r in table.items() if keep(r)]
+    # A listing outside the exchange-listed common stock (peer_table's "outside") is never a candidate.
+    rows = [(s, r) for s, r in table.items() if keep(r) and not r.get("outside")]
     idx = {"sector": {}, "group": {}, "industry": {}, "reit": {},
            # The whole market, for companies in Nasdaq's catch-all sectors. Financial companies are left out: their
            # sales mean something else, and no value to sales is worked out for them.
@@ -1501,7 +1505,7 @@ def _ffo_profit_bars(bar, no_sales, m, me, table, doubt):
     REITs."""
     idx = _index(table)
     if "ffo_margin" not in idx:
-        rows = [r for r in table.values() if r.get("reit") == "property"]
+        rows = [r for r in table.values() if r.get("reit") == "property" and not r.get("outside")]
         idx["ffo_margin"] = [r["ffo_margin"] for r in rows if r.get("ffo_margin") is not None]
         idx["ffo_roe"] = [r["ffo_roe"] for r in rows if r.get("ffo_roe") is not None]
     fm, roe = me.get("ffo_margin"), me.get("ffo_roe")
@@ -2489,6 +2493,15 @@ def fair_value(u, m, price, peers, table):
     shares = u["mcap"] / price if u.get("mcap") else m.get("shares_out")
     if not shares or shares <= 0:
         return None
+    if u.get("listing") == "partnership":
+        # Its units can share the partnership's cash with a general partner, holders of other classes and outside
+        # stakes in what it consolidates, which these methods, built for one class of common shares, don't measure:
+        # on September 2026 data they valued Plains GP Holdings on all of Plains' sales (a midpoint 50% over the price)
+        # and put MPLX between $16 and $112.
+        return {"methods": [], "verdict": None, "withheld": (
+            "There is no fair value estimate. This is a partnership, whose units can share its cash with a general "
+            "partner, other unit classes and outside owners of the businesses it consolidates. The valuation methods "
+            "here are built for a company with one class of common shares, so they would mislead.")}
     fin = financial(u, m)
     reit = reit_kind(m) == "property"
     withheld = _share_count_gap(u, m, price)

@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from .net import NotFound, Throttled, sec_json
 from .market import day_move, price_day, session_day
 from .report import one_time_note, sales_doubtful
+from .universe import outside_listing
 
 CACHE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".cache", "registrations.json")
 
@@ -458,6 +459,8 @@ def _industries(universe, metrics, prices):
     high: the whole industry has fallen, not just one company in it (the company's own out_of_favor flag)."""
     groups, market = {}, []
     for sym, u in universe.items():
+        if outside_listing(u):
+            continue  # a partnership's units count in no industry's or the market's figures (universe.outside_listing)
         ps = _ps(u, metrics.get(sym))
         if ps is not None:
             market.append(ps)
@@ -616,6 +619,8 @@ def run(universe, metrics, prices, analyst_counter, insiders=None):
     ("giants", _giant_row). The US lists name, in "net_cash_unconfirmed" and "financials_unconfirmed", the companies that
     met every other test but whose US registration could not be confirmed."""
     candidates, debt_unread, checked_by_sector = [], [], {}
+    # The listings in the sectors the checks skip (EXCLUDED_SECTORS), which the page counts beside those checked.
+    financials_checked = 0
     cash_rows, fin_rows, giants = [], [], []
     for sym, u in universe.items():
         m = metrics.get(sym)
@@ -623,6 +628,7 @@ def run(universe, metrics, prices, analyst_counter, insiders=None):
         if giant:
             giants.append(giant)
         if u["sector"] in EXCLUDED_SECTORS:
+            financials_checked += 1
             # Not screened, but its banks, insurers and other financial companies under book value are listed.
             row = m and _us_listing(u, m) and _financial_row(sym, u, m)
             if row:
@@ -718,6 +724,8 @@ def run(universe, metrics, prices, analyst_counter, insiders=None):
             "name": u["name"],
             "sector": u["sector"],
             "industry": u["industry"],
+            # Its market: NYSE, Nasdaq or another exchange, or OTC for a quote over the counter (universe.load_universe).
+            "exchange": u.get("exchange"),
             "hq": regs[sym]["hq"],
             "price": price,
             "mcap": u["mcap"],
@@ -797,6 +805,7 @@ def run(universe, metrics, prices, analyst_counter, insiders=None):
         "net_cash_list": sorted(lists["net_cash"][0], key=lambda r: (r["mcap_to_net_cash"], r["symbol"])),
         "net_cash_unconfirmed": lists["net_cash"][1],
         "financials_list": sorted(lists["financials"][0], key=lambda r: (r["price_to_book"], r["symbol"])),
+        "financials_checked": financials_checked,
         "financials_unconfirmed": lists["financials"][1],
         "giants": sorted(_one_per_company(giants, universe), key=lambda r: (-r["ps"], r["symbol"])),
     }

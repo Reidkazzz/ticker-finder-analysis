@@ -165,6 +165,8 @@
   background: var(--ink-dim); color: var(--ink); font-size: 12px; box-shadow: inset 0 0 0 1px var(--ink-line);
 }
 .screen-table .co .nm { color: var(--text); font-size: 13px; }
+/* A quote over the counter, not on an exchange: a small neutral tag after the name. */
+.co .otc { flex: none; padding: 0 5px; border-radius: var(--r-tag); border: 1px solid var(--line-3); color: var(--text-2); font-size: 10.5px; font-weight: 600; line-height: 16px; }
 .row-toggle:focus-visible { outline: 2px solid var(--text); outline-offset: -2px; border-radius: 4px; }
 .row-toggle .caret { font-size: 14px; color: var(--text-3); transition: transform .2s var(--ease), color .15s; }
 .row-toggle[aria-expanded="true"] .caret { transform: rotate(90deg); color: var(--text); }

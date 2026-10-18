@@ -95,6 +95,9 @@ const FILTERS = [
   { key: "mcap", group: "descriptive", label: "Market value",
     options: () => [[250e6, "250m", "$250M"], [500e6, "500m", "$500M"], [1e9, "1b", "$1B"], [2e9, "2b", "$2B"]]
       .filter(([v]) => !R().max_mcap || v < R().max_mcap).map(([v, id, w]) => opt(`under-${id}`, `Under ${w}`, (r) => r.mcap != null && r.mcap < v)) },
+  { key: "exchange", group: "descriptive", label: "Market", ok: () => data.results.some((r) => r.exchange === "OTC"),
+    options: () => [opt("exchange", "On an exchange", (r) => !!r.exchange && r.exchange !== "OTC"),
+      opt("otc", "Over the counter (OTC)", (r) => r.exchange === "OTC")] },
   { key: "analysts", group: "descriptive", label: "Analysts",
     options: () => {
       const few = R().undiscovered_max_analysts ?? 2;
@@ -429,7 +432,7 @@ function row(r, i, cols) {
     switch (c.k) {
       case "rank": return `<td class="c-rank">${i + 1}</td>`;
       case "co": return `<td class="txt c-co"><button class="row-toggle" type="button" aria-expanded="${state.open === r.symbol}" aria-controls="${detailId(r.symbol)}">
-        ${icon("caret-right", "caret")}<span class="co"><span class="sym">${sym}</span> <span class="nm" title="${esc(r.name)}">${esc(displayName(r.name))}</span></span></button></td>`;
+        ${icon("caret-right", "caret")}<span class="co"><span class="sym">${sym}</span> <span class="nm" title="${esc(r.name)}">${esc(displayName(r.name))}</span>${r.exchange === "OTC" ? `<span class="otc" title="Quoted over the counter, not on a stock exchange">OTC</span>` : ""}</span></button></td>`;
       case "score": return `<td class="txt c-score"><div class="score" role="img" aria-label="Score ${esc(String(r.score))} out of 100"><b>${esc(String(r.score))}</b>${tape(r.score_parts)}</div></td>`;
       case "go": return `<td class="c-go"><a class="go" href="report.html?t=${encodeURIComponent(r.symbol)}" aria-label="Open the ${sym} report">${icon("arrow-up-right")}</a></td>`;
       case "flags": return `<td class="txt c-flags">${flags(r)}</td>`;
@@ -785,6 +788,17 @@ function renderProof(meta) {
   const checked = data.sectors.reduce((a, s) => a + (s.checked || 0), 0);
   const n = data.results.length;
   document.querySelector('[data-stat="pass"]').innerHTML = checked ? `${n.toLocaleString("en-US")}<span class="of"> of ${checked.toLocaleString("en-US")}</span>` : n.toLocaleString("en-US");
+  // Every listing looked at: those put through the checks and those in the sectors they skip (banks, insurers and other
+  // financial companies), whose profitable US banks and insurers under book value have their own list. Older data has
+  // no count of the skipped ones, and says nothing of them.
+  const fin = data.financials_checked;
+  if (checked && Number.isInteger(fin)) {
+    document.querySelector('[data-stat="all"]').textContent = (checked + fin).toLocaleString("en-US");
+    document.querySelector("[data-stat-all]").hidden = false;
+    const note = document.querySelector("[data-fin-note]");
+    note.innerHTML = ` Of the ${(checked + fin).toLocaleString("en-US")} stocks looked at, the ${fin.toLocaleString("en-US")} banks, insurers and other financial companies skip these checks, which would mislead for them; the profitable US banks and insurers trading under book value have <a href="#financials">their own list</a>.`;
+    note.hidden = false;
+  }
   // The screen at a glance, from the data: its market value limit (screener.RULES) and today's top score.
   const cap = data.rules?.max_mcap;
   if (cap) document.querySelector('[data-stat="mcap"]').textContent = `Under ${cap % 1e9 === 0 ? `$${cap / 1e9}B` : money(cap)}`;
