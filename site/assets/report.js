@@ -1064,7 +1064,7 @@ function header(r, meta) {
   return `<header class="r-head">
     <div class="r-id">
       <h1 class="r-name" tabindex="-1"><span class="r-tk">${esc(r.symbol)}</span> <span class="r-nm">${esc(displayName(r.name))}</span></h1>
-      <p class="r-where">${r.exchange ? `<span>${esc(r.exchange)}</span>` : ""}${where ? `<span>${where}</span>` : ""}${r.screener === true ? `<a class="tag tag-up r-pass" href="${href}">${icon("check")}Passes the screener</a>` : ""}</p>
+      <p class="r-where">${r.exchange ? `<span>${esc(r.exchange === "OTC" ? "Over the counter (OTC), not on an exchange" : r.exchange)}</span>` : ""}${where ? `<span>${where}</span>` : ""}${r.screener === true ? `<a class="tag tag-up r-pass" href="${href}">${icon("check")}Passes the screener</a>` : ""}</p>
     </div>
     <dl class="proof-line r-proof" aria-label="Price and size">
       <div class="r-px"><dt>${r.price_day && meta?.price_date && r.price_day !== meta.price_date ? `share price, last traded ${esc(longDate(r.price_day))}` : "share price"}</dt><dd>${price(r.price)}</dd></div>
