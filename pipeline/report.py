@@ -80,7 +80,10 @@ def is_reit(u, company=None, sic=None):
     fundamentals record.
 
     The label and the code are not enough on their own, since both outlast a REIT's conversion to an ordinary taxed
-    company (_taxed_company)."""
+    company (_taxed_company). An over-the-counter company's own review decides (universe.sector_otc): HG Holdings, a taxed
+    title insurer, still carries code 6798."""
+    if u.get("reit_reviewed") is not None:
+        return u["reit_reviewed"]
     if u.get("industry") == REIT_INDUSTRY or str(sic or "") == REIT_SIC:
         return not _taxed_company(company, sic)
     if u.get("industry") not in PROPERTY_INDUSTRIES:

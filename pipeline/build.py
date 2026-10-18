@@ -26,9 +26,6 @@ SIC_CACHE = os.path.join(CACHE, "sic.json")
 SIC_REFRESH_DAYS = 180
 SIC_REFRESH_PER_RUN = 40
 SIC_MINUTES = 6
-# The industry codes of over-the-counter quotes, which their sectors come from: about 960 on a first run, then only new
-# ones and those due a recheck.
-OTC_SIC_MINUTES = 8
 # A bank's own figures in its report's fundamentals (see main).
 BANK_FIELDS = ("net_interest_income", "noninterest_income", "noninterest_expense", "provision", "efficiency_ratio",
                "adj_net_income_common", "adj_eps", "tangible_equity", "tce_ratio", "adj_roa", "adj_roe_common",
@@ -215,12 +212,14 @@ def main():
     otc = sorted(s for s, u in uni.items() if u.get("listing") == "otc")
     step(f"  {len(uni) - len(otc)} common stocks on exchanges, {len(otc)} quoted over the counter to look at")
     # The over-the-counter quotes get their prices first, since those under a dollar or not traded lately are dropped,
-    # then their industry codes, which give them a sector and industry, and after the financials their market values.
+    # then their reviewed sector, industry and REIT status, and after the financials their market values.
     otc_prices = market.price_histories(otc) if otc else {}
     universe.price_otc(uni, otc_prices, today, market.session_day)
     if otc:
-        otc_sic = sic_codes(sorted({uni[s]["cik"] for s in otc if s in uni}), today, minutes=OTC_SIC_MINUTES)
-        universe.sector_otc(uni, otc_sic)
+        waiting = universe.sector_otc(uni)
+        if waiting:
+            step(f"  {len(waiting)} over-the-counter quotes not reviewed yet (pipeline/otc_review.json), left out: "
+                 f"{', '.join(waiting[:20])}{' and others' if len(waiting) > 20 else ''}")
 
     step("Loading SEC financial statements")
     # The listed companies' market values, which order the lookups of their quarterly figures in their own filings, and
@@ -232,7 +231,7 @@ def main():
         universe.value_otc(uni, fund["companies"], today)
         kept = sum(1 for u in uni.values() if u.get("listing") == "otc")
         step(f"  {kept} of {len(otc)} over-the-counter quotes kept: ${universe.OTC_MIN_PRICE:.0f} or more, traded in the "
-             f"last {universe.OTC_RECENT_DAYS} days, with an industry code and a recent share count")
+             f"last {universe.OTC_RECENT_DAYS} days, reviewed and with a recent share count")
     # Industry codes before the financials are worked out, since code 6798 marks a REIT (report.is_reit), and for the
     # companies whose revenue may be a business development company's total investment income, since code 6770 marks a
     # blank-check company (a SPAC), which tags the interest on the money it holds in trust the same way.

@@ -1,0 +1,1737 @@
+{
+ "note": "Over-the-counter companies reviewed against their own SEC filings (universe.sector_otc): whether each is ordinary common stock of a going concern with a quote that fits its filings, its Nasdaq sector and industry by what it does, and whether it is a REIT. Reviewed October 2026; a company not here is left out until reviewed.",
+ "reviewed": "2026-10-18",
+ "companies": {
+  "930245": {
+   "ticker": "AASP",
+   "name": "Agassi Sports Entertainment Corp.",
+   "include": true,
+   "sector": "Consumer Discretionary",
+   "industry": "Services-Misc. Amusement & Recreation",
+   "reit": false,
+   "note": "10-Q filed 2026-08-14 (shell box: No; it stopped being a shell on 2025-05-31): a pre-revenue racket-sports media and entertainment company (app built with IBM, USTA deal, live events) with going-concern doubt, not a retailer. Stock sales at $5.00 and a $5.75 closing-price reference fit the $5.25 quote.",
+   "check": "10-Q filed 2026-08-14 (shell box No; shell status ended 2025-05-31): a pre-revenue racket-sports media and events company (World Series of Pickleball, IBM app, Let's Play pickleball/padel facilities per the 10/1/26 8-K), not a retailer; stock sales at $5.00 fit the $5.25 quote."
+  },
+  "943034": {
+   "ticker": "AATC",
+   "name": "AUTOSCOPE TECHNOLOGIES CORP",
+   "include": false,
+   "sector": "Industrials",
+   "industry": "Industrial Machinery/Components",
+   "reit": false,
+   "note": "Filed Form 15-12G on 2023-01-17 after delisting; the last periodic report is the 10-Q for Sep 2022, and since then it has filed only Form D notices (through 2026).",
+   "check": "Delisted (Form 25 on 2023-01-06) and filed Form 15-12G on 2023-01-17; its last periodic report is the Sep 2022 10-Q, and it has filed only Form D notices since (through 2026-03)."
+  },
+  "1642122": {
+   "ticker": "ACGP",
+   "name": "Associated Capital Group, Inc.",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Investment Bankers/Brokers/Service",
+   "reit": false,
+   "note": "Voluntarily delisted from NYSE (8-K Aug 15 2025, Form 25) and filed Form 15-12G Sep 4 2025, so it no longer files 10-K/10-Q/8-K; last SEC report is the June 2025 10-Q.",
+   "check": "Filing list: 8-K Aug 15 2025 and Form 25 (NYSE delisting), then 15-12G on Sep 4 2025. Since then only Form 4s, with no FY2025 10-K and no 2026 10-Qs; the last periodic report is the Jun 2025 10-Q."
+  },
+  "773717": {
+   "ticker": "ACRG",
+   "name": "American Clean Resources Group, Inc.",
+   "include": true,
+   "sector": "Basic Materials",
+   "industry": "Other Metals and Minerals",
+   "reit": false,
+   "note": "10-K filed 2026-03-31 (not a shell) and 10-Q filed 2026-08-14: a pre-revenue company planning toll milling of precious metals and critical-minerals processing at Tonopah, NV (Elko critical-minerals agreement in a 7/2026 8-K), not nonmetallic quarrying. The last close of $8.01 on 3/30/26 in Item 5 fits the $10 quote.",
+   "check": "10-K filed 2026-03-31 and 10-Q filed 2026-08-14 (not a shell): an exploration-stage company planning precious-metal toll milling at Tonopah, NV and critical-minerals processing (Elko agreement, July 2026), not nonmetallic quarrying; the $8.01 close on 3/30/26 in Item 5 fits the $10 quote."
+  },
+  "1420924": {
+   "ticker": "ADTI",
+   "name": "Adapti, Inc.",
+   "include": false,
+   "sector": "Consumer Discretionary",
+   "industry": "Services-Misc. Amusement & Recreation",
+   "reit": false,
+   "note": "8-K filed 2026-07-17 says the 10-Qs for Sep and Dec 2025 can no longer be relied on, and the 10-K for FY ended 3/31/26 (due ~June 2026) and the June 2026 10-Q were never filed, so it is behind on filings.",
+   "check": "8-K filed 2026-07-20 (Item 4.02) withdrew reliance on the Sep and Dec 2025 10-Qs; as of Oct 18 2026 there is still no 10-K for FY ended 3/31/26 (due about June 29, with no NT 10-K) and no June 2026 10-Q, so it is far behind on filings."
+  },
+  "764630": {
+   "ticker": "AETN",
+   "name": "AETERNUM HEALTH, INC.",
+   "include": false,
+   "sector": "Basic Materials",
+   "industry": "Metal Mining",
+   "reit": false,
+   "note": "Reverse merger closed 2026-06-30 (8-K 2026-07-07) and the EV-charging business was spun out; the 2026-08-19 10-Q shows zero revenue and only exploration and consulting costs. Its own filings value shares at $0.015 (Feb 2026) and $0.105 (May 14 2026 close), plainly inconsistent with the $2.45 quote.",
+   "check": "Exclude, but the price reason is wrong: a 1-for-20 reverse split takes effect on or after 2026-09-21 (DEF 14C 2026-09-01), so $2.45 matches the pre-split $0.105 (May 14). The real problems: the 10-Q of 2026-08-19 shows the EV business divested and zero revenue, the last reported share count (97.1M) is pre-split, and up to 133M pre-split shares are owed for a Cameroon nickel-cobalt project (8-K 2026-09-25)."
+  },
+  "1490054": {
+   "ticker": "APHD",
+   "name": "VERDE BIO HOLDINGS, INC.",
+   "include": false,
+   "sector": "Energy",
+   "industry": "Oil & Gas Production",
+   "reit": false,
+   "note": "Verde Bio (oil and gas mineral royalties) filed a change-of-control 8-K on 2024-05-13 and Form 15-12G on 2024-05-16; it has filed nothing since its 10-Q for 1/31/2024, and the quote's 52-week range of $0.03 to $4.98 is erratic.",
+   "check": "A merger 8-K (items 2.01, 3.03, 5.01) on 2024-05-13 was followed by Form 15-12G on 2024-05-16; its last periodic report is the 10-Q for 1/31/2024, and the quote's $0.03-$4.98 range is erratic."
+  },
+  "1530185": {
+   "ticker": "ATVK",
+   "name": "Globaltek Ventures, Inc.",
+   "include": false,
+   "sector": "Miscellaneous",
+   "industry": "Multi-Sector Companies",
+   "reit": false,
+   "note": "8-K of 2026-10-15: a Nevada court found its custodian and CEO was never validly appointed, the auditor resigned, and all 2019-2025 financial statements are not to be relied on (Item 4.02); no 10-Q for Jun 2026 was filed. Its business is a mix of batteries and corporate housing, not auto parts.",
+   "check": "8-K filed 2026-10-15: a Nevada court order of 2026-08-11 found the custodian/CEO was never properly appointed, Bansal resigned and recalled its FY2019-2025 audit reports (Item 4.02 non-reliance), and no Jun 2026 10-Q followed the Mar 2026 10-Q; the 10-Q describes batteries, manufacturing, aerospace and Chicago corporate-housing rentals, not auto parts."
+  },
+  "1091596": {
+   "ticker": "AURX",
+   "name": "Nuo Therapeutics, Inc.",
+   "include": true,
+   "sector": "Health Care",
+   "industry": "Medical/Dental Instruments",
+   "reit": false,
+   "note": "10-K filed 2026-03-30 and 10-Q filed 2026-08-14: a commercial-stage maker of the Aurix PRP wound-care device system with about $3.3M of 2025 revenue (Smith+Nephew distribution). The non-affiliate value of $41.1M on about 48M shares fits the $1.30 quote."
+  },
+  "1826892": {
+   "ticker": "BCAB",
+   "name": "BioAtla, Inc.",
+   "include": true,
+   "sector": "Health Care",
+   "industry": "Biotechnology: Biological Products (No Diagnostic Substances)",
+   "reit": false,
+   "note": "10-Q 2026-06-30 (filed 2026-08-13): clinical-stage antibody biotech (BA3182), going-concern doubt, exploring strategic options, not in bankruptcy. Nasdaq delisted it effective 2026-08-31 (8-K 2026-08-28). The 10-Q's $4.14 June 30 price is about 3x the $1.36 quote, a gap the post-delisting drop explains (Yahoo's split-adjusted low is $1.07)."
+  },
+  "1732409": {
+   "ticker": "BCHG",
+   "name": "Grayscale Bitcoin Cash Trust (BCH)",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Investment Bankers/Brokers/Service",
+   "reit": false,
+   "note": "Grayscale Bitcoin Cash Trust is a passive grantor trust holding BCH, so its shares are trust units, not common stock (10-K for FY ended 6/30/2026 filed 2026-09-03).",
+   "check": "Grayscale Bitcoin Cash Trust is a passive Grayscale trust holding BCH whose shares are trust units, not common stock (10-K for FY ended 6/30/2026 filed 2026-09-03)."
+  },
+  "1847360": {
+   "ticker": "BCOW",
+   "name": "1895 Bancorp of Wisconsin, Inc. /MD/",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Banks",
+   "reit": false,
+   "note": "Delisted from Nasdaq (8-K 2025-02-18, Form 25 2025-03-07) and filed a deregistration form on 2025-03-17; the last periodic report is the 10-Q for Sep 2024 and there is no FY2024 10-K.",
+   "check": "Delisted from Nasdaq (8-K 2025-02-18, Form 25 2025-03-07) and filed a Form 15 (as 15F-12B) on 2025-03-17; its last periodic report is the Sep 2024 10-Q, and it has filed no FY2024 10-K."
+  },
+  "1496690": {
+   "ticker": "BCRD",
+   "name": "BlueOne Technologies, Inc.",
+   "include": true,
+   "sector": "Technology",
+   "industry": "Computer Software: Prepackaged Software",
+   "reit": false,
+   "note": "10-K filed 2026-07-14: after buying Millennium EBS it sells payment-hub software to banks, and all FY2026 revenue ($260K) came from software implementation and subscriptions, none from prepaid cards; it has going-concern doubt, and Item 5's FY2026 bids of $4.90-$21.00 fit the $5.53 quote.",
+   "check": "10-K filed 2026-07-14 (shell box: No): after buying Millennium EBS it sells payment-hub software to banks, and all FY2026 revenue ($260K) came from implementation, license and subscription fees for that platform, not prepaid cards; Item 5's FY2026 bids of $4.90-$21.00 fit the $5.53 quote."
+  },
+  "1668340": {
+   "ticker": "BCTF",
+   "name": "Bancorp 34, Inc.",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Savings Institutions",
+   "reit": false,
+   "note": "Filed Form 15-15D on 2025-01-06, and its last report was the FY2024 10-K (2025-03-06); no 10-Q has been filed since, so the bank holding company is deregistered.",
+   "check": "Filed Form 15-15D on 2025-01-06; its last report is the FY2024 10-K (2025-03-06), with no 10-Q or other periodic report since."
+  },
+  "793306": {
+   "ticker": "BDCO",
+   "name": "BLUE DOLPHIN ENERGY CO",
+   "include": true,
+   "sector": "Energy",
+   "industry": "Oil Refining/Marketing",
+   "reit": false,
+   "note": "10-K filed 2026-03-31: downstream refiner running a 15,000-bpd crude distillation tower in Nixon, TX, so not oil and gas production (stale SIC 1311). 10-Q filed 2026-08-14 shows Q2 net income of $1.19/share on an unchanged 14.92M shares with no split, which supports the move from about $1 to $13.",
+   "check": "10-K filed 2026-03-31 (Item 1): an independent downstream company whose segments are a 15,000-bpd crude distillation refinery in Nixon, TX plus tolling and terminaling, with its oil and gas leases inactive, so SIC 1311 is stale. 10-Q filed 2026-08-14 shows Q2 EPS of $1.19 (H1 $2.18) on an unchanged 14,921,968 shares and no split, so the $13.19 quote (52-week range $1.01 to $24.89) fits the earnings jump."
+  },
+  "1310488": {
+   "ticker": "BFNH",
+   "name": "BIOFORCE NANOSCIENCES HOLDINGS, INC.",
+   "include": false,
+   "sector": "Energy",
+   "industry": "Oil & Gas Production",
+   "reit": false,
+   "note": "The 10-Q for Jun 30, 2026 shows zero sales and a going-concern warning, and the business moved from supplements to oil and gas on Jun 18, 2026 with undeveloped leases only, so it has no real operations. An 8-K dated Aug 31, 2026 values 4.5M shares at $2.48M (about $0.55 a share), and the 10-K gives $0.45 in Jun 2025; the $6.91 quote is more than 12x the filings.",
+   "check": "The 10-Q for Jun 30, 2026 shows zero sales and a going-concern warning; the business switched from supplements to oil and gas on Jun 18, 2026 and holds only gifted leases. An 8-K dated Aug 31, 2026 values 4,516,909 shares at $2.48M (about $0.55 each), and the 10-K's Q4 2025 bid was $0.58, so the $6.91 quote is more than 11x the filings, with no reverse split."
+  },
+  "1784440": {
+   "ticker": "BHIC",
+   "name": "BioScience Health Innovations, Inc.",
+   "include": true,
+   "sector": "Health Care",
+   "industry": "Medicinal Chemicals and Botanical Products",
+   "reit": false,
+   "note": "10-Q filed 2026-08-07 (shell box: No): sells patent-pending methylene blue and other health and wellness products through its Best 365 Labs subsidiary (Q2-2026 revenue $1.04M), so the stale data-processing code (SIC 7374) does not fit; Item 5 shows sporadic $4.00 quotes in 2025, against today's $6.78.",
+   "check": "10-Q filed 2026-08-07 (shell box: No): sells patent-pending methylene blue and cellular-health supplements through Best 365 Labs (Q2-2026 revenue $1.04M), so the data-processing SIC 7374 is stale; the 10-K's Item 5 shows sporadic $4.00 quotes in 2025 and the Reg A offering was amended to $4.50, consistent with $6.78."
+  },
+  "1407583": {
+   "ticker": "BHLL",
+   "name": "Bunker Hill Mining Corp.",
+   "include": true,
+   "sector": "Basic Materials",
+   "industry": "Metal Mining",
+   "reit": false,
+   "note": "10-Q Jul 31 2026: restarting the Bunker Hill zinc-lead-silver mine in Idaho (first concentrate delivered, no revenue yet) after a 1-for-35 reverse split on Mar 6 2026; the Oct 6 2026 424B3 gives an OTCQB close of $2.51, consistent with $2.28."
+  },
+  "1487718": {
+   "ticker": "BLTH",
+   "name": "AMERICAN BATTERY MATERIALS, INC.",
+   "include": true,
+   "sector": "Basic Materials",
+   "industry": "Other Metals and Minerals",
+   "reit": false,
+   "note": "10-K filed 2026-03-19 (10-Q 2026-08-10, not a shell): exploration-stage lithium and magnesium brine claims in Utah with no revenue, so the nonmetallic SIC code fits poorly. The last sale was $3.75 (2026-03-18) and shares issued for services in 2026 were valued near $5.41, consistent with $2.51, but Yahoo's 52-week low of $0.001 is a bad tick.",
+   "check": "10-K filed 2026-03-19 (not a shell, also per the 10-Q of 2026-08-10): an exploration-stage holder of lithium and magnesium brine claims (743 placer claims, Lisbon Valley, Utah) with no revenue. The last sale of $3.75 on 2026-03-18 (split-adjusted) fits the $2.51 quote; Yahoo's $0.001 52-week low is a bad tick."
+  },
+  "804563": {
+   "ticker": "BMBN",
+   "name": "BENCHMARK BANKSHARES INC",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Major Banks",
+   "reit": false,
+   "note": "Filed Form 15-12G on 2005-03-31 to deregister. The last 10-K covers FY2003 and only Form D filings follow, so it no longer files SEC reports.",
+   "check": "Filed Form 15-12G on 2005-03-31 after a Schedule 13E-3 going-private deal. The last 10-K (filed 2004-03-22) covers FY2003 and the last 10-Q was filed 2004-11-10. Only Form D filings follow (latest 2025-05-29), so it no longer files SEC reports."
+  },
+  "1275477": {
+   "ticker": "BMNM",
+   "name": "BIMINI CAPITAL MANAGEMENT, INC.",
+   "include": true,
+   "sector": "Finance",
+   "industry": "Investment Managers",
+   "reit": false,
+   "note": "Sector changed from REIT (stale SIC 6798): the 10-K FY2025 shows it taxed as a regular corporation with NOL deferred tax assets, and the 10-Q for Jun 2026 shows about 87% of H1 2026 revenue from managing Orchid Island plus advisory fees from TJIM (bought 2026-04-01); buybacks at $2.33-2.76 are consistent with $3.00.",
+   "check": "10-Q for Jun 2026 (filed 2026-08-07): of $13.72M H1 revenue, $10.20M is Orchid Island management fees and $1.73M is TJIM advisory fees (about 87%); it books an income-tax provision and relies on NOLs, so it is not a REIT; buybacks at an average $2.64 (Q2) and $2.33 (July) are consistent with $3.00."
+  },
+  "1416090": {
+   "ticker": "BSAI",
+   "name": "BLUSKY AI INC.",
+   "include": true,
+   "sector": "Technology",
+   "industry": "EDP Services",
+   "reit": false,
+   "note": "The 10-Q for Jun 30, 2026 (formerly Inception Mining; the mine was sold in 2023; not a shell) shows a pre-revenue builder of modular AI data centers and GPU-as-a-Service, with no revenue and a going-concern warning. Note conversions were valued at about $5.32 a share in Jan 2026, within 2x of the $9.60 quote; the 52-week low of $0.012 looks wrong.",
+   "check": "The 10-Q for Jun 30, 2026 (not a shell; formerly Inception Mining, whose mine was sold) describes a pre-revenue builder of modular AI data centers and GPU-as-a-Service, with a going-concern warning; a note conversion at $5.325 a share in Jan 2026 and a Reg A offering at $5.50 (Aug 28, 2026) are within 2x of the $9.60 quote."
+  },
+  "1109262": {
+   "ticker": "BSCL",
+   "name": "BILI Social International, Inc.",
+   "include": true,
+   "sector": "Consumer Discretionary",
+   "industry": "Advertising",
+   "reit": false,
+   "note": "The 10-Q for Jun 30, 2026 (formerly Allied Energy, not a shell) shows an AI influencer-marketing and social-commerce platform with $1.27M first-half revenue at 84% gross margin. A 1-for-500 reverse split took effect Jun 5, 2026, so the 10-K's $0.006 close on Apr 13, 2026 equals about $3.00, within 3x of the $6.88 quote; Yahoo's 52-week low of $0.15 looks wrong.",
+   "check": "The 10-Q for Jun 30, 2026 (not a shell; formerly Allied Energy) shows an AI influencer-marketing and social-commerce platform with $1.27M of first-half revenue; a 1-for-500 reverse split took effect Jun 5, 2026, so the 10-K's $0.006 close on Apr 13, 2026 equals about $3.00, within 3x of the $6.88 quote."
+  },
+  "1730773": {
+   "ticker": "BSFC",
+   "name": "Blue Star Foods Corp.",
+   "include": false,
+   "sector": "Consumer Staples",
+   "industry": "Other",
+   "reit": false,
+   "note": "8-K of 2026-10-08 reports a 1-for-1,600 reverse split effective Oct 8. The latest 10-Q (2026-07-31) shows 171.9M pre-split shares and the 10-K gives a last price of $0.001, so the $1.00 post-split quote is about 1,000x off the filings. The company also has going-concern doubt and filed NT 10-K/10-Q in 2026.",
+   "check": "Exclusion upheld, for a different reason than the other reviewer gave. The 8-K of 2026-10-08 reports a 1-for-1,600 reverse split effective Oct 8 that leaves about 107,488 shares. The 10-K's $0.001 last price (May 21, 2026) works out to about $1.60 after the split, so the $1.00 quote is consistent with it, not 1,000x off. The problem is that every SEC share count is still pre-split (171,880,101 on the 10-Q cover of 2026-07-31), and the OTC market value is that count times the price, which would show about $172M instead of about $0.1M. The 52-week low and high also mix pre-split and post-split prices. The industry is corrected to Meat/Poultry/Fish because 'Other' is not a valid Consumer Staples industry, and the company imports and packages crab meat."
+  },
+  "2094107": {
+   "ticker": "BSPA",
+   "name": "Ballston Spa Bancorp, Inc.",
+   "include": true,
+   "sector": "Finance",
+   "industry": "Major Banks",
+   "reit": false,
+   "note": "10-Q filed 2026-08-14: holding company for Ballston Spa National Bank, quoted on OTCQX with 1,100,071 shares; closing price was $71.00 on 4/1/26 when it merged with NBC Bancorp, so the $80 quote fits."
+  },
+  "15847": {
+   "ticker": "BUKS",
+   "name": "BUTLER NATIONAL CORP",
+   "include": true,
+   "sector": "Industrials",
+   "industry": "Aerospace",
+   "reit": false,
+   "note": "The 10-K for FY Apr 30, 2026 shows Aerospace Products at $60.6M (62% of revenue) against $37.4M from managing the Boot Hill casino and sports betting. Item 5 gives a close of $4.23 on Jun 26, 2026, which fits the $4.86 quote.",
+   "check": "The 10-K for FY Apr 30, 2026 shows Aerospace Products revenue of $60.6M out of $98.0M total (62%), with the rest from managing the Boot Hill casino and sports betting; Item 5 gives a close of $4.23 on Jun 26, 2026, which fits the $4.86 quote."
+  },
+  "1016178": {
+   "ticker": "CARV",
+   "name": "CARVER BANCORP INC",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Savings Institutions",
+   "reit": false,
+   "note": "Carver Federal Savings holding company that delisted from Nasdaq (8-K item 3.01 on 2025-11-18, Form 25 on 2025-11-28) and filed Form 15-12G on 2025-12-08; its last report is the 10-Q for 9/30/2025.",
+   "check": "8-K item 3.01 on 2025-11-18, Form 25 on 2025-11-28 and Form 15-12G on 2025-12-08; its last report is the 10-Q for 9/30/2025."
+  },
+  "1006830": {
+   "ticker": "CBKM",
+   "name": "CONSUMERS BANCORP INC /OH/",
+   "include": true,
+   "sector": "Finance",
+   "industry": "Major Banks",
+   "reit": false,
+   "note": "10-K for the year to Jun 30 2026 (filed Sep 10 2026): holding company for Consumers National Bank (Ohio), quoted on OTCQX; Item 5 shows quarterly highs rising to $29.49, consistent with the $31.89 quote."
+  },
+  "731122": {
+   "ticker": "CCFN",
+   "name": "MUNCY COLUMBIA FINANCIAL Corp",
+   "include": true,
+   "sector": "Finance",
+   "industry": "Major Banks",
+   "reit": false,
+   "note": "The 10-Q for Jun 30, 2026 shows a community bank holding company (Journey Bank, $1.67B assets) with first-half EPS of $1.35. A 3-for-1 split took effect May 15, 2026, so the $30.48 quote is split-adjusted and plausible (book value about $18.7 a share)."
+  },
+  "1437213": {
+   "ticker": "CCNB",
+   "name": "Coastal Carolina Bancshares, Inc.",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Major Banks",
+   "reit": false,
+   "note": "Filed Form 15-15D on Aug 2 2013 to suspend reporting; no 10-K or 10-Q since the Q1 2013 10-Q.",
+   "check": "SEC filing list shows a Form 15-15D on Aug 2 2013 to suspend reporting; its last periodic report is the Q1 2013 10-Q (filed May 8 2013), and since then it has filed only Form D and 13G forms."
+  },
+  "803016": {
+   "ticker": "CFNB",
+   "name": "CALIFORNIA FIRST LEASING CORP",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Finance Companies",
+   "reit": false,
+   "note": "The company filed Form 15-12G in Nov 2017 and has filed no 10-K or 10-Q since FY2017. Its Jan 2026 proxy says it has been a registered investment company (a fund) since 2022 and proposes a 1-for-50 reverse split, which explains the $1,586 quote.",
+   "check": "It filed Form 15-12G in Nov 2017 and its last 10-K covers FY Jun 2017; it now files N-CSR, N-PORT and N-CEN as a closed-end fund, and its Jan 2026 DEF 14A says it has been a registered investment company since 2022 and proposes a reverse split to deregister."
+  },
+  "1293818": {
+   "ticker": "CFOR",
+   "name": "CapForce Inc.",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Investment Bankers/Brokers/Service",
+   "reit": false,
+   "note": "Formerly OpGen, it is now a listing-sponsorship and fintech firm controlled by AEI Capital (10-Q for 6/30/2026); its FY2025 10-K (filed late, 2026-05-26) says the stock is on the OTC Expert Market with no public quotes, so the $3.50 quote and $0.00 to $34.00 range are unreliable against the filing-reported $6.05 (Dec 2025) and $15.90 (12/31/2025).",
+   "check": "Its FY2025 10-K (filed late, 2026-05-26) says the stock is on the OTC Expert Market with no market makers, no public quotes and no trading market; sales to its controlling holder imply about $23.60/share in Q2 2026 and $9.63 in Jul-Aug 2026 (10-Q for 6/30/2026), so the $3.50 quote and $0.00-$34.00 range can't be relied on; the business is listing sponsorship and investment-banking advisory."
+  },
+  "1075706": {
+   "ticker": "CIZN",
+   "name": "CITIZENS HOLDING CO /MS/",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Major Banks",
+   "reit": false,
+   "note": "Delisted (Form 25 Dec 2023) and filed 15-12G/15-15D (Dec 2023 and Jan 2024); its last report is the FY2023 10-K (2024-03-29), with nothing periodic since.",
+   "check": "Delisted (Form 25 on 2023-12-11) and filed Form 15-12G on 2023-12-29 and 15-15D on 2024-01-03; its last periodic report is the FY2023 10-K (2024-03-29)."
+  },
+  "1498547": {
+   "ticker": "CMRF",
+   "name": "CIM GROUP, INC.",
+   "include": false,
+   "sector": "Real Estate",
+   "industry": "Real Estate",
+   "reit": false,
+   "note": "10-Q filed 2026-08-14: former non-traded REIT (CMFT) renamed CIM Group Inc. after the 2026-06-24 deal. Ended its REIT status effective 2026-01-01. Says there is no public trading market for its common stock; estimated value is $5.14 a share vs a 1.825 quote (52-week low 0.001).",
+   "check": "10-Q filed 2026-08-14 says there is no public trading market for the stock. It gives an estimated value of $5.14 a share, the price it also pays to redeem shares, against a 1.825 quote with a 52-week low of 0.001. REIT status ended 2026-01-01 when CMFT became CIM Group."
+  },
+  "1895249": {
+   "ticker": "CNTM",
+   "name": "ConnectM Technology Solutions, Inc.",
+   "include": true,
+   "sector": "Miscellaneous",
+   "industry": "Multi-Sector Companies",
+   "reit": false,
+   "note": "10-Q filed 2026-08-24: legacy HVAC/solar install units being wound down, H1 2026 revenue now mostly Keen Labs energy-hardware distribution (39% in Q2) and DeliveryCircle last-mile logistics (37%); 1-for-32 reverse split 2026-04-20, debt converted at $5.35-5.64 post-split, so the $4.50 quote fits; going-concern doubt but operating and current.",
+   "check": "10-Q filed 2026-08-24: Q2 2026 revenue was $9.79M, split Keen Labs solar/storage hardware distribution $3.85M (39%), DeliveryCircle last-mile logistics $3.63M (37%) and HVAC/solar install (Owned Service Network) $1.98M, which is being streamlined; shell box No; 1-for-32 reverse split April 2026; going-concern doubt; S-1/A filed 2026-09-23 assumes a $6.00 offering price on OTCQX, consistent with the $4.50 quote."
+  },
+  "1727255": {
+   "ticker": "COBA",
+   "name": "Chilean Cobalt Corp.",
+   "include": true,
+   "sector": "Basic Materials",
+   "industry": "Metal Mining",
+   "reit": false,
+   "note": "10-K FY2025 (filed Mar 31 2026) and 10-Q Jun 2026 show a cobalt-copper exploration company in Chile on OTCQB; 8-K Sep 9 2026 sold common at $2.00, consistent with the $2.30 quote."
+  },
+  "847538": {
+   "ticker": "CPKF",
+   "name": "CHESAPEAKE FINANCIAL SHARES INC",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Major Banks",
+   "reit": false,
+   "note": "Went private through a Schedule 13E-3 and filed Form 15-12G on 2003-02-28. The last 10-K covers FY2000 and only Form D filings follow, so it no longer files SEC reports.",
+   "check": "Went private through a Schedule 13E-3 and filed Form 15-12G on 2003-02-28. The last annual report was a 10-KSB40 for FY2001 (filed 2002-04-01, not FY2000 as the other reviewer said) and the last 10-QSB was filed 2002-11-13. Only Form D filings follow (2021, 2025)."
+  },
+  "202947": {
+   "ticker": "CPTP",
+   "name": "CAPITAL PROPERTIES INC /RI/",
+   "include": false,
+   "sector": "Real Estate",
+   "industry": "Real Estate",
+   "reit": false,
+   "note": "Filed Form 15-12G on 2025-02-11 just after its FY2024 10-K (2025-02-07), with no 10-Q since; it leases land in Providence, RI and the 10-K makes no REIT election.",
+   "check": "Filed Form 15-12G on 2025-02-11, four days after its FY2024 10-K (2025-02-07), with no 10-Q since; the 10-K records income tax expense and makes no REIT election."
+  },
+  "315958": {
+   "ticker": "CRMZ",
+   "name": "CREDITRISKMONITOR COM INC",
+   "include": true,
+   "sector": "Finance",
+   "industry": "Finance: Consumer Services",
+   "reit": false,
+   "note": "10-K filed 2026-03-24: B2B subscription service for commercial credit-risk data, same label as credit-reporting peers. Item 4.02 restatement for unpaid sales tax was refiled in a 10-K/A on 2026-08-19, so the restated figures should be used. 2025 OTCQX bids of $2.07-2.98 fit the $2.12 quote."
+  },
+  "1357671": {
+   "ticker": "CRTD",
+   "name": "Creatd, Inc.",
+   "include": true,
+   "sector": "Technology",
+   "industry": "Computer Software: Programming Data Processing",
+   "reit": false,
+   "note": "Air-transport SIC is stale: the Flyte air-charter unit was sold on 2026-03-09, and the 10-Q for Jun 2026 (filed 2026-08-13, its first periodic report since re-registering by S-1 in Aug 2026) shows Vocal creator subscriptions plus agency revenue; the 8-K of 2026-09-29 gives a $3.75 close on 2026-09-22, consistent with $4.40.",
+   "check": "Its S-1 went effective 2026-08-11 after the 2024 Form 15. The 10-Q for Jun 2026 (filed 2026-08-13, not a shell) shows the Flyte aviation unit sold 2026-03-09, with continuing revenue from Vocal+ creator subscriptions ($201K) and agency work ($140K). The 8-K of 2026-09-29 values shares at a $3.75 OTCQB close on 2026-09-22, consistent with $4.40."
+  },
+  "2114521": {
+   "ticker": "CSBA",
+   "name": "CSB Financial Inc.",
+   "include": true,
+   "sector": "Finance",
+   "industry": "Banks",
+   "reit": false,
+   "note": "10-Q Jun 2026: holding company for Community Savings Bank (Bethel OH); its conversion sold 1,375,435 shares at $10.00 on Jul 29 2026 and it has been on OTCQB since Jul 30, consistent with the $13.70 quote. Caveat: the only 10-Q balance sheet predates the IPO proceeds, so book-value ratios are off until the Sep-quarter 10-Q."
+  },
+  "880417": {
+   "ticker": "CSBB",
+   "name": "CSB Bancorp, Inc.",
+   "include": true,
+   "sector": "Finance",
+   "industry": "Major Banks",
+   "reit": false,
+   "note": "10-K filed 2026-03-16: Ohio bank holding company (Commercial and Savings Bank of Millersburg). Item 5 shows a Q4 2025 range of $46.81-$57.00, consistent with $75.99. 10-Q filed 2026-08-13 is current."
+  },
+  "1845799": {
+   "ticker": "CULL",
+   "name": "Cullman Bancorp, Inc. /MD/",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Banks",
+   "reit": false,
+   "note": "Delisted (Form 25 2024-07-18) and filed Form 15-12G on 2024-07-29; the last periodic report is the 10-Q for Mar 2024, so it is more than two years without SEC reports.",
+   "check": "Delisted (Form 25 on 2024-07-18) and filed Form 15-12G on 2024-07-29; its last periodic report is the Mar 2024 10-Q."
+  },
+  "1562151": {
+   "ticker": "CWGL",
+   "name": "Crimson Wine Group, Ltd",
+   "include": true,
+   "sector": "Consumer Staples",
+   "industry": "Beverages (Production/Distribution)",
+   "reit": false,
+   "note": "10-K filed 2026-03-17: produces and sells luxury wine from seven estates (Pine Ridge, Archery Summit and others); Item 5 gives a $4.76 close on 2026-03-06, which fits the $4.23 quote."
+  },
+  "1918080": {
+   "ticker": "DBHL",
+   "name": "Deep Isolation Nuclear, Inc.",
+   "include": true,
+   "sector": "Utilities",
+   "industry": "Environmental Services",
+   "reit": false,
+   "note": "10-K FY2025 and 10-Q Jun 2026: deep-borehole nuclear waste disposal developer with Freestone environmental consulting revenue, the result of a reverse merger into the Aspen-1 shell in Jul 2025; on OTCQB since Jul 2026, merger placement at $3.00 vs $3.08 quote."
+  },
+  "927719": {
+   "ticker": "DWNX",
+   "name": "DELHI BANK CORP",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Major Banks",
+   "reit": false,
+   "note": "SEC filings are only Regulation A offering statements (latest 1-A POS 2026-03-12, qualified 2026-03-16). It has never filed a 10-K, 10-Q or 1-K, so it does not file periodic reports with the SEC.",
+   "check": "Filings are only Regulation A forms (1-A, 1-A POS, QUALIF, 2-A, 1-Z, latest 1-A POS 2026-03-12); it has never filed a 10-K, 10-Q or 1-K, so it does not file periodic reports with the SEC."
+  },
+  "1807689": {
+   "ticker": "EAIQ",
+   "name": "Eyeonix AIQ, Inc.",
+   "include": true,
+   "sector": "Consumer Discretionary",
+   "industry": "Advertising",
+   "reit": false,
+   "note": "Industry changed from Restaurants: the 10-Q for Jun 2026 (filed 2026-08-03) says restaurant operations ended in 2022-2024 and revenue ($55.8K in H1 2026) now comes from digital marketing services; it is not a shell per the filing; the 10-K cover gives $1.18 on 2025-09-30, consistent with $1.25.",
+   "check": "10-Q for Jun 2026 (filed 2026-08-03) ticks not-a-shell and says restaurant operations ended by 2024; continuing revenue ($55,800 in H1 2026) is all digital marketing through GDS Lumina; 10-K FY2025 cover gives a $1.18 close on 2025-09-30, consistent with $1.25; the DEF 14C covers only the name change."
+  },
+  "1449794": {
+   "ticker": "EMYB",
+   "name": "Embassy Bancorp, Inc.",
+   "include": true,
+   "sector": "Finance",
+   "industry": "Major Banks",
+   "reit": false,
+   "note": "10-K filed 2026-03-16: PA bank holding company (Embassy Bank for the Lehigh Valley). Item 5 shows Q4 2025 bids of $17.07-$18.45, consistent with $21.25. 10-Q filed 2026-08-13 is current."
+  },
+  "1437479": {
+   "ticker": "ENBP",
+   "name": "ENB Financial Corp",
+   "include": true,
+   "sector": "Finance",
+   "industry": "Major Banks",
+   "reit": false,
+   "note": "10-K filed 2026-03-20: holding company for Ephrata National Bank (PA). Item 5 shows OTCQX trades at $19.63-$23.22 in Q4 2025, consistent with $29.30. 10-Q filed 2026-08-14 is current."
+  },
+  "1908984": {
+   "ticker": "ENDI",
+   "name": "ENDI Corp.",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Investment Managers",
+   "reit": false,
+   "note": "Filed Form 15-12G on 2024-01-12, and its last periodic report was the FY2023 10-K (2024-04-01); since then only Form 144s, so it no longer files current reports.",
+   "check": "Filed Form 15-12G on 2024-01-12; its last periodic report is the FY2023 10-K (2024-04-01), and since then it has filed only Form 144s (2025), so no current reports."
+  },
+  "1883835": {
+   "ticker": "ESGH",
+   "name": "ESG Inc.",
+   "include": false,
+   "sector": "Consumer Staples",
+   "industry": "Packaged Foods",
+   "reit": false,
+   "note": "10-Q filed 2026-08-14: on 2026-05-26 it split off all of its China mushroom operations. What remains is an early-stage snack business with $918 of revenue, $191K of total assets, a stockholders' deficit and a defaulted convertible note, so the FY2025 10-K financials no longer describe the company.",
+   "check": "10-Q filed 2026-08-14: China operations split off 2026-05-26. What is left is an early-stage snack business with $918 of revenue, total assets of $190,777 (down from $26.9M) and a $374K deficit, plus default interest on the Labrys note, so the FY2025 10-K (amended 2026-10-13 only to fix the audit report) no longer describes the company."
+  },
+  "1705181": {
+   "ticker": "ETCG",
+   "name": "Grayscale Ethereum Classic Trust (ETC)",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Investment Bankers/Brokers/Service",
+   "reit": false,
+   "note": "Grayscale Ethereum Classic Trust (10-Q 2026-06-30): a passive grantor trust whose shares are trust units holding ETC, not operating-company common stock.",
+   "check": "10-Q 2026-06-30: a passive Delaware statutory trust taxed as a grantor trust, whose shares are fractional beneficial units in its ETC holdings. It has no officers or employees, so it is a trust vehicle, not operating-company common stock."
+  },
+  "2013792": {
+   "ticker": "EWSB",
+   "name": "EWSB Bancorp, Inc. /MD/",
+   "include": true,
+   "sector": "Finance",
+   "industry": "Banks",
+   "reit": false,
+   "note": "10-K filed 2026-03-25: holding company for East Wisconsin Savings Bank ($271M in assets). It IPO'd in Sept 2024 at $10.00 and is quoted on OTCQB, consistent with the $10.16 quote."
+  },
+  "912967": {
+   "ticker": "FBSI",
+   "name": "FIRST BANCSHARES INC /MO/",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Banks",
+   "reit": false,
+   "note": "Deregistered: filed Form 15-12G on 2012-06-08 and has filed no reports with the SEC since its 10-Q of 2012-05-15.",
+   "check": "Deregistered: filed Form 25 on 2012-05-29 and Form 15-12G on 2012-06-08, and since its 10-Q of 2012-05-15 it has filed only Form D notices (2020, 2025, 2026), no periodic reports."
+  },
+  "1131903": {
+   "ticker": "FCCN",
+   "name": "SPECTRAL CAPITAL Corp",
+   "include": true,
+   "sector": "Telecommunications",
+   "industry": "Telecommunications Equipment",
+   "reit": false,
+   "note": "The 10-Q for Jun 30, 2026 reports one segment, Telco Services (wholesale international voice through 42 Telecom and Telvantis), with $646.8M first-half revenue and a going-concern warning. It gives a close of $2.09 on May 22, 2026, which fits the $2.30 quote.",
+   "check": "The 10-Q for Jun 30, 2026 reports one segment, Telco Services (Telvantis wholesale voice and 42 Telecom messaging), with $646.8M of first-half revenue and a going-concern warning; it gives a quoted close of $2.09 on May 22, 2026, which fits the $2.30 quote."
+  },
+  "1722731": {
+   "ticker": "FDCT",
+   "name": "FDCTECH, INC.",
+   "include": true,
+   "sector": "Finance",
+   "industry": "Investment Bankers/Brokers/Service",
+   "reit": false,
+   "note": "S-1 filed 2026-09-15 (after the 1-for-100 split of 2026-07-10 and dilution to 125M shares) gives a last sale of $0.15 on 2026-09-14 and $0.70-0.78 in late August. The $3.99 quote is more than 5x off. Revenue comes from forex/CFD brokerage and wealth management, not software. Its 10-K has been amended and restated several times.",
+   "check": "The S-1/A filed 2026-09-24 (effective 2026-10-01) gives a last sale of $2.10 on 2026-09-23, after the 1-for-100 split. So the $3.99 quote is about 1.9x that, not 3x or more; the $0.15 figure is from 2026-09-14. 10-Q filed 2026-08-17: H1 2026 revenue was $32.7M, mostly forex/CFD brokerage, with $3.4M wealth management and about $3.0M technology."
+  },
+  "922358": {
+   "ticker": "FGPR",
+   "name": "FERRELLGAS PARTNERS L P",
+   "include": false,
+   "sector": "Consumer Discretionary",
+   "industry": "Other Specialty Stores",
+   "reit": false,
+   "note": "Ferrellgas Partners L.P. is a limited partnership, and FGPR is its Class A partnership units, not common stock (10-K for FY Jul 31, 2026 filed Sep 25, 2026; propane distributor).",
+   "check": "The 10-K for FY Jul 31, 2026 (filed Sep 25, 2026) says Ferrellgas Partners, L.P. is a publicly traded Delaware limited partnership whose Class A Units trade OTC as FGPR, so these are partnership units, not common stock."
+  },
+  "1846702": {
+   "ticker": "FIGP",
+   "name": "Forge Group, Inc.",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Property-Casualty Insurers",
+   "reit": false,
+   "note": "Operating commercial auto insurer (taxi/small-business), but it files only Regulation A reports (1-K, 1-SA Sep 17 2026), not 10-K/10-Q/8-K, and SEC has no XBRL company facts for it (404); a director buyback at $18 fits the $20 quote.",
+   "check": "1-SA (Sep 17 2026) shows a working commercial auto insurer (Forge Insurance Co., A- rated), but it reports only under Regulation A (1-K/1-SA/1-U), never 10-K/10-Q/8-K. SEC companyfacts returns 404, so there are no XBRL financials for the site."
+  },
+  "1852039": {
+   "ticker": "FILG",
+   "name": "Grayscale Filecoin Trust (FIL)",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Trusts Except Educational Religious and Charitable",
+   "reit": false,
+   "note": "Grayscale Filecoin Trust is a crypto grantor trust (trust units, not operating common stock); its only filings are a Form 10 (Apr 2023) that was withdrawn (RW Jun 2023), so it files no periodic reports.",
+   "check": "Grayscale Filecoin Trust is a grantor trust whose shares are trust units. Its Form 10-12G (Apr 14 2023) was withdrawn (RW Jun 9 2023); since then there are only Form D/A and 144 filings and no periodic reports."
+  },
+  "737875": {
+   "ticker": "FKYS",
+   "name": "FIRST KEYSTONE CORP",
+   "include": true,
+   "sector": "Finance",
+   "industry": "Major Banks",
+   "reit": false,
+   "note": "10-K filed 2026-03-30: bank holding company for First Keystone Community Bank, a Pennsylvania commercial bank with $1.5B assets. 2025 OTC prices of $13.51-17.40 and rising fit the $19.47 quote."
+  },
+  "740806": {
+   "ticker": "FMBM",
+   "name": "F&M BANK CORP",
+   "include": true,
+   "sector": "Finance",
+   "industry": "Major Banks",
+   "reit": false,
+   "note": "10-Q Aug 13 2026: one-bank holding company for Farmers & Merchants Bank, quoted on OTCQX; an insider sold at $33.38 in May 2026, in line with the $40.85 quote."
+  },
+  "1085913": {
+   "ticker": "FMCB",
+   "name": "FARMERS & MERCHANTS BANCORP",
+   "include": true,
+   "sector": "Finance",
+   "industry": "Major Banks",
+   "reit": false,
+   "note": "Bank holding company (Farmers & Merchants Bank of Central California). 10-K filed 2026-03-13 Item 5: OTCQX trades, Q4 2025 range $985-$1,145, close $1,111; 10-Q filed 2026-08-07. $1,445 is consistent."
+  },
+  "1026214": {
+   "ticker": "FMCC",
+   "name": "FEDERAL HOME LOAN MORTGAGE CORP",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Finance Companies",
+   "reit": false,
+   "note": "10-Q filed 2026-07-30 says Freddie Mac still operates in conservatorship with FHFA as conservator and no set end date; the 8-K of 2026-10-02 is only an officer change.",
+   "check": "10-Q filed 2026-07-30 says Freddie Mac has operated in conservatorship since 2008 and the conservatorship has no set end date. The 8-K of 2026-10-02 only reports a Chief Risk Officer change. It is a GSE in conservatorship."
+  },
+  "1698022": {
+   "ticker": "FMFG",
+   "name": "Farmers & Merchants Bancshares, Inc.",
+   "include": true,
+   "sector": "Finance",
+   "industry": "Banks",
+   "reit": false,
+   "note": "10-K filed 2026-03-26 and 10-Q filed 2026-08-11: holding company for Farmers and Merchants Bank of Maryland (about $872M in assets). The non-affiliate value of $53.2M on about 3.24M shares fits the $18.6 quote, and the 6/2026 8-K only extends a rights plan."
+  },
+  "310522": {
+   "ticker": "FNMA",
+   "name": "FEDERAL NATIONAL MORTGAGE ASSOCIATION FANNIE MAE",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Finance Companies",
+   "reit": false,
+   "note": "10-Q filed 2026-07-29 says Fannie Mae has been in FHFA conservatorship since 2008 and still is; government-sponsored enterprise in conservatorship.",
+   "check": "10-Q filed 2026-07-29 says Fannie Mae has been in conservatorship since 2008 with FHFA as conservator, and its statements are headed '(In conservatorship)'. It is a GSE in conservatorship."
+  },
+  "1099668": {
+   "ticker": "FOTB",
+   "name": "FIRST OTTAWA BANCSHARES, INC.",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Major Banks",
+   "reit": false,
+   "note": "The company filed Form 15-15D on Aug 10, 2012, and its last periodic report is the 10-Q for Q1 2012, so it has not filed reports for 14 years.",
+   "check": "It filed Form 15-15D on Aug 10, 2012, and its last periodic report is the 10-Q for Q1 2012; since then it has filed only Form D notices, so it does not file current reports."
+  },
+  "1828377": {
+   "ticker": "FTCO",
+   "name": "Fortitude Gold Corp",
+   "include": true,
+   "sector": "Basic Materials",
+   "industry": "Precious Metals",
+   "reit": false,
+   "note": "10-Q Aug 4 2026: gold producer at its Isabella Pearl and County Line mines in Nevada, with $8.2M of Q2 net sales and 2,133 oz produced; quoted on OTCQB."
+  },
+  "1796949": {
+   "ticker": "GFLT",
+   "name": "GenFlat Holdings, Inc.",
+   "include": true,
+   "sector": "Industrials",
+   "industry": "Misc Corporate Leasing Services",
+   "reit": false,
+   "note": "10-K filed 2026-09-25: an early-stage seller and lessor of collapsible marine containers with nominal revenue (the old healthcare consulting business is gone). Item 5 says only a minimal trading market exists. Options were granted 2026-07-20 at $1.39, and at 6/30/26 the options at $4.50-$10.25 had no intrinsic value, so the $5.95 quote is about 4.3x the latest price the filings report (a borderline exclusion).",
+   "check": "10-K filed 2026-09-25 (not a shell; container sales and leasing with nominal revenue) reports trading from $1.39 (July 20, 2026 option grant) up to $10.25 (stock price after the February 2026 $3.00 IPO), so the $5.95 quote sits inside the range the filings report, and Yahoo's 52-week high of $10.575 matches; I would not exclude it as plainly inconsistent, but the sector change is right."
+  },
+  "890066": {
+   "ticker": "GLBZ",
+   "name": "GLEN BURNIE BANCORP",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Major Banks",
+   "reit": false,
+   "note": "Community bank holding company that voluntarily delisted from Nasdaq (Form 25 on 2025-12-22) and deregistered (Form 15-12G on 2026-01-13); its last report is the 10-Q for 9/30/2025.",
+   "check": "Form 25 on 2025-12-22, POS AM/S-8 POS deregistrations on 2025-12-30, then Form 15-12G on 2026-01-13; its last report is the 10-Q for 9/30/2025."
+  },
+  "1938338": {
+   "ticker": "GLTK",
+   "name": "GlobalTech Corp",
+   "include": false,
+   "sector": "Miscellaneous",
+   "industry": "Multi-Sector Companies",
+   "reit": false,
+   "note": "An 8-K dated Sep 29, 2026 (Item 4.02) says the FY2025 10-K and both 2026 10-Qs should no longer be relied on (an $8.4M tax valuation allowance cuts equity from $39.8M to $31.4M), and no restated filings have appeared yet. A 1-for-3 reverse split took effect Aug 2026. Revenue in the first half of 2026 was 53% retail and footwear and 47% Pakistan telecom and broadband.",
+   "check": "An 8-K filed Oct 2, 2026 (Item 4.02) says the FY2025 10-K and both 2026 10-Qs should not be relied on: an $8.4M tax valuation allowance raises the FY2025 loss from $3.15M to $11.55M and cuts equity from $39.8M to $31.4M, and no restated filings have been made yet. First-half 2026 revenue was 53% UK footwear retail, with the rest from Pakistan telecom and broadband and from consulting."
+  },
+  "13156": {
+   "ticker": "GLXZ",
+   "name": "Galaxy Gaming, Inc.",
+   "include": true,
+   "sector": "Consumer Discretionary",
+   "industry": "Services-Misc. Amusement & Recreation",
+   "reit": false,
+   "note": "10-K FY2025 (filed 2026-03-30) shows it licenses proprietary casino table games and iGaming content; Evolution ended the merger on 2026-07-21 (8-K); 10-Q for Jun 2026 filed 2026-08-10; the 2025 OTCQB range of $2.52-2.94 is in line with $1.60 after the deal ended."
+  },
+  "1978811": {
+   "ticker": "GOVB",
+   "name": "Gouverneur Bancorp, Inc./MD/",
+   "include": true,
+   "sector": "Finance",
+   "industry": "Banks",
+   "reit": false,
+   "note": "10-K filed 2025-12-19 (FY ending 9/30) and 10-Q filed 2026-08-13: savings and loan holding company for Gouverneur Savings and Loan, which mainly makes 1-4 family mortgages. OTCQB, 1.05M shares, semi-annual dividend; $20.86 is below about $29 of book value per share."
+  },
+  "1282571": {
+   "ticker": "GRNL",
+   "name": "GREENLITE VENTURES INC",
+   "include": false,
+   "sector": "Basic Materials",
+   "industry": "Metal Mining",
+   "reit": false,
+   "note": "Filed Form 15-12G on 2014-01-07 to end its reporting; its last 10-Q was 2013 and the only filing since is a 2019 8-K giving contact details, so it does not file current reports.",
+   "check": "Its filing list shows a Form 15-12G (2014-01-07) ending its reporting and no 10-K or 10-Q since 2013; later filings are only a 2019 8-K and a 2025 Form D, so it does not file current reports."
+  },
+  "2025000": {
+   "ticker": "GSNR",
+   "name": "Grayscale Near Trust (NEAR)",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Investment Bankers/Brokers/Service",
+   "reit": false,
+   "note": "Grayscale Near Trust is a crypto grantor trust whose only SEC filing is an S-1 (2026-01-20); it files no 10-K or 10-Q.",
+   "check": "Grayscale Near Trust is a crypto trust whose SEC filings are only an S-1/S-1/A (latest 2026-06-12) plus Form 144s and a 13G, with no 10-K or 10-Q filed."
+  },
+  "2029297": {
+   "ticker": "GTAO",
+   "name": "Grayscale Bittensor Trust (TAO)",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Investment Bankers/Brokers/Service",
+   "reit": false,
+   "note": "Grayscale Bittensor Trust is a passive grantor trust holding TAO, so its shares are trust units, not common stock (10-Q filed 2026-08-04).",
+   "check": "Grayscale Bittensor Trust is a passive trust holding TAO that issues shares at NAV through private placements (8-K 2026-10-13; 10-Q filed 2026-08-04), so its shares are trust units, not common stock."
+  },
+  "1832487": {
+   "ticker": "GUER",
+   "name": "Guerrilla RF, Inc.",
+   "include": true,
+   "sector": "Technology",
+   "industry": "Semiconductors",
+   "reit": false,
+   "note": "10-K filed 2026-03-26 and 10-Q 2026-08-12: RF integrated-circuit maker quoted on OTCQX with 10.7M shares; stock options granted in Q2 2026 at $3.05, so the $4.15 quote fits."
+  },
+  "1761325": {
+   "ticker": "GXLM",
+   "name": "Grayscale Stellar Lumens Trust (XLM)",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Investment Bankers/Brokers/Service",
+   "reit": false,
+   "note": "Grayscale Stellar Lumens Trust is a passive grantor trust holding XLM, so its shares are trust units, not common stock (10-Q filed 2026-08-04).",
+   "check": "Grayscale Stellar Lumens Trust is a passive Grayscale trust holding XLM whose shares are trust units, not common stock (10-Q filed 2026-08-04; 8-K 2026-10-15)."
+  },
+  "732417": {
+   "ticker": "HBIA",
+   "name": "HILLS BANCORPORATION",
+   "include": true,
+   "sector": "Finance",
+   "industry": "Major Banks",
+   "reit": false,
+   "note": "Iowa bank holding company. 10-K filed 2026-03-18 Item 5: OTC bids for Q4 2025 were $77.50-$82. The 10-Q filed 2026-08-06 reports a 2-for-1 split in June 2026, so about $39-41 adjusted, consistent with $47."
+  },
+  "1482554": {
+   "ticker": "HFUS",
+   "name": "Hartford Creative Group, Inc.",
+   "include": true,
+   "sector": "Consumer Discretionary",
+   "industry": "Advertising",
+   "reit": false,
+   "note": "10-K filed 2025-10-15 and 10-Q 2026-06-12: Chinese social-media advertising placement and campaign services make up its revenue, not data processing; OTC close was $2.27 on 10/13/25, so the $2.00 quote fits; going-concern doubt.",
+   "check": "10-Q filed 2026-06-12: 9-month revenue was $1.50M of social-media advertising in China plus $0.07M from mini-dramas, not data processing; the 10-K filed 2025-10-15 gives a $2.27 close on 10/13/25, so the $2.00 quote fits; there is going-concern doubt, and the FY Jul-2026 10-K is not yet due (Oct 29)."
+  },
+  "88000": {
+   "ticker": "HKHC",
+   "name": "Horizon Kinetics Holding Corp",
+   "include": true,
+   "sector": "Finance",
+   "industry": "Investment Managers",
+   "reit": false,
+   "note": "Horizon Kinetics, an investment adviser with $9.6B AUM (10-K filed 2026-03-12; 10-Q filed 2026-08-13). OTCQX range for Q4 2025 was $22.51-$38.00, consistent with $20.40."
+  },
+  "1953988": {
+   "ticker": "HLEO",
+   "name": "Helio Corp /FL/",
+   "include": true,
+   "sector": "Industrials",
+   "industry": "Military/Government/Technical",
+   "reit": false,
+   "note": "10-K filed 2026-02-17 and 10-Q filed 2026-09-14: Heliospace designs and tests spaceflight hardware, with 82% of Q3 revenue from government work. 1-for-5 reverse split on 2026-07-20; open-market buybacks at $5.35-5.61 split-adjusted support the $4.55 quote. Going-concern doubt."
+  },
+  "1680139": {
+   "ticker": "HLYK",
+   "name": "HealthLynked Corp",
+   "include": true,
+   "sector": "Health Care",
+   "industry": "Medical/Nursing Services",
+   "reit": false,
+   "note": "10-K FY2025 and 10-Q 2026-06-30: patient service revenue from its functional-medicine practice is 96% of revenue ($649K of $673K in H1); S-1/A (2026-05-29) gives a last sale of $2.22 on 2026-05-28, consistent with $2.09. 1-for-100 split in Sep 2025."
+  },
+  "1563665": {
+   "ticker": "HRGN",
+   "name": "Harvard Apparatus Regenerative Technology, Inc.",
+   "include": true,
+   "sector": "Health Care",
+   "industry": "Biotechnology: Biological Products (No Diagnostic Substances)",
+   "reit": false,
+   "note": "10-K filed 2026-03-19 and 10-Q 2026-08-13: clinical-stage regenerative-medicine company (stem-cell esophageal implant in a phase 1 trial); industry changed from instruments to biologics like VCEL; price was $1.70 on 6/30/25, so the $2.23 quote fits.",
+   "check": "10-K filed 2026-03-19: a clinical-stage regenerative-medicine company whose implant uses the patient's own stem cells, with an FDA-cleared IND for a phase 1 esophagus trial, so it is a cell-therapy biotech like VCEL rather than an instrument maker; the $2.23 quote is about 2.1x the $1.05 private placement of 9/11/26 (8-K) and within the 52-week range."
+  },
+  "1630176": {
+   "ticker": "HYEX",
+   "name": "HEALTHY EXTRACTS INC.",
+   "include": true,
+   "sector": "Health Care",
+   "industry": "Medicinal Chemicals and Botanical Products",
+   "reit": false,
+   "note": "10-K filed 2026-04-09: plant-based nutraceuticals (BergaMet, UBN) plus Gummy USA contract manufacturing; Item 5 closing prices of $0.81-2.35 (Q4 2025 to Feb 2026) fit the $1.05 quote."
+  },
+  "1054102": {
+   "ticker": "IDXG",
+   "name": "INTERPACE BIOSCIENCES, INC.",
+   "include": true,
+   "sector": "Health Care",
+   "industry": "Medical Specialities",
+   "reit": false,
+   "note": "Industry changed from Medical/Dental Instruments: its revenue comes from molecular diagnostic tests run in its CLIA lab, the label Nasdaq gives DGX, LH and CSTL; the S-1/A (2026-10-01) reports a 1-for-5 reverse split and a last sale of $6.42 on 2026-09-29, consistent with $5.15.",
+   "check": "S-1/A (2026-10-01) says all revenue comes from clinical services, meaning thyroid molecular diagnostic tests (ThyGeNEXT, ThyraMIR v2) run in its CLIA/CAP lab, the label DGX, LH and CSTL carry; it records a 1-for-5 reverse split approved 2026-08-20 and a last sale of $6.42 on 2026-09-29, consistent with $5.15."
+  },
+  "50292": {
+   "ticker": "IEHC",
+   "name": "IEH Corp",
+   "include": true,
+   "sector": "Technology",
+   "industry": "Electrical Products",
+   "reit": false,
+   "note": "10-K filed 2026-06-12 and 10-Q filed 2026-08-07: makes hyperboloid PCB connectors for defense and aerospace and moved to OTCQX in 2/2026. Item 5 bids rose to $19.75 in Q1 2026, which fits the $30.08 quote given the 52-week high of $33.88."
+  },
+  "1657214": {
+   "ticker": "ILAL",
+   "name": "International Land Alliance Inc.",
+   "include": true,
+   "sector": "Real Estate",
+   "industry": "Homebuilding",
+   "reit": false,
+   "note": "10-K FY2025 (2026-04-27) and 10-Q 2026-06-30: residential land developer in Baja California and Southern California, with going-concern doubt and toxic convertible notes. 1-for-50 reverse split on 2026-02-04; H1 2026 share issuances imply roughly $3 a share, so the $1.59 quote is within 3x. Yahoo's 52-week low of $0.10 looks unadjusted for the split."
+  },
+  "1528985": {
+   "ticker": "INRE",
+   "name": "Inland Real Estate Income Trust, Inc.",
+   "include": false,
+   "sector": "Real Estate",
+   "industry": "Real Estate Investment Trusts",
+   "reit": true,
+   "note": "Non-traded REIT (10-K filed 2026-03-11; 10-Q filed 2026-08-05). Says there is no established public trading market and gives an estimated value of $16.89 a share; the 9.51 quote (52-week low 0.001) is not a market price.",
+   "check": "10-K filed 2026-03-11 Item 5 says there is no established public trading market and gives an estimated NAV of $16.89, which is also the Q2 2026 buyback price in the 10-Q filed 2026-08-05. The 9.51 quote (52-week low 0.001) is not a market price. It elected REIT status from 2013."
+  },
+  "1133062": {
+   "ticker": "JANL",
+   "name": "JANEL CORP",
+   "include": true,
+   "sector": "Industrials",
+   "industry": "Integrated Freight & Logistics",
+   "reit": false,
+   "note": "10-K filed 2025-12-05 for FY Sep 2025: logistics (freight forwarding, customs brokerage, trucking) was $183.8M of $207.4M revenue; OTCQX close was $36.01 on 9/30/25, so the $45 quote fits; filings current (10-Q 2026-08-07); reclassified from Business Services to match EXPD and CHRW.",
+   "check": "10-K filed 2025-12-05 (FY Sep 2025): Logistics brought in $183.8M of $207.4M revenue, and about 89% of 9-month revenue in the 10-Q filed 2026-08-07; the 9/30/25 close was $36.01 and FY25 bids ran $25.47-$41, so the $45 quote fits; EXPD and CHRW carry the same label on the site."
+  },
+  "1517389": {
+   "ticker": "JFIL",
+   "name": "Jubilant Flame International, Ltd",
+   "include": false,
+   "sector": "Technology",
+   "industry": "EDP Services",
+   "reit": false,
+   "note": "10-Q 2026-08-31 (filed 2026-10-14): zero revenue (pre-revenue since 2020), total assets $5,665, working-capital deficit $1.47M, 199,867 shares after a 1-for-100 split on 2026-09-09. A shell with no operations, although it ticks 'not a shell'.",
+   "check": "10-Q for the quarter ended 2026-08-31 (filed 2026-10-14): no revenue since its business stopped in Jan 2020, the filing cites a 'lack of active operations', assets are $5,665 and the working-capital deficit is $1.47M (going-concern doubt). It has 199,867 shares after a 1-for-100 split on 2026-09-09, so it is a shell with no operations despite ticking 'not a shell'."
+  },
+  "714712": {
+   "ticker": "JUVF",
+   "name": "JUNIATA VALLEY FINANCIAL CORP",
+   "include": true,
+   "sector": "Finance",
+   "industry": "Major Banks",
+   "reit": false,
+   "note": "10-K filed 2026-03-25 and 10-Q filed 2026-08-12 are current: a Pennsylvania community bank holding company (Juniata Valley Bank, about $895M in assets) quoted on OTCQX. The $15.6 quote fits the non-affiliate market value of $62.1M on about 5.0M shares."
+  },
+  "1230058": {
+   "ticker": "KANP",
+   "name": "KAANAPALI LAND LLC",
+   "include": false,
+   "sector": "Real Estate",
+   "industry": "Homebuilding",
+   "reit": false,
+   "note": "10-K filed 2026-03-25: Kaanapali Land is a Delaware LLC whose registered security is LLC membership interests (Class A shares), and Item 5 says there is no established public trading market, so not ordinary common stock.",
+   "check": "10-K filed 2026-03-25: the 12(g) security is 'Limited Liability Company Interests (Class A Shares)' of a Delaware LLC (taxed as a corporation), and Item 5 says there is no established public trading market, so these are LLC units, not ordinary common stock."
+  },
+  "803742": {
+   "ticker": "KISB",
+   "name": "KISH BANCORP INC",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Major Banks",
+   "reit": false,
+   "note": "EDGAR shows no 10-K, 10-Q or 8-K for Kish Bancorp at all, only Form D filings (latest 2026-06-11), so it does not file current SEC reports.",
+   "check": "EDGAR submissions list only 12 Form D filings (2009-04-03 to 2026-06-11) and no 10-K, 10-Q or 8-K ever, so Kish Bancorp does not file periodic SEC reports."
+  },
+  "1110607": {
+   "ticker": "KLNG",
+   "name": "Koil Energy Solutions, Inc.",
+   "include": true,
+   "sector": "Consumer Discretionary",
+   "industry": "Oil and Gas Field Machinery",
+   "reit": false,
+   "note": "10-K FY2025 (filed 2026-03-31) shows subsea oil and gas equipment and services, the same Nasdaq label as FET, OIS and NOV; 10-Q for Jun 2026 filed 2026-08-14; a director's Form 4 sale at $2.97 on 2026-09-22 matches $2.90."
+  },
+  "1493137": {
+   "ticker": "LCTC",
+   "name": "Lifeloc Technologies, Inc",
+   "include": true,
+   "sector": "Industrials",
+   "industry": "Biotechnology: Laboratory Analytical Instruments",
+   "reit": false,
+   "note": "10-K filed 2026-03-27: makes fuel-cell breath-alcohol testing instruments; Item 5 bids of $2.40-3.67 in FY2025 are consistent with the $4.00 quote."
+  },
+  "1456189": {
+   "ticker": "LEAT",
+   "name": "Leatt Corp",
+   "include": true,
+   "sector": "Consumer Discretionary",
+   "industry": "Recreational Games/Products/Toys",
+   "reit": false,
+   "note": "10-K filed 2026-03-24 and 10-Q filed 2026-08-14: designs and sells protective gear (neck braces, body armor, helmets, apparel) for motorsport and cycling riders, with $61.9M revenue in 2025, not motor vehicles. Item 5 closing prices of $5.50-$13.50 fit the $10.90 quote.",
+   "check": "10-K filed 2026-03-24: designs and sells protective gear for motorsport and cycling riders (body armor 47%, helmets 21%, neck braces 5%; $61.9M revenue in 2025), not vehicles; Item 5 closes of $5.50-$13.50 fit $10.90, and the 9/29/26 8-K is only an annual-meeting notice."
+  },
+  "750004": {
+   "ticker": "LNWO",
+   "name": "Light & Wonder, Inc.",
+   "include": true,
+   "sector": "Consumer Discretionary",
+   "industry": "Services-Misc. Amusement & Recreation",
+   "reit": false,
+   "note": "The FY2025 10-K (filed 2026-02-24) confirms LNWO is its common stock on OTC Pink after the Nasdaq delisting of 2025-11-13 (ASX CDIs 1:1, AU$140.24 on 2026-02-18), and the 10-Q for 6/30/2026 is current; the business is slot machines, game content, social casino and iGaming, so the EDP Services label from SIC 7373 is stale.",
+   "check": "Item 5 of the FY2025 10-K (filed 2026-02-24) says its common stock trades on OTC Pink as LNWO after the 2025 Nasdaq delisting (ASX CDIs at AU$140.24 on 2026-02-18, close to the $82.12 quote); its segments are Gaming, SciPlay and iGaming, so the EDP Services label is stale, and the 10-Q for 6/30/2026 is current."
+  },
+  "2064307": {
+   "ticker": "LOGC",
+   "name": "ContextLogic Holdings Inc.",
+   "include": true,
+   "sector": "Industrials",
+   "industry": "Mining & Quarrying of Nonmetallic Minerals (No Fuels)",
+   "reit": false,
+   "note": "10-Q filed 2026-08-13: former Wish shell now operates US Salt (evaporated and specialty salt producer, bought 2026-02-26). OTCQB. Shares were issued at about $8 in the deal and rights offering, consistent with $15.10."
+  },
+  "1732406": {
+   "ticker": "LTCN",
+   "name": "Grayscale Litecoin Trust (LTC)",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Investment Bankers/Brokers/Service",
+   "reit": false,
+   "note": "Grayscale Litecoin Trust is a passive grantor trust whose shares are trust units holding LTC, not operating-company common stock (10-K for FY ended 6/30/2026 filed 2026-09-03).",
+   "check": "10-K for FY ended 6/30/2026 (filed 2026-09-03) says the shares are units of fractional undivided beneficial interest in a passive trust holding LTC, not operating-company common stock."
+  },
+  "1726079": {
+   "ticker": "LUCN",
+   "name": "Lucent, Inc.",
+   "include": false,
+   "sector": "Consumer Discretionary",
+   "industry": "Business Services",
+   "reit": false,
+   "note": "Filed Form 15-12G on 2025-06-20 and no 10-K or 10-Q since May 2025; an 8-K of 2025-12-30 says its only planned acquisition (DESTI) was rescinded, so no operating business is shown.",
+   "check": "Filed Form 15-12G on 2025-06-20 with its last 10-Q covering Q1 2025; the 8-K of 2025-12-30 says the DESTI acquisition was rescinded, so it neither files current reports nor shows an operating business."
+  },
+  "1957783": {
+   "ticker": "MACT",
+   "name": "MachTen, Inc.",
+   "include": false,
+   "sector": "Telecommunications",
+   "industry": "Telecommunications Equipment",
+   "reit": false,
+   "note": "Filed Form 15-12G on Feb 7 2024 to deregister; there have been no filings since then, and the last 10-Q covers Sep 2023.",
+   "check": "Filed an 8-K and 15-12G on Feb 7 2024 to deregister. There are no SEC filings after that; the last 10-Q covers the quarter to Sep 30 2023."
+  },
+  "2024899": {
+   "ticker": "MFBI",
+   "name": "Monroe Federal Bancorp, Inc.",
+   "include": true,
+   "sector": "Finance",
+   "industry": "Savings Institutions",
+   "reit": false,
+   "note": "10-K FY ended 2026-03-31 (filed 2026-06-25) and 10-Q 2026-06-30: holding company of Monroe Federal savings bank in Ohio, quoted on OTCQB as MFBI, 541,434 shares; a $12.80 quote fits a $10 conversion offering."
+  },
+  "2033615": {
+   "ticker": "MGNO",
+   "name": "Magnolia Bancorp, Inc.",
+   "include": true,
+   "sector": "Finance",
+   "industry": "Savings Institutions",
+   "reit": false,
+   "note": "10-K filed 2026-03-16: holding company of Mutual Savings and Loan Association (Metairie, LA); quoted on OTCQB, 2025 range $10.50-$11.98; the $14.77 quote is about 1.25x that, and 10-Q filed 2026-08-11 (Yahoo's 52-week low of $13.72 is above the Q4 2025 range)."
+  },
+  "1844392": {
+   "ticker": "MRAI",
+   "name": "Marpai, Inc.",
+   "include": false,
+   "sector": "Health Care",
+   "industry": "Misc Health and Biotechnology Services",
+   "reit": false,
+   "note": "Operating health-plan administrator (TPA) with going-concern doubt and a $38.9M stockholders' deficit (10-Q filed 2026-08-13); that filing values vendor stock at about $0.44 a share in Q2 2026, and the July 2026 preferred converts at $1.00, so the $3.13 quote is more than 3x the latest filing's prices.",
+   "check": "Operating health-plan administrator (10-Q filed 2026-08-13: going-concern doubt, $38.9M stockholders' deficit), but its filings price the stock at $0.44 (vendor shares, April 2026) and $1.00 (Oct 2025 placement, per the 2026-08-13 13D/A, and July 2026 preferred conversion), so the $3.13 quote is more than 3x those prices."
+  },
+  "1967306": {
+   "ticker": "MSBB",
+   "name": "Mercer Bancorp, Inc.",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Banks",
+   "reit": false,
+   "note": "Mercer Savings Bank holding company that filed Form 15-12G on 2026-08-10 to deregister after an 8-K on 2026-08-03; its last report is the 10-Q for 3/31/2026, and the 6/30/2026 10-Q was never filed.",
+   "check": "An 8-K (8.01) on 2026-08-03 was followed by an S-8 POS and Form 15-12G on 2026-08-10; its last report is the 10-Q for 3/31/2026, and no 6/30/2026 10-Q was filed."
+  },
+  "2075109": {
+   "ticker": "MTTN",
+   "name": "Matternet, Inc.",
+   "include": true,
+   "sector": "Industrials",
+   "industry": "Aerospace",
+   "reit": false,
+   "note": "10-Q Jun 2026: designs and makes drone delivery systems, the result of a reverse merger into the Los Altos Ventures shell on May 22 2026, with a placement at $3.00; 8-K Sep 21 2026 says OTCQB trading began, consistent with the $3.78 quote."
+  },
+  "1947463": {
+   "ticker": "NACB",
+   "name": "ODNB Financial Corp",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Major Banks",
+   "reit": false,
+   "note": "This CIK is ODNB Financial Corp, which has no public market and has filed no 10-K or 10-Q (S-4 effective Oct 9 2026); the NACB quote belongs to National Capital Bancorp, its merger target, which does not file with the SEC.",
+   "check": "424B3 dated Oct 13 2026: the CIK is ODNB Financial Corp, privately held with no established public trading market and no 10-K or 10-Q yet; the OTC symbol NACB belongs to its merger target National Capital Bancorp, a separate company that does not file with the SEC."
+  },
+  "720762": {
+   "ticker": "NIMU",
+   "name": "NON INVASIVE MONITORING SYSTEMS INC /FL/",
+   "include": false,
+   "sector": "Industrials",
+   "industry": "Military/Government/Technical",
+   "reit": false,
+   "note": "10-Q filed 2026-08-14 has the shell-company box checked (no operations since 2019). It did a 1-for-150 reverse split on 2026-07-30 and its merger with Gravitics is still pending (S-4/A amendments through 2026-10-13).",
+   "check": "10-Q filed 2026-08-14 has the shell-company box checked Yes and says it has no operations or inventory. A 1-for-150 reverse split was filed 2026-07-27, and the Gravitics merger is still pending (S-4/A amendments through 2026-10-13)."
+  },
+  "1854964": {
+   "ticker": "NLCP",
+   "name": "NewLake Capital Partners, Inc.",
+   "include": true,
+   "sector": "Real Estate",
+   "industry": "Real Estate Investment Trusts",
+   "reit": true,
+   "note": "The 10-K for FY2025 (filed Mar 2026) describes an internally managed REIT that has elected REIT tax status since 2019 and owns triple-net cannabis properties; it trades on OTCQX. 2025 EPS of $1.28 makes the $13.77 quote plausible, and the 10-Q for Jun 30, 2026 is current.",
+   "check": "The 10-K for FY2025 (filed Mar 6, 2026) says it is an internally managed REIT that has been taxed as a REIT since its 2019 short tax year, owns triple-net leased cannabis properties and trades on OTCQX; the 10-Q for Jun 30, 2026 is current."
+  },
+  "1282631": {
+   "ticker": "NLST",
+   "name": "NETLIST INC",
+   "include": true,
+   "sector": "Technology",
+   "industry": "Semiconductors",
+   "reit": false,
+   "note": "Memory-module maker and reseller (10-K filed 2026-03-19, FY25 net sales $188.6M; 10-Q filed 2026-08-11). OTCQB. The 8-K of 2026-10-05 reports a $600M Micron patent license, which explains the rise from the $0.70 offerings to $5.74."
+  },
+  "888981": {
+   "ticker": "NNUP",
+   "name": "NOCOPI TECHNOLOGIES INC/MD/",
+   "include": true,
+   "sector": "Industrials",
+   "industry": "Specialty Chemicals",
+   "reit": false,
+   "note": "10-K filed 2026-03-31: formulates and licenses specialty reactive and security inks (toy/educational printing is one market; it makes no toys); the May 2026 Polymeric purchase (screens and digital inks) makes ink product sales most of Q2 revenue. Shares were valued at $1.50 at that deal, which fits the $1.70 quote.",
+   "check": "10-Q filed 2026-08-13: licenses reactive and security ink technology to toy/entertainment and document-security licensees (it makes no toys); bought Polymeric (screens and digital inks) in May 2026, and Q2 product sales were $895K of $961K revenue; shares were valued at the $1.50 quoted price at that deal and in a Jan 2026 placement, consistent with the $1.70 quote."
+  },
+  "72205": {
+   "ticker": "NOBH",
+   "name": "NOBILITY HOMES INC",
+   "include": true,
+   "sector": "Consumer Discretionary",
+   "industry": "Homebuilding",
+   "reit": false,
+   "note": "10-K filed 2026-01-30 and 10-Q filed 2026-09-15: builds manufactured and modular homes and sells them through its own Florida retail centers; it bought back shares at $26.50-$29.70 (Aug 2025 to Jan 2026), which fits the $27.50 quote."
+  },
+  "1011060": {
+   "ticker": "NORD",
+   "name": "Nordicus Partners Corp",
+   "include": true,
+   "sector": "Health Care",
+   "industry": "Biotechnology: Pharmaceutical Preparations",
+   "reit": false,
+   "note": "10-K filed 2026-07-14 and 10-Q filed 2026-09-28: now a preclinical biotech (Orocidin, Bio-Convert, NoviThera) rather than a consulting firm. FY2026 stock sales at $1.90-$5.00 and a buyback at $1.36 fit the $4.04 quote.",
+   "check": "10-K filed 2026-07-14 (not a shell): a preclinical Nordic biotech (Orocidin, Bio-Convert, NoviThera) with no FY2026 revenue; stock sold at $1.90-$5.00 (Oct 2025-Mar 2026) and $2.75 (10-Q, Apr-Jun 2026), which fits the $4.04 quote."
+  },
+  "71557": {
+   "ticker": "NUVR",
+   "name": "Nuvera Communications, Inc.",
+   "include": true,
+   "sector": "Telecommunications",
+   "industry": "Telecommunications Equipment",
+   "reit": false,
+   "note": "10-K filed 2026-03-16: rural Minnesota fiber broadband, video and voice carrier; the cover gives an $11.05 close on 2025-06-30, which fits the $16 quote and its $11.25-$18.18 52-week range."
+  },
+  "1163389": {
+   "ticker": "NWPP",
+   "name": "NEW PEOPLES BANKSHARES INC",
+   "include": true,
+   "sector": "Finance",
+   "industry": "Major Banks",
+   "reit": false,
+   "note": "10-Q Aug 12 2026: holding company for New Peoples Bank (Virginia), quoted on OTC Pink; insider buys at $4.85-4.86 in Sep 2026 match the $4.91 quote."
+  },
+  "1865429": {
+   "ticker": "OAKV",
+   "name": "Oak View Bankshares, Inc.",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Major Banks",
+   "reit": false,
+   "note": "The last periodic report was a Regulation A 1-K filed 2022-04-29, and a 1-Z exit report followed on 2022-06-22. Since then it has filed only Form D, so it no longer files current reports with the SEC.",
+   "check": "Its only periodic reports were under Regulation A (1-SA 2021, 1-K 2022-04-29), and the 1-Z exit filed 2022-06-22 ended them; since then it has filed only Form D, so it does not file current reports."
+  },
+  "1000045": {
+   "ticker": "OMCC",
+   "name": "OLD MARKET CAPITAL Corp",
+   "include": false,
+   "sector": "Telecommunications",
+   "industry": "Telecommunications Equipment",
+   "reit": false,
+   "note": "Delisted from Nasdaq (Form 25 2025-12-22) and filed 15-12G/A on 2026-01-02, so no reports after the Sep 2025 10-Q; that 10-Q shows all revenue now comes from Amplex wireless and fiber internet, not consumer finance.",
+   "check": "Filed Form 25 on 2025-12-22 and Form 15-12G/A (Rule 12g-4(a)(2), 65 holders) on 2026-01-02, with no periodic report after the Sep 2025 10-Q; that 10-Q shows its only operating segment is Amplex's broadband and VOIP business and that consumer finance is a discontinued operation."
+  },
+  "74818": {
+   "ticker": "ORBT",
+   "name": "ORBIT INTERNATIONAL CORP",
+   "include": false,
+   "sector": "Technology",
+   "industry": "Industrial Machinery/Components",
+   "reit": false,
+   "note": "Filed a Form 25 in Oct 2014 and a 15-12G (deregistration) on 2014-11-14; no 10-K or 10-Q since the 2014-06-30 10-Q, so it no longer files reports with the SEC.",
+   "check": "SEC submissions: 15-12G deregistration filed 2014-11-14 and nothing since except Forms 4 through 2015 and a Form D on 2026-10-07; no 10-K or 10-Q in 12 years, so it does not file current reports."
+  },
+  "1076691": {
+   "ticker": "OSBK",
+   "name": "OCONEE FINANCIAL CORP",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Major Banks",
+   "reit": false,
+   "note": "Filed Form 15-12G in Apr 2012 and its last 10-Q was May 2012; since then only a Reg A offering (2023) and a Form D (2025), so there are no current SEC reports.",
+   "check": "Filed Form 15-12G on 2012-04-18, and its last 10-Q (Mar 2012) was filed 2012-05-15; since then it has filed only a Reg A offering (2023, closed with Form 1-Z) and a Form D (2025), so there are no current reports."
+  },
+  "1938569": {
+   "ticker": "PALX",
+   "name": "Palomino Laboratories Inc.",
+   "include": true,
+   "sector": "Technology",
+   "industry": "Semiconductors",
+   "reit": false,
+   "note": "10-K FY2025 and 10-Q Jun 2026: pre-revenue microLED optical-interconnect chip developer (reverse merger into Unite Acquisition 3 shell; bought chip designer VLI Jul 2026), on OTCQB since Apr 17 2026. Its Oct 8 2026 proxy gives a $4.86 close on Jul 11 2026, so the $14 quote is a 2.9x run-up, just under the 3x line; worth a second look."
+  },
+  "1017655": {
+   "ticker": "PAYD",
+   "name": "PAID INC",
+   "include": true,
+   "sector": "Consumer Discretionary",
+   "industry": "Business Services",
+   "reit": false,
+   "note": "10-K filed 2026-03-31 (10-Q 2026-08-14): runs the ShipTime online shipping-label and courier-rate platform; Item 5 OTC Pink bids of $2.25-3.30 in Q4 2025 fit the $2.51 quote."
+  },
+  "1122020": {
+   "ticker": "PCSV",
+   "name": "PCS Edventures!, Inc.",
+   "include": true,
+   "sector": "Consumer Discretionary",
+   "industry": "Other Consumer Services",
+   "reit": false,
+   "note": "10-K filed 2026-06-26: sells K-12 STEM education products, curriculum and enrichment programs, so Real Estate does not fit. Its 1-for-12 reverse split took effect 2026-05-04. Split-adjusted Item 5 prices of $1.22-1.80 in Q1 2026 fit the $1.43 quote, but Yahoo's 52-week low of $0.15 is a pre-split price that was not adjusted.",
+   "check": "10-K filed 2026-06-26: sells TK-12 STEM education products, curricula and enrichment programs, so Real Estate is a bad mapping. Its 1-for-12 reverse split took effect 2026-05-04. Item 5 split-adjusted Q1 2026 prices of $1.22-1.80 and a $1.35 buyback on 2026-05-15 fit the $1.43 quote."
+  },
+  "770460": {
+   "ticker": "PFBX",
+   "name": "PEOPLES FINANCIAL CORP /MS/",
+   "include": true,
+   "sector": "Finance",
+   "industry": "Major Banks",
+   "reit": false,
+   "note": "10-Q Aug 14 2026: one-bank holding company for The Peoples Bank, Biloxi MS, quoted on OTCQX; an insider bought at $22.25 on Jul 31 2026, in line with the $23.40 quote."
+  },
+  "1967656": {
+   "ticker": "PFSB",
+   "name": "PFS Bancorp, Inc.",
+   "include": true,
+   "sector": "Finance",
+   "industry": "Banks",
+   "reit": false,
+   "note": "10-K FY2025 shows the savings-bank holding company of Peru Federal Savings Bank (Illinois) on OTCQB; 10-Q for Jun 2026 (filed 2026-08-05) shows buybacks at $18.32-18.33, consistent with $22.01."
+  },
+  "2087419": {
+   "ticker": "PNSB",
+   "name": "PSB Financial, Inc.",
+   "include": true,
+   "sector": "Finance",
+   "industry": "Banks",
+   "reit": false,
+   "note": "10-Q filed 2026-08-14: mutual-to-stock conversion closed 5/21/2026 at $10/share; Montana savings bank (Dillon, Deer Lodge) focused on residential loans; the $10.88 quote fits the offering price."
+  },
+  "844985": {
+   "ticker": "POSC",
+   "name": "POSITRON CORP",
+   "include": true,
+   "sector": "Health Care",
+   "industry": "Biotechnology: Electromedical & Electrotherapeutic Apparatus",
+   "reit": false,
+   "note": "Re-registered via Form 10 in Nov 2025; 10-K filed 2026-03-31 and 10-Q 2026-08-14: makes PET and PET-CT imaging systems, tiny revenue ($112K in Q2 2026) with going-concern doubt; non-affiliate value of $21.9M on 32.8M shares fits the $1.55 quote."
+  },
+  "1297937": {
+   "ticker": "PRKA",
+   "name": "PARKS AMERICA, INC",
+   "include": true,
+   "sector": "Consumer Discretionary",
+   "industry": "Services-Misc. Amusement & Recreation",
+   "reit": false,
+   "note": "10-K FY Sep 2025 (filed 2025-12-12) shows it runs wild animal safari parks on OTCQX; after the 2025 reverse and forward split, Item 5 gives a range of $35-48, consistent with $40.99; 10-Q filed 2026-08-07."
+  },
+  "925173": {
+   "ticker": "PTBS",
+   "name": "POTOMAC BANCSHARES INC",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Major Banks",
+   "reit": false,
+   "note": "Filed Form 15-12G on Aug 13 2012 to deregister; its last periodic report is the Q1 2012 10-Q.",
+   "check": "SEC filing list shows a Form 15-12G on Aug 13 2012 to deregister; its last periodic report is the Q1 2012 10-Q (filed May 15 2012), and since then it has filed only Form D notices (2020, 2026)."
+  },
+  "939930": {
+   "ticker": "PYYX",
+   "name": "PYXUS INTERNATIONAL, INC.",
+   "include": true,
+   "sector": "Industrials",
+   "industry": "Farming/Seeds/Milling",
+   "reit": false,
+   "note": "10-K filed 2026-06-04 for FY Mar 2026: global leaf-tobacco merchant and processor quoted on OTCID with 24.6M shares; filings current (10-Q 2026-08-05); classification matches peer UVV."
+  },
+  "1094032": {
+   "ticker": "QDMI",
+   "name": "QDM International Inc.",
+   "include": true,
+   "sector": "Finance",
+   "industry": "Specialty Insurers",
+   "reit": false,
+   "note": "10-K filed 2026-06-29: Hong Kong insurance broker (YeeTah), with Q2-2026 revenue of $8.4M. Item 5's Jan-Mar 2026 closes ran $29.52-$69.92 (after a 1-for-34 reverse split in Sep 2025), so the $10 quote is about 2.95x below that low, just under the 3x cutoff; the stock is thinly traded."
+  },
+  "1970743": {
+   "ticker": "RMXI",
+   "name": "RMX INDUSTRIES, INC.",
+   "include": true,
+   "sector": "Technology",
+   "industry": "Computer Software: Programming Data Processing",
+   "reit": false,
+   "note": "10-Q filed 2026-08-13: on-site AI video-intelligence software (QuantrusX) with $1,440 revenue in Q2 and going-concern doubt, 1-for-3 reverse split on 7/24/26; post-effective S-1 amendment filed 2026-08-24 gives $7.70 last sale on 8/21/26, so the $4.05 quote is within 2x."
+  },
+  "84112": {
+   "ticker": "RSKIA",
+   "name": "GEORGE RISK INDUSTRIES, INC.",
+   "include": true,
+   "sector": "Telecommunications",
+   "industry": "Telecommunications Equipment",
+   "reit": false,
+   "note": "10-K filed 2026-08-07: makes security alarm components (96% of sales), plus keyboards and proximity switches; the Class A stock ranged $15.00-$19.57 in FY2026, which fits the $20.80 quote."
+  },
+  "83350": {
+   "ticker": "RSRV",
+   "name": "RESERVE PETROLEUM CO",
+   "include": true,
+   "sector": "Energy",
+   "industry": "Oil & Gas Production",
+   "reit": false,
+   "note": "10-K FY2025 (filed 2026-03-31) shows non-operated oil and gas working and royalty interests; 10-Q for Jun 2026 filed 2026-08-14 shows a buyback at $160 in June 2026, consistent with $226 (1.4x)."
+  },
+  "1641601": {
+   "ticker": "RVRF",
+   "name": "River Financial Corp",
+   "include": true,
+   "sector": "Finance",
+   "industry": "Major Banks",
+   "reit": false,
+   "note": "10-K filed 2026-03-10: holding company of River Bank & Trust (Alabama commercial bank); Item 5 reports trades of $25-$50 and a last trade at $44 on 2/27/2026, so the $50 quote is consistent; 10-Q filed 2026-08-04."
+  },
+  "1870600": {
+   "ticker": "SBDS",
+   "name": "Solo Brands, Inc.",
+   "include": true,
+   "sector": "Consumer Discretionary",
+   "industry": "Recreational Games/Products/Toys",
+   "reit": false,
+   "note": "10-Q 2026-06-30 (filed 2026-08-13): outdoor lifestyle brands (Solo Stove fire pits, Chubbies apparel, Oru kayaks), H1 sales $151M. Moved to OTCQB after NYSE delisting for market cap under $15M (8-K 2026-04-02, 25-NSE 2026-07-08); 2.57M shares after a 1-for-40 split, consistent with the $2.35 quote. Going-concern doubt was disclosed but management says its plans alleviate it."
+  },
+  "2036060": {
+   "ticker": "SBMW",
+   "name": "Security Midwest Bancorp, Inc.",
+   "include": true,
+   "sector": "Finance",
+   "industry": "Banks",
+   "reit": false,
+   "note": "10-K filed 2026-04-07: holding company of Security Bank, an Illinois savings bank (Springfield); IPO at $10 on 7/31/2025, first OTCQB trade $11.40, equity $22.6M on 889,781 shares, so $18 is consistent; 10-Q filed 2026-08-14."
+  },
+  "830616": {
+   "ticker": "SCIA",
+   "name": "SCI Engineered Materials, Inc.",
+   "include": true,
+   "sector": "Industrials",
+   "industry": "Industrial Specialties",
+   "reit": false,
+   "note": "10-K filed 2026-02-17: makes sputtering targets and other advanced materials for thin-film coating ($19.6M revenue), not energy machinery, so it is classified like MTRN; bought back stock at $5.00 in Dec 2025, so the $9.71 quote is about 2x, within range.",
+   "check": "10-K filed 2026-02-17: one segment making PVD sputtering targets and other advanced thin-film materials ($19.6M revenue), not energy machinery, so it gets the same label as MTRN; it bought back stock at $5.00 (Dec 2025) and $5.35 (Q1 2026, per the 10-Q filed 2026-07-30), and the $9.71 quote, about 1.8x that, is backed by higher earnings."
+  },
+  "1703157": {
+   "ticker": "SCTH",
+   "name": "Securetech Innovations, Inc.",
+   "include": true,
+   "sector": "Industrials",
+   "industry": "Industrial Machinery/Components",
+   "reit": false,
+   "note": "The 10-Q for Jun 30, 2026 and 10-K/A No. 2 (Sep 2026) say AI UltraProd (construction 3D-printing robots and equipment, China) brings in substantially all of the $4.85M first-half sales, and the old Top Kontrol car-security line is being spun off. The S-1 (Sep 2026) gives a last sale of $22.00 on Aug 31, 2026, which fits the $19 quote.",
+   "check": "The 10-Q for Jun 30, 2026 says AI UltraProd (3D-printing robots for construction, plus related equipment, in China) brings in substantially all of the $4.85M first-half revenue, and the legacy Top Kontrol car-security line is being spun off; the S-1 (Sep 2026) gives a last sale of $22.00 on Aug 31, 2026, which fits the $19 quote."
+  },
+  "1022505": {
+   "ticker": "SDCH",
+   "name": "SideChannel, Inc.",
+   "include": true,
+   "sector": "Technology",
+   "industry": "EDP Services",
+   "reit": false,
+   "note": "10-Q 2026-06-30 (filed 2026-08-12): cybersecurity services (vCISO) and Enclave software, 9-month revenue $5.1M. 1-for-52 reverse split on 2026-01-23; average RSU grant value of $2.26 fits the $1.50 quote. Yahoo's 52-week low of $0.053 looks pre-split."
+  },
+  "1331421": {
+   "ticker": "SDCO",
+   "name": "SDR Drone, Inc.",
+   "include": false,
+   "sector": "Industrials",
+   "industry": "Aerospace",
+   "reit": false,
+   "note": "No operations: the 10-K filed 2026-04-28 (as Hallmark Venture Group) says all business has ceased, and the 10-Q filed 2026-08-14 shows zero revenue and $1,036 total assets after the June 2026 rename to SDR Drone; the $1.09 quote is about 10x the $0.10 Q4-2025 price in Item 5.",
+   "check": "Effectively no operations: the 10-K/A filed 2026-05-28 checks the shell box. The 10-Q filed 2026-08-14 shows zero revenue and $1,036 of total assets, with the June 2026 Korean drone IP booked at $0 and only a business plan; the shell box was unchecked after the June 9, 2026 change of control."
+  },
+  "818677": {
+   "ticker": "SFDL",
+   "name": "SECURITY FEDERAL CORP",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Major Banks",
+   "reit": false,
+   "note": "Filed Form 15 on 2025-12-12; the 10-K of 2026-03-20 says it will no longer file reports with the SEC, and no 2026 10-Qs were filed (South Carolina commercial bank).",
+   "check": "Filed Form 15 on 2025-12-12; its 10-K of 2026-03-20 says it is no longer required to file reports after that 10-K, and no 2026 10-Qs followed."
+  },
+  "2032609": {
+   "ticker": "SHFH",
+   "name": "Scientist Home Future Health Ltd",
+   "include": true,
+   "sector": "Consumer Staples",
+   "industry": "Retail-Drug Stores and Proprietary Stores",
+   "reit": false,
+   "note": "10-K FY2025 and 10-Q Jun 2026: a Hong Kong retailer of own-brand health supplements (most of its revenue, from a related-party supplier) plus some creams and check-up services, not a cosmetics maker. On OTCID since Jan 2026; S-1 IPO at $1.50 fits the $1.70 quote; it carries a going-concern warning.",
+   "check": "10-K FY2025 and 10-Q Jun 2026: a Hong Kong retailer of own-brand health supplements and topical creams bought from a related-party supplier (supplements make up most of 1H26 revenue of $265k), plus check-up services; it is not a shell, though it carries a going-concern warning. Quoted on OTCID since Jan 16 2026; the $1.70 quote fits shares sold at $1.50."
+  },
+  "1128281": {
+   "ticker": "SKAS",
+   "name": "Saker Aviation Services, Inc.",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Investment Bankers/Brokers/Service",
+   "reit": false,
+   "note": "10-K FY2025 and 10-Q 2026-06-30: stopped operating the Downtown Manhattan Heliport on 2025-03-29. Its only revenue is $30K in H1 2026 from financial advisory work begun Dec 2025, and its $8.65M of assets are all cash, investments and prepaids. That makes it effectively a shell with nominal operations, although it ticks 'not a shell'.",
+   "check": "10-Q 2026-06-30 (filed 2026-08-14): heliport concession ended 2025-03-29. Revenue is now $15K a quarter from financial advisory for one client, at a gross loss, with two employees. Its $8.65M of assets are all cash, Treasuries and prepaids. The 10-K says it may cease operations and is weighing strategic alternatives, so it is a cash shell with nominal operations, although it ticks 'not a shell'."
+  },
+  "1794942": {
+   "ticker": "SKFG",
+   "name": "Stark Focus Group, Inc.",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Blank Checks",
+   "reit": false,
+   "note": "10-K filed 2026-06-02 and 10-Q filed 2026-08-13: $0 revenue in 2024-2025, no cash, no operating business (apparel unit sold in 2021). Control sold at about $0.043/share in June 2026 and new shares at $0.048 in July 2026, so the $1.07 quote is more than 20x actual deal prices.",
+   "check": "10-Q filed 2026-08-13: no revenue since its apparel unit was sold in 2021, no cash or assets at 6/30/26, and only a non-binding data-center MOU; 83% control sold for $355K (~$0.043/share) in June 2026 and 8.4M shares sold for $400K (~$0.048) in July 2026, so the $1.07 quote (about $20M value) is more than 20x the company's own deal prices."
+  },
+  "1657642": {
+   "ticker": "SLBK",
+   "name": "Skyline Bankshares, Inc.",
+   "include": true,
+   "sector": "Finance",
+   "industry": "Major Banks",
+   "reit": false,
+   "note": "10-K filed 2026-03-20: Virginia bank holding company (Skyline National Bank). The investor deck in the 8-K of 2026-09-09 gives a market cap of $138.3M on Aug 11 2026 (about $24.40/share on 5.67M shares), consistent with $28.65. 10-Q filed 2026-08-14 is current."
+  },
+  "1759546": {
+   "ticker": "SNFI",
+   "name": "Stark Novus Financial Inc.",
+   "include": true,
+   "sector": "Finance",
+   "industry": "Diversified Financial Services",
+   "reit": false,
+   "note": "Former Lordstown Motors (Chapter 11 exit 2024-03-14, then Nu Ride shell). Its 10-Q filed 2026-08-14 ticks the shell box No after the 2026-07-15 purchase of Affinity (insurance distribution and investment advice); it also holds $11.6M of billboard loans. No revenue through Q2 2026. 16.3M shares x $1.68 is about $27M against $43.8M of mostly cash assets.",
+   "check": "Former Lordstown/Nu Ride; FY2025 10-K ticked shell Yes, but the 10-Q filed 2026-08-14 ticks No after the 2026-07-15 Affinity purchase (annuity/life insurance commissions plus RIA fees, $3.9M 2025 revenue per the 8-K/A of 2026-09-30); it also holds $11.6M of billboard loans out of $43.8M total assets; auto label is stale; $1.68 fits the ~$20M non-affiliate value reported at mid-2025."
+  },
+  "2072421": {
+   "ticker": "SNNF",
+   "name": "Seneca Bancorp, Inc.",
+   "include": true,
+   "sector": "Finance",
+   "industry": "Major Banks",
+   "reit": false,
+   "note": "10-K filed 2026-03-30: holding company for Seneca Savings Bank, a national bank since the 2025-10-15 mutual-to-stock conversion. OTCQX since 2025-10-16, with Q4 2025 range $9.66-12.29, consistent with the $12.91 quote."
+  },
+  "889353": {
+   "ticker": "SNTL",
+   "name": "Sentinel Holdings Ltd.",
+   "include": true,
+   "sector": "Consumer Discretionary",
+   "industry": "Diversified Commercial Services",
+   "reit": false,
+   "note": "10-K filed 2026-06-05 and 10-Q filed 2026-08-13: armed and unarmed security guard services in California, $4.37M revenue in H1 2026. Old SIC 7200 dates from a portrait business, so it gets the guard-services label. 2025 trading was $1.47-6.17 and units sold at $1.00 in Feb 2026, so the $1.76 quote is plausible. Going-concern doubt.",
+   "check": "10-Q filed 2026-08-13: armed and unarmed security guard, patrol and event security in California, with $4.37M continuing revenue in H1 2026 (shell No, going-concern doubt); SIC 7200 is stale, and 7381 guard services maps to this label; the FY2025 10-K Item 5 shows $1.47-6.17 trading and Feb 2026 units sold at $1.00, so the $1.76 quote is plausible."
+  },
+  "91668": {
+   "ticker": "SODI",
+   "name": "SOLITRON DEVICES INC",
+   "include": true,
+   "sector": "Technology",
+   "industry": "Semiconductors",
+   "reit": false,
+   "note": "10-K filed 2026-05-28: makes power transistors, MOSFETs and hybrids for military and aerospace customers; last sale $23.00 on 2026-05-26 and an FY2026 high of $25, which is consistent with the $35 quote and its $17.20-$38.20 52-week range."
+  },
+  "1407973": {
+   "ticker": "SONX",
+   "name": "Sonendo, Inc.",
+   "include": false,
+   "sector": "Health Care",
+   "industry": "Medical/Dental Instruments",
+   "reit": false,
+   "note": "Dental device maker (GentleWave) that filed Form 15-12G on 2025-02-27; its final report is the FY2024 10-K filed 2025-03-26, and the quote's 52-week low of $0.02 against a $1.28 price is erratic.",
+   "check": "Filed Form 15-12G on 2025-02-27; its last report is the FY2024 10-K filed 2025-03-26, followed only by a Form D and a 13G/A, and the quote's $0.02 low against a $1.28 price is erratic."
+  },
+  "1807893": {
+   "ticker": "SPFX",
+   "name": "STANDARD PREMIUM FINANCE HOLDINGS, INC.",
+   "include": true,
+   "sector": "Finance",
+   "industry": "Diversified Financial Services",
+   "reit": false,
+   "note": "10-K FY2025 (filed 2026-03-20) and 10-Q 2026-06-30 (filed 2026-08-10): makes insurance premium finance loans (finance charges $6.0M of $6.8M H1 2026 revenue), quoted on OTCQX; December 2025 buybacks at $1.87 are in line with the $3.15 quote."
+  },
+  "867038": {
+   "ticker": "SPND",
+   "name": "SPINDLETOP OIL & GAS CO",
+   "include": true,
+   "sector": "Energy",
+   "industry": "Oil & Gas Production",
+   "reit": false,
+   "note": "10-K FY2025 (filed 2026-04-15) shows oil and gas exploration and production; Item 5 gives a Q1 2026 range of $2.75-6.00, which brackets $4.70; it is quoted on OTC Pink Limited; 10-Q for Jun 2026 filed 2026-08-19 under an NT extension."
+  },
+  "747540": {
+   "ticker": "SPRS",
+   "name": "SURGE COMPONENTS INC",
+   "include": true,
+   "sector": "Technology",
+   "industry": "Electronic Components",
+   "reit": false,
+   "note": "10-K filed 2026-02-27 (FY ending 11/30) and 10-Q filed 2026-10-14: supplies capacitors and discrete semiconductors made by Asian contract makers to OEMs and distributors. OTC Pink, 5.72M shares; the $3.27 quote is plausible against the $6.4M non-affiliate value."
+  },
+  "1166362": {
+   "ticker": "STBI",
+   "name": "STURGIS BANCORP INC",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Major Banks",
+   "reit": false,
+   "note": "Deregistered with a Form 15-12G filed 2005-02-23 after a 2004 going-private 13E-3. Its last 10-Q was filed 2004-11-15, and it has filed no periodic reports since.",
+   "check": "Deregistered with a Form 15-12G on 2005-02-23 after the 2004 13E-3 going-private deal; its last 10-Q was filed 2004-11-15, and since then it has filed only Form D and 13G."
+  },
+  "779227": {
+   "ticker": "STLE",
+   "name": "STEELE BANCORP INC",
+   "include": true,
+   "sector": "Finance",
+   "industry": "Major Banks",
+   "reit": false,
+   "note": "10-K filed 2026-03-30 (the 10-K/A of 2026-05-11 only removed 'Unaudited' headings): PA bank holding company (Central Penn Bank & Trust) formed by the Aug 2025 Mifflinburg/Northumberland merger. Item 5 shows a Q4 2025 range of $25.50-$29.64; $46.99 is about 1.6x that, under the 3x rule. 10-Q filed 2026-08-12 is current."
+  },
+  "797465": {
+   "ticker": "STLY",
+   "name": "HG Holdings, Inc.",
+   "include": true,
+   "sector": "Finance",
+   "industry": "Specialty Insurers",
+   "reit": false,
+   "note": "10-K filed 2026-03-27: the former Stanley Furniture is now a Florida title insurer and title agency (NCTIC, Omega). The REIT SIC code is stale: the REIT is HC Realty, an affiliate it invests in, and HG Holdings does not elect REIT status itself. The 10-Q of 2026-08-12 shows 2026 buybacks at $4.75, consistent with the $3.58 quote.",
+   "check": "10-K filed 2026-03-27: the former Stanley Furniture is now a Florida title insurer and title agency (NCTIC, Omega). HC Realty, an affiliate it invests in, is the REIT; HG pays income tax (2025 effective rate 255.6%). In the 10-Q of 2026-08-12, Q1 2026 buybacks of $287K for 60K shares (about $4.78 each) fit the $3.58 quote."
+  },
+  "885508": {
+   "ticker": "STRS",
+   "name": "STRATUS PROPERTIES INC",
+   "include": false,
+   "sector": "Real Estate",
+   "industry": "Homebuilding",
+   "reit": false,
+   "note": "Under a plan of complete liquidation and dissolution (8-K 2026-07-01); delisted from Nasdaq (Form 25, 2026-07-31) and deregistered (Forms 15-12G/15-15D, 2026-08-10).",
+   "check": "8-K 2026-07-01 says the company is under a stockholder-approved Plan of Liquidation with a $5.00 initial liquidating distribution; Form 25 was filed 2026-07-31 and Forms 15-12G/15-15D on 2026-08-10, ending its reporting."
+  },
+  "1647822": {
+   "ticker": "SVMB",
+   "name": "Jingbo Technology, Inc.",
+   "include": true,
+   "sector": "Consumer Discretionary",
+   "industry": "Other Consumer Services",
+   "reit": false,
+   "note": "10-K filed 2026-07-20 (FY Feb 2026): Chinese VIE whose $1.37M of $1.54M revenue is parking-lot fees, not software (SIC left over from SavMobi). Has a going-concern doubt. Item 5 shows one-print quarters, the last at $1.90 (Mar 2026), consistent with $2.14. 10-Q filed 2026-10-14 is current. Trading is very thin.",
+   "check": "10-K filed 2026-07-20 (FY Feb 2026): $1,369,618 of $1,542,867 revenue was parking fees from Chinese VIE parking lots, not software. Item 5 shows one-price quarters, the last at $1.90 (Mar 2026), which fits the $2.14 quote. It has a going-concern doubt. The 10-Q filed 2026-10-14 is current."
+  },
+  "1527599": {
+   "ticker": "SYBX",
+   "name": "SYNLOGIC, INC.",
+   "include": false,
+   "sector": "Health Care",
+   "industry": "Biotechnology: Pharmaceutical Preparations",
+   "reit": false,
+   "note": "10-Q filed 2026-08-11: delisted from Nasdaq 2026-01-21, it calls itself a 'public shell' with one employee. Its only plan is the pending merger with Caldera Therapeutics (8-K 2026-07-29).",
+   "check": "10-Q filed 2026-08-11 has the shell-company box checked Yes. Delisted from Nasdaq 2026-01-21 as a 'public shell' with one full-time employee, its only plan is the pending Caldera Therapeutics merger (8-K 2026-07-29)."
+  },
+  "942126": {
+   "ticker": "TAIT",
+   "name": "TAITRON COMPONENTS INC",
+   "include": false,
+   "sector": "Technology",
+   "industry": "Electronic Components",
+   "reit": false,
+   "note": "Discrete-semiconductor distributor that delisted from Nasdaq (Form 25 on 2025-11-24) and deregistered (Form 15-12G on 2025-12-08); its last report is the 10-Q for 9/30/2025.",
+   "check": "8-K item 3.01 on 2025-11-14, Form 25 on 2025-11-24 and Form 15-12G on 2025-12-08; its last report is the 10-Q for 9/30/2025."
+  },
+  "1090396": {
+   "ticker": "TBTC",
+   "name": "TABLE TRAC INC",
+   "include": true,
+   "sector": "Consumer Discretionary",
+   "industry": "Services-Misc. Amusement & Recreation",
+   "reit": false,
+   "note": "10-K filed 2026-03-24: sells and leases casino management and table-games systems to over 300 casinos (gaming-technology label kept). OTCQX, 4.64M shares, pays dividends; $19.4M non-affiliate value at 6/30/25 fits the $5.10 quote."
+  },
+  "1552800": {
+   "ticker": "TTSH",
+   "name": "TILE SHOP HOLDINGS, INC.",
+   "include": false,
+   "sector": "Consumer Discretionary",
+   "industry": "Home Furnishings",
+   "reit": false,
+   "note": "Went dark: a 1-for-3,000 reverse split followed by a forward split, Nasdaq delisting in Dec 2025, and Form 15 on 2026-01-02; the FY2025 10-K (2026-02-26) says it will not file further SEC reports.",
+   "check": "Its FY2025 10-K (2026-02-26) says it delisted from Nasdaq (Form 25, 2025-12-17) after a 1-for-3,000 reverse split and 3,000-for-1 forward split, filed Form 15 on 2026-01-02 and suspended its reporting duties; it has filed no 10-Q in 2026."
+  },
+  "1465740": {
+   "ticker": "TWOD",
+   "name": "TWO HARBORS INVESTMENT CORP.",
+   "include": false,
+   "sector": "Real Estate",
+   "industry": "Real Estate Investment Trusts",
+   "reit": true,
+   "note": "TWOD is Two Harbors' 9.375% Senior Notes due 2030 (8-K dated 2026-09-04), a debt security rather than common stock; the company completed its acquisition (8-K item 2.01 on 2026-08-25), filed Form 25 for the notes on 2026-09-24 and Form 15-12G on 2026-10-08.",
+   "check": "TWOD is Two Harbors' 9.375% Senior Notes due 2030 (the Form 25 of 2026-09-24 names this class), not common stock; the CCM merger closed on 2026-08-25 (8-K items 2.01 and 5.01), and Form 15-12G on 2026-10-08 ended reporting for the notes, common stock and preferred."
+  },
+  "1725262": {
+   "ticker": "TYFG",
+   "name": "Tri-County Financial Group, Inc.",
+   "include": true,
+   "sector": "Finance",
+   "industry": "Major Banks",
+   "reit": false,
+   "note": "10-K filed 2026-03-09: Illinois bank holding company (First State Bank, Mendota). 8-K of 2026-08-10 announces a pending merger into HBT Financial at $71.01 cash or 2.4589 HBT shares, consistent with the $80.08 quote. 10-Q filed 2026-08-13 is current."
+  },
+  "1087456": {
+   "ticker": "UBOH",
+   "name": "UNITED BANCSHARES INC/OH",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Major Banks",
+   "reit": false,
+   "note": "Filed Form 15-12G on 2023-03-23 after its FY2022 10-K (2023-03-13); since then the only filing is a Form D (2026), so it does not file current reports.",
+   "check": "Delisted (Form 25 on 2022-08-17) and filed Form 15-12G on 2022-09-01 and again on 2023-03-23, after its FY2022 10-K (2023-03-13); the only later filing is a Form D (2026-05-13)."
+  },
+  "811211": {
+   "ticker": "UNIB",
+   "name": "UNIVERSITY BANCORP INC /DE/",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Major Banks",
+   "reit": false,
+   "note": "Filed Form 15-12G on Jan 12 2009 to deregister; its last periodic report is the Q3 2008 10-Q.",
+   "check": "SEC filing list shows a Form 25 and a Form 15-12G on Jan 12 2009 to delist and deregister; its last periodic report is the Q3 2008 10-Q, and since then it has filed only Form D and 144 forms."
+  },
+  "2084261": {
+   "ticker": "URSB",
+   "name": "URSB Bancorp, Inc.",
+   "include": true,
+   "sector": "Finance",
+   "industry": "Banks",
+   "reit": false,
+   "note": "10-Q Jun 2026: holding company for United Roosevelt Savings Bank (NJ), after a standard mutual-to-stock conversion that closed Mar 26 2026; 2,334,375 shares and equity of $39.5M fit a $10 IPO and the $12.90 quote."
+  },
+  "832480": {
+   "ticker": "UTGN",
+   "name": "UTG INC",
+   "include": true,
+   "sector": "Finance",
+   "industry": "Life Insurance",
+   "reit": false,
+   "note": "10-K filed 2026-03-25: insurance holding company for Universal Guaranty Life (individual life insurance). Item 5 shows a Q4 2025 close range of $43.05-$59.80, consistent with $58. 10-Q filed 2026-08-12 is current."
+  },
+  "1919182": {
+   "ticker": "UTKN",
+   "name": "Universal Token",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Finance: Consumer Services",
+   "reit": false,
+   "note": "10-Q for Jun 30 2026: an early-stage blockchain/tokenization developer that has never had revenue, with $27 cash, $18.6K of spending in the quarter and going-concern doubt; it says it is not a shell but has almost no operations.",
+   "check": "10-Q for Jun 30 2026 (filed Aug 12 2026): pre-revenue tokenization developer with no revenue ever, $27 cash, $18.6K of quarterly spending (mostly audit and legal fees, with activity cut back) and going-concern doubt; it is not a shell company on paper but is nearly dormant."
+  },
+  "898171": {
+   "ticker": "UWHR",
+   "name": "UWHARRIE CAPITAL CORP",
+   "include": true,
+   "sector": "Finance",
+   "industry": "Major Banks",
+   "reit": false,
+   "note": "10-Q Aug 11 2026: bank holding company for Uwharrie Bank (NC), quoted on OTCQX with thin trading; non-affiliate float of $61.6M on Jun 2025 on about 7.16M shares fits the $14.01 quote and $9.75 52-week low."
+  },
+  "1205922": {
+   "ticker": "VCNX",
+   "name": "VACCINEX, INC.",
+   "include": false,
+   "sector": "Health Care",
+   "industry": "Biotechnology: Pharmaceutical Preparations",
+   "reit": false,
+   "note": "Clinical-stage biotech that filed Form 15-12G on 2025-03-27; its final report is the FY2024 10-K filed 2025-04-15, with no 10-Q since.",
+   "check": "Filed Form 15-12G on 2025-03-27; its last report is the FY2024 10-K filed 2025-04-15, and nothing has been filed since."
+  },
+  "2033264": {
+   "ticker": "VDTA",
+   "name": "Vertical Data Inc.",
+   "include": true,
+   "sector": "Technology",
+   "industry": "Retail: Computer Software & Peripheral Equipment",
+   "reit": false,
+   "note": "10-Q Jun 2026 and S-1 Oct 2 2026: distributor of GPU servers and IT systems with data-center managed services, not management consulting; the S-1 gives the last sale on OTCQB as $5.40 on Sep 30 2026, consistent with the $4.10 quote.",
+   "check": "10-Q Jun 2026: a value-added reseller of GPU servers and IT hardware to data centers (IT hardware sales plus billing-service revenue), not a management consultant, which fits the SIC 5045 computer-wholesale label. S-1 (Oct 2 2026) gives the last OTCQB sale as $5.40 on Sep 30 2026, consistent with the $4.10 quote."
+  },
+  "1470129": {
+   "ticker": "VIIQ",
+   "name": "VisitIQ Corp.",
+   "include": false,
+   "sector": "Technology",
+   "industry": "Computer Software: Prepackaged Software",
+   "reit": false,
+   "note": "Deregistered by 15-12G in 2013. Its only report since is a late 10-K for FY ended 2025-08-31 (filed 2026-05-20, amended 2026-05-26), whose cover says it is not required to file and has not filed all required reports; no 10-Qs, so it does not file current reports.",
+   "check": "Deregistered by 15-12G in 2013. Its only report since is a 10-K for FY ended 2025-08-31, filed late on 2026-05-20 (10-K/A 2026-05-26), whose cover checks 'not required to file' and 'No' to having filed all required reports. There are no 10-Qs, so the newest financials are over 13 months old."
+  },
+  "727510": {
+   "ticker": "VISK",
+   "name": "Viskase Holdings, Inc.",
+   "include": true,
+   "sector": "Industrials",
+   "industry": "Containers/Packaging",
+   "reit": false,
+   "note": "10-Q filed 2026-08-03: formerly Enzon Pharmaceuticals, merged with Viskase on 3/26/26 after a 1-for-100 reverse split and now makes cellulosic, fibrous and plastic casings for processed meat ($176.7M sales in H1); 20-day average price was $7.83 on a post-split basis, so the $4.14 quote is plausible, but the $0.02 52-week low is a pre-split figure.",
+   "check": "10-Q filed 2026-08-03: formerly Enzon, merged with Viskase on 3/26/26 after a 1-for-100 reverse split and now makes cellulosic, fibrous and plastic casings for processed meat ($176.7M H1 sales); the $7.83 20-day VWAP in the merger terms makes the $4.14 quote plausible, but the $0.02 52-week low is a pre-split figure, and there is going-concern doubt tied to refinancing a facility due Aug 2027."
+  },
+  "1565228": {
+   "ticker": "VISL",
+   "name": "Vislink Technologies, Inc.",
+   "include": false,
+   "sector": "Telecommunications",
+   "industry": "Telecommunications Equipment",
+   "reit": false,
+   "note": "Live-video communications equipment maker that filed Form 15-12G on 2025-05-12, right after its FY2024 10-K and 10-K/A; it has filed no 10-Q or 10-K since.",
+   "check": "Filed Form 15-12G on 2025-05-12, three days after its FY2024 10-K/A; it has filed no 10-Q or 10-K since, only 13D/A and Form 4."
+  },
+  "2078149": {
+   "ticker": "VRHI",
+   "name": "Veri MedTech Holdings, Inc.",
+   "include": false,
+   "sector": "Health Care",
+   "industry": "Medical/Nursing Services",
+   "reit": false,
+   "note": "Its only SEC filings are an S-1 and S-1/As (latest 2026-09-22), never declared effective, with no 10-K, 10-Q or 8-K, so it is not yet a reporting company. The business is a medical-marijuana-card telehealth platform (Veriheal), the same label as TDOC and LFMD.",
+   "check": "Only SEC filings are an S-1 (2025-11-14) and S-1/As through 2026-09-22 with no EFFECT notice, and the prospectus says it is an SEC non-reporting company that files with OTC Markets; its business is the Veriheal medical-cannabis-card telehealth platform (same label as TDOC, LFMD, HIMS)."
+  },
+  "1848416": {
+   "ticker": "VRNO",
+   "name": "Verano Holdings Corp.",
+   "include": true,
+   "sector": "Health Care",
+   "industry": "Medicinal Chemicals and Botanical Products",
+   "reit": false,
+   "note": "10-Q filed 2026-08-05: US cannabis company whose Q2 revenue was $182M retail plus $80M wholesale, not crop farming. Nasdaq puts listed cannabis producers in Medicinal Chemicals and Botanical Products. Did a 1-for-5 reverse split on 2026-06-11. OTCQX and Cboe Canada; $4.89 is consistent.",
+   "check": "10-Q filed 2026-08-05: vertically integrated US cannabis company with about 70% retail and 30% wholesale revenue, not crop farming. About 73M shares after the 1-for-5 reverse split. Listed on Cboe Canada and quoted on OTCQX; $4.89 is consistent."
+  },
+  "1913838": {
+   "ticker": "VWFB",
+   "name": "VWF Bancorp, Inc.",
+   "include": false,
+   "sector": "Finance",
+   "industry": "Banks",
+   "reit": false,
+   "note": "Savings bank holding company (Van Wert Federal) that filed Form 15-12G on 2025-07-15 to deregister; its last periodic report is the 10-Q for 3/31/2025, so it no longer files current reports.",
+   "check": "Filed Form 15-12G on 2025-07-15; its last periodic report is the 10-Q for 3/31/2025 (filed 2025-05-13), and since then it has filed only Forms 3/4 and 13G, so it no longer files current reports."
+  },
+  "1071840": {
+   "ticker": "WNDW",
+   "name": "SolarWindow Technologies, Inc.",
+   "include": false,
+   "sector": "Industrials",
+   "industry": "Major Chemicals",
+   "reit": false,
+   "note": "Pre-revenue developer of electricity-generating coatings with going-concern doubt; the 10-Q filed 2026-07-13 gives a $0.28 close on 2026-05-29 and the 10-K gives $0.45 on 2025-11-10, so the $1.42 quote is about 5x the latest filing's price, with no reverse split.",
+   "check": "The 10-Q filed 2026-07-13 gives a $0.28 close on 2026-05-29, with 65,779,045 shares unchanged (no reverse split) and no filings since, so the $1.42 quote is about 5x the latest filing's price; it is also a pre-revenue developer with going-concern doubt."
+  },
+  "1101026": {
+   "ticker": "ZIVO",
+   "name": "Zivo Bioscience, Inc.",
+   "include": false,
+   "sector": "Health Care",
+   "industry": "Biotechnology: Biological Products (No Diagnostic Substances)",
+   "reit": false,
+   "note": "Filed Form 15-12G on 2026-03-31 without filing a FY2025 10-K; its last periodic report is the 10-Q for Sep 2025, so it is deregistered.",
+   "check": "An 8-K (2026-03-30) announced the decision to deregister and stop public reporting, and it filed Form 15-12G on 2026-03-31 without a FY2025 10-K; its last periodic report is the Sep 2025 10-Q."
+  }
+ }
+}
